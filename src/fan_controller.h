@@ -1,0 +1,76 @@
+#ifndef FAN_CONTROLLER_H
+#define FAN_CONTROLLER_H
+
+#include <Arduino.h>
+#include "config.h"
+
+class FanController {
+public:
+    void begin();
+    void loop();
+
+    // Fan control
+    void setSpeed(uint8_t percent);
+    uint8_t getSpeed();
+    void turnOn();
+    void turnOff();
+    bool isOn();
+
+    // Timer
+    void setTimer(uint16_t minutes);
+    void cancelTimer();
+    uint16_t getRemainingMinutes();
+    bool isTimerActive();
+
+    // Interval mode
+    void setIntervalMode(bool enabled);
+    bool isIntervalMode();
+    void setIntervalTimes(uint8_t onSeconds, uint8_t offSeconds);
+    uint8_t getIntervalOnTime();
+    uint8_t getIntervalOffTime();
+
+    // RPM (only available on ESP32 with tacho)
+    uint16_t getRPM();
+
+    // Callback for state changes
+    typedef void (*StateChangeCallback)(bool on, uint8_t speed);
+    void onStateChange(StateChangeCallback callback);
+
+private:
+    uint8_t _speed = 0;
+    uint8_t _targetSpeed = 0;
+    bool _isOn = false;
+
+    // Timer
+    unsigned long _timerEndTime = 0;
+    bool _timerActive = false;
+
+    // Interval mode
+    bool _intervalMode = false;
+    uint8_t _intervalOnTime = 30;
+    uint8_t _intervalOffTime = 30;
+    unsigned long _intervalNextToggle = 0;
+    bool _intervalCurrentlyOn = true;
+
+    // RPM measurement (ESP32 only)
+#ifdef PLATFORM_ESP32
+    static volatile uint32_t _tachoCount;
+    static void IRAM_ATTR tachoISR();
+    unsigned long _lastRpmCalc = 0;
+#endif
+    uint16_t _rpm = 0;
+
+    // Soft start
+    unsigned long _softStartTime = 0;
+    uint8_t _softStartTarget = 0;
+
+    // Callback
+    StateChangeCallback _stateCallback = nullptr;
+
+    void applyPWM(uint8_t percent);
+    void notifyStateChange();
+};
+
+extern FanController fanController;
+
+#endif // FAN_CONTROLLER_H
