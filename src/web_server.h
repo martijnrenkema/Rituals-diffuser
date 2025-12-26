@@ -24,6 +24,8 @@ private:
     void handleSaveMqtt(AsyncWebServerRequest* request);
     void handleFanControl(AsyncWebServerRequest* request);
     void handleReset(AsyncWebServerRequest* request);
+    void handleSavePasswords(AsyncWebServerRequest* request);
+    void handleGetPasswords(AsyncWebServerRequest* request);
 };
 
 extern WebServer webServer;
