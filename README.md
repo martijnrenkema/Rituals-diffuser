@@ -2,6 +2,7 @@
 
 Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-dependent Rituals firmware with fully local control via Home Assistant.
 
+![Version](https://img.shields.io/badge/Version-1.1.0-brightgreen)
 ![ESP-WROOM-02](https://img.shields.io/badge/ESP-WROOM--02-blue)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP8266-orange)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT-41BDF5)
@@ -13,8 +14,11 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 - **Home Assistant Integration** - MQTT auto-discovery
 - **Timer Presets** - 30, 60, 90, 120 minutes + continuous
 - **Interval Mode** - Pulsing mode to save fragrance
+- **Night Mode** - Auto-dim LED during configured hours
+- **RFID Cartridge Detection** - Reads scent name from Rituals cartridge
+- **Usage Statistics** - Track total runtime and cartridge usage
 - **OTA Updates** - Wireless firmware updates after initial flash
-- **Web Interface** - Configure WiFi, MQTT, and control the diffuser
+- **Web Interface** - Configure WiFi, MQTT, passwords, and control the diffuser
 - **RGB LED Status** - Visual feedback for device state
 - **Physical Buttons** - Front and rear button support
 
@@ -31,6 +35,24 @@ This firmware is designed for the **Rituals Perfume Genie 2.0** which contains a
 | GPIO15 | LED | WS2812 RGB LED |
 | GPIO16 | Front Button | "Connect" button |
 | GPIO3 | Rear Button | Back button (RX pin) |
+
+## ⚠️ Backup Original Firmware First!
+
+**Before flashing custom firmware, backup the original Rituals firmware so you can restore it if needed.**
+
+```bash
+# Connect USB-to-serial adapter and identify port
+ls /dev/cu.usbserial-*
+
+# Backup original firmware (2MB flash)
+esptool.py --port /dev/cu.usbserial-XXXX read_flash 0x00000 0x200000 rituals_original_firmware.bin
+```
+
+To restore original firmware:
+```bash
+esptool.py --port /dev/cu.usbserial-XXXX erase_flash
+esptool.py --port /dev/cu.usbserial-XXXX write_flash 0x00000 rituals_original_firmware.bin
+```
 
 ## Installation
 
@@ -104,7 +126,11 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 | Interval On | Number | On-time (10-120 sec) |
 | Interval Off | Number | Off-time (10-120 sec) |
 | Time Left | Sensor | Remaining timer minutes |
+| Fan RPM | Sensor | Current fan speed |
 | WiFi Signal | Sensor | Signal strength (dBm) |
+| Cartridge | Sensor | Current scent name (via RFID) |
+| Total Runtime | Sensor | Total device runtime (hours) |
+| Cartridge Runtime | Sensor | Time since cartridge change |
 
 ### Timer Presets
 
@@ -143,10 +169,12 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 
 ### Default Passwords
 
-| Function | Password | Location |
-|----------|----------|----------|
-| WiFi AP | `diffuser123` | config.h |
-| OTA Updates | `diffuser-ota` | config.h |
+| Function | Default | Configurable |
+|----------|---------|--------------|
+| WiFi AP | `diffuser123` | Yes, via web interface |
+| OTA Updates | `diffuser-ota` | Yes, via web interface |
+
+Passwords can be changed in the web interface under "Security". Minimum 8 characters required. Device restart needed after changing.
 
 ### MQTT Topics
 
@@ -166,6 +194,7 @@ rituals_diffuser/availability     → online/offline
 │   ├── fan_controller.*      # Fan control, timer, interval
 │   ├── led_controller.*      # WS2812 RGB LED
 │   ├── button_handler.*      # Button handling
+│   ├── rfid_handler.*        # RFID cartridge detection
 │   ├── storage.*             # EEPROM storage
 │   ├── wifi_manager.*        # WiFi management
 │   ├── web_server.*          # Web interface
@@ -182,6 +211,7 @@ rituals_diffuser/availability     → online/offline
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson) - JSON
 - [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer) - Web server
 - [FastLED](https://github.com/FastLED/FastLED) - LED control
+- [MFRC522](https://github.com/miguelbalboa/rfid) - RFID reader
 
 ## Troubleshooting
 
