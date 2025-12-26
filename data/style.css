@@ -69,3 +69,5 @@ input:focus{outline:none;border-color:var(--gold)}
 .night-cfg{display:none;flex-direction:column;gap:12px;margin-top:16px}
 .night-cfg.show{display:flex}
 .night-cfg input[type=range]{width:100%}
+footer{text-align:center;padding:20px 0 10px;color:var(--dim)}
+.version{font-size:.75rem}
