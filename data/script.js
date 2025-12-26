@@ -103,3 +103,42 @@ $('#reset').onclick=async()=>{
         alert('Resetting...');
     }
 };
+
+// Password settings
+async function fetchPasswords(){
+    try{
+        const r=await fetch('/api/passwords');
+        const d=await r.json();
+        $('#ota-status').textContent=d.ota_custom?'(custom)':'(default: '+d.ota_default+')';
+        $('#ap-status').textContent=d.ap_custom?'(custom)':'(default: '+d.ap_default+')';
+    }catch(e){console.error(e)}
+}
+fetchPasswords();
+
+$('#pass-form').onsubmit=async e=>{
+    e.preventDefault();
+    const otaPass=$('#p-ota').value;
+    const apPass=$('#p-ap').value;
+
+    if(!otaPass&&!apPass){
+        alert('Enter at least one password to change');
+        return;
+    }
+
+    const params={};
+    if(otaPass)params.ota_password=otaPass;
+    if(apPass)params.ap_password=apPass;
+
+    try{
+        const r=await fetch('/api/passwords',{method:'POST',body:new URLSearchParams(params)});
+        const d=await r.json();
+        if(d.success){
+            alert(d.message);
+            $('#p-ota').value='';
+            $('#p-ap').value='';
+            fetchPasswords();
+        }else{
+            alert(d.error||'Error saving passwords');
+        }
+    }catch(e){alert('Error')}
+};

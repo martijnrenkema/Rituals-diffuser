@@ -129,6 +129,32 @@ void Storage::setIntervalMode(bool enabled, uint8_t onTime, uint8_t offTime) {
     Serial.println("[STORAGE] Interval settings saved");
 }
 
+void Storage::setOTAPassword(const char* password) {
+    strlcpy(_settings.otaPassword, password, sizeof(_settings.otaPassword));
+    commit();
+    Serial.println("[STORAGE] OTA password saved");
+}
+
+void Storage::setAPPassword(const char* password) {
+    strlcpy(_settings.apPassword, password, sizeof(_settings.apPassword));
+    commit();
+    Serial.println("[STORAGE] AP password saved");
+}
+
+const char* Storage::getOTAPassword() {
+    if (strlen(_settings.otaPassword) > 0) {
+        return _settings.otaPassword;
+    }
+    return OTA_PASSWORD;  // Default from config.h
+}
+
+const char* Storage::getAPPassword() {
+    if (strlen(_settings.apPassword) > 0) {
+        return _settings.apPassword;
+    }
+    return WIFI_AP_PASSWORD;  // Default from config.h
+}
+
 bool Storage::hasWiFiCredentials() {
     return strlen(_settings.wifiSsid) > 0;
 }

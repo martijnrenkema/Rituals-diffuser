@@ -58,3 +58,7 @@ input:focus{outline:none;border-color:var(--gold)}
 .btn.danger{background:var(--red);color:#fff}
 .info{display:flex;flex-direction:column;gap:6px;color:var(--dim);font-size:.9rem}
 .info b{color:var(--text)}
+.field-group{display:flex;flex-direction:column;gap:6px}
+.field-group label{color:var(--dim);font-size:.85rem;display:flex;justify-content:space-between;align-items:center}
+.field-group small{color:var(--gold);font-size:.75rem}
+.hint{color:var(--dim);font-size:.8rem;text-align:center}

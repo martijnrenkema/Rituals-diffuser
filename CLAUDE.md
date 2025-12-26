@@ -1,5 +1,9 @@
 # Rituals Perfume Genie 2.0 - Development Documentation
 
+## Repository
+
+**GitHub:** https://github.com/martijnrenkema/Rituals-diffuser
+
 ## Hardware Platform
 
 **Target Device:** Rituals Perfume Genie 2.0
@@ -15,12 +19,29 @@
 | GPIO16 | BUTTON_FRONT_PIN | "Connect" button |
 | GPIO3 | BUTTON_REAR_PIN | Rear button (RX pin) |
 
+## Passwords & Security
+
+### Default Passwords
+| Function | Default Value | Configurable |
+|----------|---------------|--------------|
+| WiFi AP | diffuser123 | Yes, via web interface |
+| OTA Updates | diffuser-ota | Yes, via web interface |
+
+### Changing Passwords
+Passwords can be changed via the web interface:
+1. Connect to the device (WiFi or AP mode)
+2. Open http://<device-ip>/ in browser
+3. Expand "Security" section
+4. Enter new password (minimum 8 characters)
+5. Click "Save Passwords"
+6. **Restart device** to apply changes
+
 ## OTA (Over-The-Air) Updates
 
 ### Configuration
-- **Hostname:** `rituals-diffuser.local`
+- **Hostname:** rituals-diffuser.local
 - **Port:** 3232
-- **Password:** `diffuser-ota`
+- **Password:** Configurable (default: diffuser-ota)
 
 ### Commands
 ```bash
@@ -34,21 +55,12 @@ pio run -e esp8266 -t upload --upload-port /dev/cu.usbserial-XXXX
 pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 ```
 
-### Troubleshooting OTA
-1. Verify device is online: `ping rituals-diffuser.local`
-2. Try IP address if mDNS fails
-3. Check port 3232 is not blocked
-4. Fallback: use serial flash
-
 ## WiFi Configuration
 
 ### AP Mode
-- **SSID:** `Rituals-Diffuser-XXXX` (last 4 hex of MAC)
-- **Password:** `diffuser123`
-- **IP:** `192.168.4.1`
-
-### Captive Portal
-Device automatically redirects to configuration page when connected to AP.
+- **SSID:** Rituals-Diffuser-XXXX (last 4 hex of MAC)
+- **Password:** Configurable (default: diffuser123)
+- **IP:** 192.168.4.1
 
 ## MQTT Integration
 
@@ -73,20 +85,7 @@ Device automatically registers with Home Assistant via MQTT discovery.
 - 120 minutes
 - Continuous
 
-### MQTT Topics
-```
-rituals_diffuser/fan/state        → ON/OFF
-rituals_diffuser/fan/speed        → 0-100
-rituals_diffuser/fan/preset       → Timer preset
-rituals_diffuser/interval/state   → ON/OFF
-rituals_diffuser/availability     → online/offline
-```
-
 ## Building
-
-### Requirements
-- PlatformIO CLI or VS Code extension
-- USB-to-Serial adapter for initial flash
 
 ### Build Commands
 ```bash
@@ -98,28 +97,25 @@ pio run -e esp8266 -t upload --upload-port /dev/cu.usbserial-XXXX
 
 # Build and upload via OTA
 pio run -e esp8266_ota -t upload
-
-# Upload SPIFFS filesystem
-pio run -e esp8266 -t uploadfs
 ```
 
-## Default Credentials
+## Web Interface API
 
-| Function | Value |
-|----------|-------|
-| WiFi AP Password | `diffuser123` |
-| OTA Password | `diffuser-ota` |
+### Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /api/status | GET | Get device status |
+| /api/wifi | POST | Set WiFi credentials |
+| /api/mqtt | POST | Set MQTT configuration |
+| /api/fan | POST | Control fan (power, speed, timer) |
+| /api/passwords | GET | Get password status |
+| /api/passwords | POST | Set OTA/AP passwords |
+| /api/reset | POST | Factory reset |
 
-## Platform-Specific Notes
+## Platform Notes
 
-### ESP8266 vs ESP32
-This firmware uses conditional compilation for ESP8266:
-- `#ifdef PLATFORM_ESP8266` for platform-specific code
-- Uses `analogWrite()` instead of `ledcWrite()` for PWM
-- Uses EEPROM instead of Preferences (NVS) for storage
+- Uses PLATFORM_ESP8266 conditional compilation
+- analogWrite() for PWM (not ledcWrite)
+- EEPROM for storage (not Preferences/NVS)
 - FastLED for WS2812B LED control
-
-### Known Limitations
-- GPIO3 (RX) used for rear button - serial debug may interfere
-- Limited to ~600KB firmware (flash usage ~58%)
-- Single WS2812B LED on GPIO15
+- GPIO3 (RX) used for rear button

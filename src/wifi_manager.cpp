@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 #include "config.h"
+#include "storage.h"
 
 // WiFi library is included via wifi_manager.h
 
@@ -105,7 +106,7 @@ bool WiFiManager::isConnected() {
 
 void WiFiManager::startAP() {
     WiFi.mode(WIFI_AP_STA);  // Both AP and STA mode for flexibility
-    WiFi.softAP(_apName.c_str(), WIFI_AP_PASSWORD);
+    WiFi.softAP(_apName.c_str(), storage.getAPPassword());  // Use stored or default password
 
     setState(WifiStatus::AP_MODE);
     Serial.printf("[WIFI] AP started: %s\n", _apName.c_str());

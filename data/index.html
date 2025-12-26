@@ -88,6 +88,22 @@
             </details>
 
             <details class="card">
+                <summary>Security</summary>
+                <form id="pass-form">
+                    <div class="field-group">
+                        <label>OTA Password <small id="ota-status"></small></label>
+                        <input type="password" id="p-ota" placeholder="New OTA password (min 8 chars)">
+                    </div>
+                    <div class="field-group">
+                        <label>WiFi AP Password <small id="ap-status"></small></label>
+                        <input type="password" id="p-ap" placeholder="New AP password (min 8 chars)">
+                    </div>
+                    <button type="submit" class="btn">Save Passwords</button>
+                    <small class="hint">Device restart required after changing passwords</small>
+                </form>
+            </details>
+
+            <details class="card">
                 <summary>System</summary>
                 <div class="info">
                     <span>MAC: <b id="mac">--</b></span>
