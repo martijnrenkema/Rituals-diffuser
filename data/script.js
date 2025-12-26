@@ -142,3 +142,91 @@ $('#pass-form').onsubmit=async e=>{
         }
     }catch(e){alert('Error')}
 };
+
+// RFID handlers
+$('#rfid-scan').onclick=async()=>{
+    $('#rfid-status').textContent='Scanning for RFID reader...';
+    try{
+        const r=await fetch('/api/rfid',{method:'POST',body:new URLSearchParams({action:'scan'})});
+        const d=await r.json();
+        if(d.success)$('#rfid-status').textContent=d.message;
+    }catch(e){$('#rfid-status').textContent='Error starting scan'}
+};
+
+$('#rfid-clear').onclick=async()=>{
+    if(confirm('Clear RFID configuration?')){
+        try{
+            const r=await fetch('/api/rfid',{method:'POST',body:new URLSearchParams({action:'clear'})});
+            const d=await r.json();
+            if(d.success)$('#rfid-status').textContent=d.message;
+        }catch(e){$('#rfid-status').textContent='Error'}
+    }
+};
+
+// Night mode handlers
+$('#night-enable').onchange=async e=>{
+    await saveNightMode();
+};
+
+$('#night-bright').oninput=e=>{
+    $('#night-bright-val').textContent=e.target.value+'%';
+};
+
+$('#save-night').onclick=async()=>{
+    await saveNightMode();
+    alert('Night mode settings saved');
+};
+
+async function saveNightMode(){
+    const params={
+        enabled:$('#night-enable').checked,
+        start:$('#night-start').value,
+        end:$('#night-end').value,
+        brightness:$('#night-bright').value
+    };
+    try{
+        await fetch('/api/night',{method:'POST',body:new URLSearchParams(params)});
+    }catch(e){console.error(e)}
+}
+
+// Update function extended for new data
+function updateExtended(d){
+    // RFID status
+    if(d.rfid){
+        const dot=$('#rfid-dot');
+        dot.classList.toggle('on',d.rfid.configured);
+        dot.classList.toggle('scanning',d.rfid.scanning);
+        $('#cartridge').textContent=d.rfid.cartridge||'--';
+        if(d.rfid.scanning){
+            $('#rfid-status').textContent='Scanning...';
+        }else if(d.rfid.configured){
+            $('#rfid-status').textContent=d.rfid.tag_present?'Tag detected':'Ready';
+        }else{
+            $('#rfid-status').textContent='Not configured';
+        }
+    }
+
+    // Statistics
+    if(d.stats){
+        $('#total-runtime').textContent=d.stats.total_runtime.toFixed(1);
+        $('#session-runtime').textContent=d.stats.session_runtime;
+        $('#cart-runtime').textContent=d.stats.cartridge_runtime.toFixed(1);
+    }
+
+    // Night mode
+    if(d.night){
+        $('#night-enable').checked=d.night.enabled;
+        $('#night-cfg').classList.toggle('show',d.night.enabled);
+        $('#night-start').value=d.night.start;
+        $('#night-end').value=d.night.end;
+        $('#night-bright').value=d.night.brightness;
+        $('#night-bright-val').textContent=d.night.brightness+'%';
+    }
+}
+
+// Wrap original update to include extended data
+const originalUpdate=update;
+update=function(d){
+    originalUpdate(d);
+    updateExtended(d);
+};

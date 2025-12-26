@@ -1,5 +1,6 @@
 #include "fan_controller.h"
 #include "config.h"
+#include "storage.h"
 
 FanController fanController;
 
@@ -50,6 +51,9 @@ void FanController::loop() {
         _lastRpmCalc = now;
     }
 #endif
+
+    // Update runtime statistics every minute
+    updateRuntimeStats();
 
     // Handle soft start
     if (_softStartTime > 0) {
@@ -110,6 +114,10 @@ void FanController::turnOn() {
         _isOn = true;
         if (_speed == 0) _speed = 50; // Default to 50% if not set
 
+        // Start session timer
+        _sessionStartTime = millis();
+        _lastRuntimeSave = millis();
+
         // Soft start
         _softStartTime = millis();
         _softStartTarget = _speed;
@@ -126,9 +134,19 @@ void FanController::turnOn() {
 }
 
 void FanController::turnOff() {
+    // Save final runtime before turning off
+    if (_isOn && _sessionStartTime > 0) {
+        uint32_t sessionMinutes = (millis() - _sessionStartTime) / 60000;
+        if (sessionMinutes > 0) {
+            storage.addRuntimeMinutes(sessionMinutes);
+            _sessionRuntime += sessionMinutes;
+        }
+    }
+
     _isOn = false;
     applyPWM(0);
     _softStartTime = 0;
+    _sessionStartTime = 0;
     Serial.println("[FAN] Turned OFF");
     notifyStateChange();
 }
@@ -221,4 +239,35 @@ void FanController::notifyStateChange() {
     if (_stateCallback) {
         _stateCallback(_isOn, _speed);
     }
+}
+
+void FanController::updateRuntimeStats() {
+    if (!_isOn || _sessionStartTime == 0) return;
+
+    unsigned long now = millis();
+
+    // Save runtime every 5 minutes while running
+    if (now - _lastRuntimeSave >= 300000) {  // 5 minutes
+        uint32_t minutesSinceLastSave = (now - _lastRuntimeSave) / 60000;
+        if (minutesSinceLastSave > 0) {
+            storage.addRuntimeMinutes(minutesSinceLastSave);
+            _sessionRuntime += minutesSinceLastSave;
+            _lastRuntimeSave = now;
+            Serial.printf("[FAN] Runtime saved: +%d min (total: %d min)\n",
+                          minutesSinceLastSave, storage.getTotalRuntimeMinutes());
+        }
+    }
+}
+
+uint32_t FanController::getSessionRuntimeMinutes() {
+    if (!_isOn || _sessionStartTime == 0) return 0;
+    return (millis() - _sessionStartTime) / 60000;
+}
+
+uint32_t FanController::getTotalRuntimeMinutes() {
+    return storage.getTotalRuntimeMinutes() + getSessionRuntimeMinutes();
+}
+
+uint32_t FanController::getCartridgeRuntimeMinutes() {
+    return storage.getCartridgeRuntimeMinutes() + getSessionRuntimeMinutes();
 }

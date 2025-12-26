@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <time.h>
 #include "config.h"
 #include "storage.h"
 #include "wifi_manager.h"
@@ -7,6 +8,7 @@
 #include "fan_controller.h"
 #include "led_controller.h"
 #include "ota_handler.h"
+#include "rfid_handler.h"
 
 #ifdef PLATFORM_ESP8266
 #include "button_handler.h"
@@ -14,6 +16,57 @@
 
 // Global settings
 DiffuserSettings settings;
+
+// Time sync
+bool timeConfigured = false;
+unsigned long lastNightModeCheck = 0;
+
+// Configure NTP time sync
+void setupTimeSync() {
+    // Configure time for Europe/Amsterdam timezone (CET/CEST)
+    configTime(3600, 3600, "pool.ntp.org", "time.nist.gov");
+    Serial.println("[TIME] NTP sync configured");
+    timeConfigured = true;
+}
+
+// Get current hour (0-23), returns 255 if time not available
+uint8_t getCurrentHour() {
+    if (!timeConfigured) return 255;
+
+    time_t now = time(nullptr);
+    if (now < 1000000000) return 255;  // Time not yet synced
+
+    struct tm* timeinfo = localtime(&now);
+    return timeinfo->tm_hour;
+}
+
+// Check and apply night mode
+void checkNightMode() {
+    if (!storage.isNightModeEnabled()) return;
+
+    uint8_t hour = getCurrentHour();
+    if (hour == 255) return;  // Time not available
+
+    bool isNight = storage.isNightModeActive(hour);
+    static bool wasNight = false;
+
+    if (isNight != wasNight) {
+        if (isNight) {
+            ledController.setBrightness(storage.getNightModeBrightness());
+            Serial.printf("[MAIN] Night mode activated (hour=%d)\n", hour);
+        } else {
+            ledController.setBrightness(100);
+            Serial.printf("[MAIN] Night mode deactivated (hour=%d)\n", hour);
+        }
+        wasNight = isNight;
+    }
+}
+
+// RFID cartridge change handler
+void onCartridgeChange(const char* name) {
+    Serial.printf("[MAIN] New cartridge: %s\n", name);
+    mqttHandler.publishState();
+}
 
 // WiFi state change handler
 void onWiFiStateChange(WifiStatus state) {
@@ -29,6 +82,10 @@ void onWiFiStateChange(WifiStatus state) {
             }
             // Start OTA when connected
             otaHandler.begin();
+            // Setup NTP time sync
+            setupTimeSync();
+            // Initialize RFID after WiFi (needs SPI)
+            rfidHandler.begin();
             break;
         case WifiStatus::AP_MODE:
             ledController.showAPMode();
@@ -186,6 +243,9 @@ void setup() {
     otaHandler.onStart(onOTAStart);
     otaHandler.onEnd(onOTAEnd);
 
+    // Setup RFID callback
+    rfidHandler.onCartridgeChange(onCartridgeChange);
+
     Serial.println("[MAIN] Setup complete");
     Serial.println();
 }
@@ -197,10 +257,18 @@ void loop() {
     fanController.loop();
     ledController.loop();
     otaHandler.loop();
+    rfidHandler.loop();
 
 #ifdef PLATFORM_ESP8266
     buttonHandler.loop();
 #endif
+
+    // Check night mode every minute
+    unsigned long now = millis();
+    if (now - lastNightModeCheck >= 60000) {
+        checkNightMode();
+        lastNightModeCheck = now;
+    }
 
     // Small delay to prevent watchdog issues
     yield();

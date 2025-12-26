@@ -41,6 +41,10 @@ public:
     void showOTA();             // Purple fast blink - OTA update
     void showError();           // Red - Error
 
+    // Brightness control (for night mode)
+    void setBrightness(uint8_t percent);
+    uint8_t getBrightness();
+
 private:
     LedMode _mode = LedMode::OFF;
     unsigned long _lastToggle = 0;

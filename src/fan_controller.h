@@ -32,6 +32,11 @@ public:
     // RPM (only available on ESP32 with tacho)
     uint16_t getRPM();
 
+    // Runtime statistics
+    uint32_t getSessionRuntimeMinutes();
+    uint32_t getTotalRuntimeMinutes();
+    uint32_t getCartridgeRuntimeMinutes();
+
     // Callback for state changes
     typedef void (*StateChangeCallback)(bool on, uint8_t speed);
     void onStateChange(StateChangeCallback callback);
@@ -64,11 +69,17 @@ private:
     unsigned long _softStartTime = 0;
     uint8_t _softStartTarget = 0;
 
+    // Runtime tracking
+    unsigned long _sessionStartTime = 0;
+    unsigned long _lastRuntimeSave = 0;
+    uint32_t _sessionRuntime = 0;  // Minutes this session
+
     // Callback
     StateChangeCallback _stateCallback = nullptr;
 
     void applyPWM(uint8_t percent);
     void notifyStateChange();
+    void updateRuntimeStats();
 };
 
 extern FanController fanController;

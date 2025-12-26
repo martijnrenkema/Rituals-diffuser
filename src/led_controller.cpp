@@ -197,3 +197,21 @@ void LedController::updateLed() {
     FastLED.show();
 #endif
 }
+
+void LedController::setBrightness(uint8_t percent) {
+#ifdef PLATFORM_ESP8266
+    // Map percent (0-100) to FastLED brightness (0-255)
+    _brightness = map(constrain(percent, 0, 100), 0, 100, 0, 255);
+    FastLED.setBrightness(_brightness);
+    FastLED.show();
+    Serial.printf("[LED] Brightness set to %d%%\n", percent);
+#endif
+}
+
+uint8_t LedController::getBrightness() {
+#ifdef PLATFORM_ESP8266
+    return map(_brightness, 0, 255, 0, 100);
+#else
+    return 100;
+#endif
+}
