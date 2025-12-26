@@ -62,3 +62,9 @@ input:focus{outline:none;border-color:var(--gold)}
 .field-group label{color:var(--dim);font-size:.85rem;display:flex;justify-content:space-between;align-items:center}
 .field-group small{color:var(--gold);font-size:.75rem}
 .hint{color:var(--dim);font-size:.8rem;text-align:center}
+.dot.small{width:8px;height:8px;display:inline-block;vertical-align:middle;margin-left:6px}
+.dot.scanning{background:var(--gold);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.night-cfg{display:none;flex-direction:column;gap:12px;margin-top:16px}
+.night-cfg.show{display:flex}
+.night-cfg input[type=range]{width:100%}

@@ -88,6 +88,53 @@
             </details>
 
             <details class="card">
+                <summary>Cartridge <span id="rfid-dot" class="dot small"></span></summary>
+                <div class="info">
+                    <span>Scent: <b id="cartridge">--</b></span>
+                    <span>Cartridge runtime: <b id="cart-runtime">--</b> hours</span>
+                </div>
+                <div class="row-2">
+                    <button id="rfid-scan" class="btn">Scan RFID</button>
+                    <button id="rfid-clear" class="btn-sm">Clear</button>
+                </div>
+                <small id="rfid-status" class="hint"></small>
+            </details>
+
+            <details class="card">
+                <summary>Night Mode</summary>
+                <div class="row">
+                    <span>Enable night mode</span>
+                    <label class="switch"><input type="checkbox" id="night-enable"><span></span></label>
+                </div>
+                <div id="night-cfg" class="night-cfg">
+                    <div class="row-2">
+                        <div class="field-group">
+                            <label>Start (hour)</label>
+                            <input type="number" id="night-start" min="0" max="23" value="22">
+                        </div>
+                        <div class="field-group">
+                            <label>End (hour)</label>
+                            <input type="number" id="night-end" min="0" max="23" value="7">
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label>LED Brightness</label>
+                        <input type="range" id="night-bright" min="0" max="100" value="10">
+                        <span id="night-bright-val">10%</span>
+                    </div>
+                    <button id="save-night" class="btn">Save Night Mode</button>
+                </div>
+            </details>
+
+            <details class="card">
+                <summary>Statistics</summary>
+                <div class="info">
+                    <span>Total runtime: <b id="total-runtime">--</b> hours</span>
+                    <span>Session: <b id="session-runtime">--</b> min</span>
+                </div>
+            </details>
+
+            <details class="card">
                 <summary>Security</summary>
                 <form id="pass-form">
                     <div class="field-group">

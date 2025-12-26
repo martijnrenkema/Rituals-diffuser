@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "fan_controller.h"
 #include "mqtt_handler.h"
+#include "rfid_handler.h"
 #include <ArduinoJson.h>
 
 #ifdef PLATFORM_ESP8266
@@ -80,6 +81,22 @@ void WebServer::setupRoutes() {
         handleGetPasswords(request);
     });
 
+    _server->on("/api/rfid", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleGetRFID(request);
+    });
+
+    _server->on("/api/rfid", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        handleRFIDAction(request);
+    });
+
+    _server->on("/api/night", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleGetNightMode(request);
+    });
+
+    _server->on("/api/night", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        handleSaveNightMode(request);
+    });
+
     // Captive portal redirect
     _server->onNotFound([](AsyncWebServerRequest* request) {
         request->redirect("/");
@@ -100,7 +117,7 @@ void WebServer::setupRoutes() {
 void WebServer::handleStatus(AsyncWebServerRequest* request) {
     DiffuserSettings settings = storage.load();
 
-    StaticJsonDocument<1024> doc;
+    StaticJsonDocument<1536> doc;
 
     // WiFi status
     doc["wifi"]["connected"] = wifiManager.isConnected();
@@ -127,6 +144,23 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     // Device info
     doc["device"]["name"] = settings.deviceName;
     doc["device"]["mac"] = wifiManager.getMacAddress();
+
+    // Statistics
+    doc["stats"]["total_runtime"] = storage.getTotalRuntimeMinutes() / 60.0;  // hours
+    doc["stats"]["session_runtime"] = fanController.getSessionRuntimeMinutes();  // minutes
+    doc["stats"]["cartridge_runtime"] = storage.getCartridgeRuntimeMinutes() / 60.0;  // hours
+
+    // RFID status
+    doc["rfid"]["configured"] = rfidHandler.isConfigured();
+    doc["rfid"]["scanning"] = rfidHandler.isScanning();
+    doc["rfid"]["tag_present"] = rfidHandler.isTagPresent();
+    doc["rfid"]["cartridge"] = rfidHandler.getCartridgeName();
+
+    // Night mode
+    doc["night"]["enabled"] = settings.nightModeEnabled;
+    doc["night"]["start"] = settings.nightModeStart;
+    doc["night"]["end"] = settings.nightModeEnd;
+    doc["night"]["brightness"] = settings.nightModeBrightness;
 
     String response;
     serializeJson(doc, response);
@@ -296,4 +330,75 @@ void WebServer::handleGetPasswords(AsyncWebServerRequest* request) {
     String response;
     serializeJson(doc, response);
     request->send(200, "application/json", response);
+}
+
+void WebServer::handleGetRFID(AsyncWebServerRequest* request) {
+    StaticJsonDocument<256> doc;
+
+    doc["configured"] = rfidHandler.isConfigured();
+    doc["scanning"] = rfidHandler.isScanning();
+    doc["tag_present"] = rfidHandler.isTagPresent();
+    doc["cartridge"] = rfidHandler.getCartridgeName();
+    doc["uid"] = rfidHandler.getTagUID();
+    doc["runtime"] = storage.getCartridgeRuntimeMinutes() / 60.0;  // hours
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void WebServer::handleRFIDAction(AsyncWebServerRequest* request) {
+    if (request->hasParam("action", true)) {
+        String action = request->getParam("action", true)->value();
+
+        if (action == "scan") {
+            rfidHandler.startScan();
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"Scanning for RFID reader...\"}");
+        } else if (action == "clear") {
+            rfidHandler.clearConfig();
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"RFID configuration cleared\"}");
+        } else {
+            request->send(400, "application/json", "{\"error\":\"Unknown action\"}");
+        }
+    } else {
+        request->send(400, "application/json", "{\"error\":\"Missing action parameter\"}");
+    }
+}
+
+void WebServer::handleGetNightMode(AsyncWebServerRequest* request) {
+    StaticJsonDocument<256> doc;
+    DiffuserSettings settings = storage.load();
+
+    doc["enabled"] = settings.nightModeEnabled;
+    doc["start"] = settings.nightModeStart;
+    doc["end"] = settings.nightModeEnd;
+    doc["brightness"] = settings.nightModeBrightness;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
+    bool enabled = false;
+    uint8_t start = 22;
+    uint8_t end = 7;
+    uint8_t brightness = 10;
+
+    if (request->hasParam("enabled", true)) {
+        enabled = request->getParam("enabled", true)->value() == "true";
+    }
+    if (request->hasParam("start", true)) {
+        start = request->getParam("start", true)->value().toInt();
+    }
+    if (request->hasParam("end", true)) {
+        end = request->getParam("end", true)->value().toInt();
+    }
+    if (request->hasParam("brightness", true)) {
+        brightness = request->getParam("brightness", true)->value().toInt();
+    }
+
+    storage.setNightMode(enabled, start, end, brightness);
+
+    request->send(200, "application/json", "{\"success\":true,\"message\":\"Night mode settings saved\"}");
 }
