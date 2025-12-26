@@ -173,13 +173,9 @@ String MQTTHandler::getDeviceJson() {
     StaticJsonDocument<512> device;
     device["identifiers"][0] = "rituals_diffuser_" + _deviceId;
     device["name"] = "Rituals Diffuser";
-#ifdef PLATFORM_ESP8266
-    device["model"] = "Genie 2.0";
-#else
-    device["model"] = "ESP32 Custom";
-#endif
-    device["manufacturer"] = "DIY";
-    device["sw_version"] = "1.0.0";
+    device["model"] = "Perfume Genie 2.0";
+    device["manufacturer"] = "Rituals (Custom FW)";
+    device["sw_version"] = "1.1.0";
 
     String output;
     serializeJson(device, output);
@@ -220,11 +216,7 @@ void MQTTHandler::publishFanDiscovery() {
     p += "\"avty_t\":\"" + b + "/availability\",";
     p += "\"spd_rng_min\":1,\"spd_rng_max\":100,";
     p += "\"dev\":{\"ids\":[\"rituals_" + _deviceId + "\"],";
-#ifdef PLATFORM_ESP8266
-    p += "\"name\":\"Rituals Diffuser\",\"mf\":\"DIY\",\"mdl\":\"Genie 2.0\"}}";
-#else
-    p += "\"name\":\"Rituals Diffuser\",\"mf\":\"DIY\",\"mdl\":\"ESP32\"}}";
-#endif
+    p += "\"name\":\"Rituals Diffuser\",\"mf\":\"Rituals (Custom FW)\",\"mdl\":\"Perfume Genie 2.0\"}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/fan/rd_" + _deviceId + "/config";
 
