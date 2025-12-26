@@ -2,6 +2,8 @@
 #include "config.h"
 #include "fan_controller.h"
 #include "wifi_manager.h"
+#include "rfid_handler.h"
+#include "storage.h"
 #include <ArduinoJson.h>
 
 // WiFi library is included via mqtt_handler.h
@@ -194,6 +196,9 @@ void MQTTHandler::publishDiscovery() {
     publishRemainingTimeSensorDiscovery();
     publishRPMSensorDiscovery();
     publishWiFiSensorDiscovery();
+    publishCartridgeSensorDiscovery();
+    publishTotalRuntimeSensorDiscovery();
+    publishCartridgeRuntimeSensorDiscovery();
 
     Serial.println("[MQTT] Discovery published");
 }
@@ -327,6 +332,52 @@ void MQTTHandler::publishWiFiSensorDiscovery() {
     _mqttClient.publish(topic.c_str(), p.c_str(), true);
 }
 
+void MQTTHandler::publishCartridgeSensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Cartridge\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_cart\",";
+    p += "\"stat_t\":\"" + b + "/cartridge\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"ic\":\"mdi:spray\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_cart/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+
+void MQTTHandler::publishTotalRuntimeSensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Total Runtime\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_trun\",";
+    p += "\"stat_t\":\"" + b + "/total_runtime\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"unit_of_meas\":\"h\",\"ic\":\"mdi:clock-check\",";
+    p += "\"ent_cat\":\"diagnostic\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_trun/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+
+void MQTTHandler::publishCartridgeRuntimeSensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Cartridge Runtime\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_crun\",";
+    p += "\"stat_t\":\"" + b + "/cartridge_runtime\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"unit_of_meas\":\"h\",\"ic\":\"mdi:clock-outline\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_crun/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+
 void MQTTHandler::removeDiscovery() {
     String pre = String(MQTT_DISCOVERY_PREFIX);
     String id = "rd_" + _deviceId;
@@ -372,6 +423,25 @@ void MQTTHandler::publishState() {
     _mqttClient.publish((base + "/remaining_time").c_str(), String(fanController.getRemainingMinutes()).c_str(), true);
     _mqttClient.publish((base + "/rpm").c_str(), String(fanController.getRPM()).c_str(), true);
     _mqttClient.publish((base + "/wifi_signal").c_str(), String(wifiManager.getRSSI()).c_str(), true);
+
+    // Cartridge (from RFID or storage)
+    String cartridge = rfidHandler.getCartridgeName();
+    if (cartridge.length() == 0) {
+        cartridge = storage.getCurrentCartridge();
+    }
+    if (cartridge.length() == 0) {
+        cartridge = "Unknown";
+    }
+    _mqttClient.publish((base + "/cartridge").c_str(), cartridge.c_str(), true);
+
+    // Runtime statistics (in hours)
+    float totalHours = fanController.getTotalRuntimeMinutes() / 60.0;
+    float cartridgeHours = fanController.getCartridgeRuntimeMinutes() / 60.0;
+    char buf[10];
+    snprintf(buf, sizeof(buf), "%.1f", totalHours);
+    _mqttClient.publish((base + "/total_runtime").c_str(), buf, true);
+    snprintf(buf, sizeof(buf), "%.1f", cartridgeHours);
+    _mqttClient.publish((base + "/cartridge_runtime").c_str(), buf, true);
 }
 
 void MQTTHandler::publishAvailability(bool online) {
