@@ -72,6 +72,14 @@ void WebServer::setupRoutes() {
         handleReset(request);
     });
 
+    _server->on("/api/passwords", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        handleSavePasswords(request);
+    });
+
+    _server->on("/api/passwords", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleGetPasswords(request);
+    });
+
     // Captive portal redirect
     _server->onNotFound([](AsyncWebServerRequest* request) {
         request->redirect("/");
@@ -243,4 +251,49 @@ void WebServer::handleReset(AsyncWebServerRequest* request) {
     delay(500);
     storage.reset();
     ESP.restart();
+}
+
+void WebServer::handleSavePasswords(AsyncWebServerRequest* request) {
+    bool changed = false;
+
+    if (request->hasParam("ota_password", true)) {
+        String otaPass = request->getParam("ota_password", true)->value();
+        if (otaPass.length() >= 8) {
+            storage.setOTAPassword(otaPass.c_str());
+            changed = true;
+        } else if (otaPass.length() > 0) {
+            request->send(400, "application/json", "{\"error\":\"OTA password must be at least 8 characters\"}");
+            return;
+        }
+    }
+
+    if (request->hasParam("ap_password", true)) {
+        String apPass = request->getParam("ap_password", true)->value();
+        if (apPass.length() >= 8) {
+            storage.setAPPassword(apPass.c_str());
+            changed = true;
+        } else if (apPass.length() > 0) {
+            request->send(400, "application/json", "{\"error\":\"AP password must be at least 8 characters\"}");
+            return;
+        }
+    }
+
+    if (changed) {
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Passwords saved. Restart device to apply.\"}");
+    } else {
+        request->send(400, "application/json", "{\"error\":\"No valid passwords provided\"}");
+    }
+}
+
+void WebServer::handleGetPasswords(AsyncWebServerRequest* request) {
+    StaticJsonDocument<256> doc;
+    // Don't return actual passwords, just indicate if custom ones are set
+    doc["ota_custom"] = strlen(storage.load().otaPassword) > 0;
+    doc["ap_custom"] = strlen(storage.load().apPassword) > 0;
+    doc["ota_default"] = OTA_PASSWORD;
+    doc["ap_default"] = WIFI_AP_PASSWORD;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
 }

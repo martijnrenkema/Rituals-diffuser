@@ -1,5 +1,6 @@
 #include "ota_handler.h"
 #include "config.h"
+#include "storage.h"
 
 #ifdef PLATFORM_ESP8266
     #include <ArduinoOTA.h>
@@ -11,7 +12,7 @@ OTAHandler otaHandler;
 
 void OTAHandler::begin() {
     ArduinoOTA.setHostname(OTA_HOSTNAME);
-    ArduinoOTA.setPassword(OTA_PASSWORD);
+    ArduinoOTA.setPassword(storage.getOTAPassword());  // Use stored or default password
 
     ArduinoOTA.onStart([this]() {
         String type;

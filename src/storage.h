@@ -26,9 +26,13 @@ struct DiffuserSettings {
     bool intervalEnabled;
     uint8_t intervalOnTime;
     uint8_t intervalOffTime;
+
+    // Security - configurable passwords
+    char otaPassword[32];
+    char apPassword[32];
 };
 
-#define SETTINGS_MAGIC 0xD1FF0001  // Magic number for valid settings
+#define SETTINGS_MAGIC 0xD1FF0002  // Magic number for valid settings (incremented for new fields)
 
 class Storage {
 public:
@@ -46,6 +50,12 @@ public:
     void setDeviceName(const char* name);
     void setFanSpeed(uint8_t speed);
     void setIntervalMode(bool enabled, uint8_t onTime, uint8_t offTime);
+    void setOTAPassword(const char* password);
+    void setAPPassword(const char* password);
+
+    // Password getters
+    const char* getOTAPassword();
+    const char* getAPPassword();
 
     // Check if WiFi is configured
     bool hasWiFiCredentials();
