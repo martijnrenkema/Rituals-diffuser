@@ -183,13 +183,8 @@ void setup() {
 
     Serial.println();
     Serial.println("=================================");
-#ifdef PLATFORM_ESP8266
     Serial.println("  Rituals Perfume Genie 2.0");
     Serial.println("  Custom Firmware v1.1.0");
-#else
-    Serial.println("  Rituals Diffuser ESP32");
-    Serial.println("  Version 1.0.0");
-#endif
     Serial.println("=================================");
     Serial.println();
 
