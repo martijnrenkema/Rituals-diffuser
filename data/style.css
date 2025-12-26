@@ -5,9 +5,10 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 header{display:flex;justify-content:space-between;align-items:center;padding:12px 0 24px}
 .logo{display:flex;align-items:center;gap:10px;color:var(--gold);font-size:1.1rem;font-weight:600}
 .logo svg{opacity:.9}
-.status{display:flex;gap:8px}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--red)}
-.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+.status{display:flex;gap:12px}
+.status-item{display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--dim)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red)}
+.dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
 .hero{text-align:center;padding:20px 0 30px;position:relative}
 .power-btn{width:64px;height:64px;border-radius:50%;border:2px solid var(--gold-dim);background:transparent;color:var(--dim);cursor:pointer;transition:all .3s;position:absolute;top:20px;right:0}
 .power-btn svg{width:28px;height:28px;fill:currentColor}
