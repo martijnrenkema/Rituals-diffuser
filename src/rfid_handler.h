@@ -65,6 +65,13 @@ private:
     static const uint8_t SCAN_PINS_COUNT;
     uint8_t _scanIndex = 0;
 
+    // Scan state - instance variables to fix static reset bug
+    uint8_t _sckIdx = 0;
+    uint8_t _misoIdx = 0;
+    uint8_t _mosiIdx = 0;
+    uint8_t _ssIdx = 0;
+    uint8_t _rstIdx = 0;
+
     bool tryPinCombination(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss, uint8_t rst);
     void initReader(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss, uint8_t rst);
     void continueScan();

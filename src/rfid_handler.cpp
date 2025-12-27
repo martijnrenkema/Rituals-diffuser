@@ -92,6 +92,13 @@ void RFIDHandler::startScan() {
     _scanSuccess = false;
     _scanIndex = 0;
     _scanStartTime = millis();
+
+    // Fix: Reset scan indices to start from beginning
+    _sckIdx = 0;
+    _misoIdx = 0;
+    _mosiIdx = 0;
+    _ssIdx = 0;
+    _rstIdx = 0;
 }
 
 void RFIDHandler::continueScan() {
@@ -114,14 +121,6 @@ void RFIDHandler::continueScan() {
     static const uint8_t ssPinsCount = sizeof(ssPins) / sizeof(ssPins[0]);
     static const uint8_t rstPinsCount = sizeof(rstPins) / sizeof(rstPins[0]);
 
-    // Fix #6: Reset static indices on first call to prevent carrying over from previous scan
-    static uint8_t sckIdx = 0, misoIdx = 0, mosiIdx = 0, ssIdx = 0, rstIdx = 0;
-    static bool needsReset = true;
-    if (needsReset) {
-        sckIdx = misoIdx = mosiIdx = ssIdx = rstIdx = 0;
-        needsReset = false;
-    }
-
     // Timeout after 30 seconds
     if (millis() - _scanStartTime > 30000) {
         Serial.println("[RFID] Scan timeout");
@@ -131,12 +130,13 @@ void RFIDHandler::continueScan() {
         return;
     }
 
+    // Fix: Use instance variables instead of static (reset properly in startScan)
     // Try current combination
-    uint8_t sck = sckPins[sckIdx];
-    uint8_t miso = misoPins[misoIdx];
-    uint8_t mosi = mosiPins[mosiIdx];
-    uint8_t ss = ssPins[ssIdx];
-    uint8_t rst = rstPins[rstIdx];
+    uint8_t sck = sckPins[_sckIdx];
+    uint8_t miso = misoPins[_misoIdx];
+    uint8_t mosi = mosiPins[_mosiIdx];
+    uint8_t ss = ssPins[_ssIdx];
+    uint8_t rst = rstPins[_rstIdx];
 
     // Skip invalid combinations (same pin used twice)
     bool valid = (sck != miso && sck != mosi && sck != ss && sck != rst &&
@@ -163,21 +163,21 @@ void RFIDHandler::continueScan() {
         }
     }
 
-    // Move to next combination
-    rstIdx++;
-    if (rstIdx >= rstPinsCount) {
-        rstIdx = 0;
-        ssIdx++;
-        if (ssIdx >= ssPinsCount) {
-            ssIdx = 0;
-            mosiIdx++;
-            if (mosiIdx >= mosiPinsCount) {
-                mosiIdx = 0;
-                misoIdx++;
-                if (misoIdx >= misoPinsCount) {
-                    misoIdx = 0;
-                    sckIdx++;
-                    if (sckIdx >= sckPinsCount) {
+    // Move to next combination (using instance variables)
+    _rstIdx++;
+    if (_rstIdx >= rstPinsCount) {
+        _rstIdx = 0;
+        _ssIdx++;
+        if (_ssIdx >= ssPinsCount) {
+            _ssIdx = 0;
+            _mosiIdx++;
+            if (_mosiIdx >= mosiPinsCount) {
+                _mosiIdx = 0;
+                _misoIdx++;
+                if (_misoIdx >= misoPinsCount) {
+                    _misoIdx = 0;
+                    _sckIdx++;
+                    if (_sckIdx >= sckPinsCount) {
                         // All combinations tried
                         Serial.println("[RFID] Scan complete - no working configuration found");
                         _scanning = false;
@@ -204,8 +204,14 @@ bool RFIDHandler::tryPinCombination(uint8_t sck, uint8_t miso, uint8_t mosi, uin
     SPI.pins(sck, miso, mosi, ss);
     SPI.begin();
 
-    // Create MFRC522 instance
+    // Create MFRC522 instance - Fix: Check for allocation failure
     _mfrc522 = new MFRC522(ss, rst);
+    if (_mfrc522 == nullptr) {
+        Serial.println("[RFID] Memory allocation failed");
+        SPI.end();
+        return false;
+    }
+
     _mfrc522->PCD_Init();
 
     delay(50);  // Give it time to initialize
@@ -236,7 +242,15 @@ void RFIDHandler::initReader(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss
     SPI.pins(sck, miso, mosi, ss);
     SPI.begin();
 
+    // Fix: Check for allocation failure
     _mfrc522 = new MFRC522(ss, rst);
+    if (_mfrc522 == nullptr) {
+        Serial.println("[RFID] Memory allocation failed in initReader");
+        SPI.end();
+        _status = RFIDStatus::ERROR;
+        return;
+    }
+
     _mfrc522->PCD_Init();
 
     delay(50);
@@ -255,9 +269,11 @@ bool RFIDHandler::detectTag() {
         return false;
     }
 
-    // Get UID
+    // Get UID - Fix: Validate size to prevent buffer overflow
+    // MFRC522 library defines uidByte with max 10 bytes
     String uid = "";
-    for (byte i = 0; i < _mfrc522->uid.size; i++) {
+    byte maxSize = min(_mfrc522->uid.size, (byte)10);
+    for (byte i = 0; i < maxSize; i++) {
         if (_mfrc522->uid.uidByte[i] < 0x10) uid += "0";
         uid += String(_mfrc522->uid.uidByte[i], HEX);
     }

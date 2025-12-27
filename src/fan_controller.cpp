@@ -159,6 +159,11 @@ bool FanController::isOn() {
 
 void FanController::setTimer(uint16_t minutes) {
     if (minutes > 0) {
+        // Fix: Limit to 24 hours to prevent overflow
+        if (minutes > 1440) {
+            minutes = 1440;
+            Serial.println("[FAN] Timer limited to 24 hours");
+        }
         _timerEndTime = millis() + (minutes * 60000UL);
         _timerActive = true;
         if (!_isOn) turnOn();

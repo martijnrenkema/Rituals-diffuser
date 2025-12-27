@@ -41,7 +41,11 @@ void OTAHandler::begin() {
     });
 
     ArduinoOTA.onProgress([this](unsigned int progress, unsigned int total) {
-        int percent = (progress / (total / 100));
+        // Fix: Prevent division by zero when total < 100
+        int percent = 0;
+        if (total > 0) {
+            percent = (progress * 100) / total;  // Safer calculation
+        }
         Serial.printf("[OTA] Progress: %u%%\r", percent);
 
         if (_progressCallback) {

@@ -98,7 +98,14 @@ bool MQTTHandler::isConnected() {
 }
 
 void MQTTHandler::mqttCallback(char* topic, byte* payload, unsigned int length) {
-    char message[length + 1];
+    // Fix: Limit length to prevent stack overflow (max 512 bytes for MQTT payload)
+    const unsigned int MAX_MQTT_PAYLOAD = 512;
+    if (length > MAX_MQTT_PAYLOAD) {
+        Serial.printf("[MQTT] Payload too large (%u bytes), truncating to %u\n", length, MAX_MQTT_PAYLOAD);
+        length = MAX_MQTT_PAYLOAD;
+    }
+
+    char message[MAX_MQTT_PAYLOAD + 1];
     memcpy(message, payload, length);
     message[length] = '\0';
 
@@ -121,8 +128,12 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
             fanController.turnOff();
         }
     } else if (t.endsWith("/fan/speed/set")) {
-        // Speed percentage
+        // Speed percentage - Fix: Add input validation
         int speed = p.toInt();
+        if (speed < 0 || speed > 100) {
+            Serial.printf("[MQTT] Invalid speed: %d (must be 0-100)\n", speed);
+            return;
+        }
         fanController.setSpeed(speed);
         if (speed > 0 && !fanController.isOn()) {
             fanController.turnOn();

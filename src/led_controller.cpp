@@ -70,16 +70,20 @@ void LedController::loop() {
             // Smooth pulsing effect
             if (now - _lastToggle >= 10) {
                 if (_pulseDirection) {
-                    _pulseValue += 5;
-                    if (_pulseValue >= 255) {
+                    // Fix: Prevent overflow by checking before adding
+                    if (_pulseValue >= 250) {
                         _pulseValue = 255;
                         _pulseDirection = false;
+                    } else {
+                        _pulseValue += 5;
                     }
                 } else {
-                    _pulseValue -= 5;
-                    if (_pulseValue <= 10) {
+                    // Fix: Prevent underflow by checking before subtracting
+                    if (_pulseValue <= 15) {
                         _pulseValue = 10;
                         _pulseDirection = true;
+                    } else {
+                        _pulseValue -= 5;
                     }
                 }
 #ifdef PLATFORM_ESP8266

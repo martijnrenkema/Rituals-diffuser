@@ -37,6 +37,8 @@ uint8_t getCurrentHour() {
     if (now < 1000000000) return 255;  // Time not yet synced
 
     struct tm* timeinfo = localtime(&now);
+    // Fix: Check for NULL pointer before dereferencing
+    if (timeinfo == nullptr) return 255;
     return timeinfo->tm_hour;
 }
 
