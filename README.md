@@ -10,6 +10,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 
 ## Features
 
+### Core Features
 - **Local Control** - No cloud dependency, works offline
 - **Home Assistant Integration** - MQTT auto-discovery
 - **Timer Presets** - 30, 60, 90, 120 minutes + continuous
@@ -17,10 +18,17 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 - **Night Mode** - Auto-dim LED during configured hours
 - **RFID Cartridge Detection** - Reads scent name from Rituals cartridge
 - **Usage Statistics** - Track total runtime and cartridge usage
-- **OTA Updates** - Wireless firmware updates after initial flash
-- **Web Interface** - Configure WiFi, MQTT, passwords, and control the diffuser
 - **RGB LED Status** - Visual feedback for device state
 - **Physical Buttons** - Front and rear button support
+
+### Advanced Features
+- **WebSocket Support** - Real-time state updates (2/sec max)
+- **Web OTA Updates** - Firmware updates via web interface
+- **Backup/Restore** - Export and import full configuration as JSON
+- **CSRF Protection** - Session-based token authentication
+- **Security Headers** - X-Frame-Options, X-XSS-Protection, etc.
+- **Input Validation** - Comprehensive validation on all API endpoints
+- **Non-blocking I/O** - Async WiFi reconnect and web server
 
 ## Hardware
 
@@ -92,7 +100,7 @@ esptool.py --port /dev/cu.usbserial-XXXX write_flash 0x00000 rituals_original_fi
 
 ### OTA Updates (After First Flash)
 
-Once the firmware is installed and connected to WiFi:
+#### Method 1: Arduino OTA (PlatformIO)
 
 ```bash
 pio run -e esp8266_ota -t upload
@@ -103,6 +111,13 @@ pio run -e esp8266_ota -t upload
 | Hostname | `rituals-diffuser.local` |
 | Port | 3232 |
 | Password | `diffuser-ota` |
+
+#### Method 2: Web OTA (Browser)
+
+1. Open web interface: `http://rituals-diffuser.local` or `http://[device-ip]`
+2. Build firmware: `pio run -e esp8266`
+3. Upload `.pio/build/esp8266/firmware.bin` via web interface
+4. Device automatically reboots after successful update
 
 ## WiFi Setup
 
@@ -185,6 +200,103 @@ rituals_diffuser/fan/preset       → Timer preset
 rituals_diffuser/availability     → online/offline
 ```
 
+## Web Interface & API
+
+### WebSocket
+
+Real-time bidirectional communication for instant state updates.
+
+**Endpoint:** `ws://[device-ip]/ws`
+
+**Client → Server (Commands):**
+```json
+{"fan": "on"}
+{"fan": "off"}
+{"speed": 75}
+{"request": "state"}
+```
+
+**Server → Client (State Updates):**
+```json
+{
+  "fan": {"on": true, "speed": 75, "timer_active": true, "remaining_minutes": 45},
+  "wifi": {"connected": true, "rssi": -65, "ip": "192.168.1.100"},
+  "mqtt": {"connected": true},
+  "rfid": {"tag_present": true, "cartridge": "Sakura"},
+  "runtime": {"total": 150.5, "session": 2}
+}
+```
+
+### REST API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth` | GET | Get CSRF token for protected endpoints |
+| `/api/status` | GET | Device status (fan, WiFi, MQTT, RFID) |
+| `/api/fan` | POST | Control fan (on, speed, timer, interval) |
+| `/api/wifi` | POST | Save WiFi credentials |
+| `/api/mqtt` | POST | Save MQTT configuration |
+| `/api/passwords` | GET/POST | View/change OTA and AP passwords |
+| `/api/rfid` | GET/POST | RFID status and configuration |
+| `/api/night` | GET/POST | Night mode settings |
+| `/api/backup` | GET | Download full configuration as JSON |
+| `/api/restore` | POST | Restore configuration from JSON |
+| `/api/reset` | POST | Factory reset device |
+| `/update` | POST | Upload firmware binary (Web OTA) |
+
+**Authentication:** Include `X-Auth-Token` header with token from `/api/auth` for protected endpoints.
+
+### Backup & Restore
+
+**Export Configuration:**
+```bash
+curl http://rituals-diffuser.local/api/backup > backup.json
+```
+
+**Import Configuration:**
+```bash
+curl -X POST http://rituals-diffuser.local/api/restore \
+  -H "Content-Type: application/json" \
+  -d @backup.json
+```
+
+Configuration backup includes:
+- WiFi credentials
+- MQTT settings
+- Device name
+- Fan speed and interval settings
+- Security passwords (OTA, AP)
+- RFID pin configuration
+- Night mode settings
+
+## Security Features
+
+### CSRF Protection
+- Session-based authentication tokens
+- Token required for sensitive operations
+- Token rotates on device restart
+
+### Input Validation
+- All user inputs validated and sanitized
+- Length limits enforced on strings
+- Numeric ranges constrained (speed: 0-100, hours: 0-23, etc.)
+- Password length validation (minimum 8 characters)
+
+### Security Headers
+```
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+X-XSS-Protection: 1; mode=block
+Referrer-Policy: no-referrer
+```
+
+### Best Practices
+- Change default passwords after first setup
+- Use strong WiFi passwords (WPA2)
+- Keep firmware updated
+- Disable AP mode when not needed
+- Use MQTT authentication
+
 ## Project Structure
 
 ```
@@ -216,20 +328,74 @@ rituals_diffuser/availability     → online/offline
 ## Troubleshooting
 
 ### OTA upload fails
-- Check WiFi: `ping rituals-diffuser.local`
-- Try using IP address instead of hostname
-- Ensure port 3232 is not blocked
-- Fallback: flash via serial
+- **Arduino OTA:**
+  - Check WiFi: `ping rituals-diffuser.local`
+  - Try using IP address instead of hostname
+  - Ensure port 3232 is not blocked
+  - Verify OTA password is correct
+- **Web OTA:**
+  - Use firmware.bin file (not .elf)
+  - Wait for upload to complete (progress bar)
+  - Don't interrupt during flash process
+- **Fallback:** Flash via serial connection
+
+### WebSocket connection issues
+- Check browser console for errors
+- Verify WebSocket endpoint: `ws://[ip]/ws`
+- Some browsers block mixed content (HTTP + WS on HTTPS sites)
+- Try refreshing the page
+
+### Backup/Restore fails
+- Ensure backup JSON file is valid
+- Check file size < 2KB
+- Verify all required fields are present
+- Device restarts after successful restore
 
 ### Device not found in Home Assistant
 - Check MQTT broker connection
 - Remove old device from HA
 - Power cycle the ESP
 - Wait 30 seconds for discovery
+- Verify MQTT credentials are correct
 
 ### WiFi won't connect
 - Factory reset: hold front button for 3 seconds
-- Connect to AP mode and reconfigure
+- Connect to AP mode: `Rituals-Diffuser-XXXX`
+- Reconfigure WiFi credentials
+- Check WiFi password (min 8 chars for WPA2)
+
+### API returns 401 Unauthorized
+- Get auth token from `/api/auth`
+- Include token in `X-Auth-Token` header
+- Token resets on device reboot
+
+## Changelog
+
+### v1.1.0 (Latest)
+
+**New Features:**
+- ✨ WebSocket support for real-time state updates
+- ✨ Web OTA firmware updates via browser
+- ✨ Backup/Restore configuration as JSON
+- 🔒 CSRF protection with session tokens
+- 🔒 Comprehensive input validation on all endpoints
+- 🔒 Security headers (X-Frame-Options, X-XSS-Protection, etc.)
+
+**Improvements:**
+- 🚀 Non-blocking WiFi reconnection (removed 5-second delay)
+- 🐛 Fixed WebSocket memory leak in server stop
+- 🐛 Fixed runtime statistics double-counting
+- 🐛 Fixed restore handler incomplete data buffering
+- 🐛 Fixed RFID static variable reset between scans
+- 🐛 Fixed buffer overflow in WebSocket message handling
+- 🐛 Thread-safe null checks for concurrent access
+- 📝 Reduced EEPROM wear with optional commit parameter
+
+**Security:**
+- Default passwords no longer exposed via API
+- Password requirements enforced (8+ characters)
+- CSRF token rotation on reboot
+- Input sanitization on all user inputs
 
 ## Contributing
 
