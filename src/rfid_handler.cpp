@@ -296,11 +296,15 @@ String RFIDHandler::readTagData() {
 
     // Read pages 4-15 (user data area for NTAG)
     byte buffer[18];
-    byte size = sizeof(buffer);
 
     for (byte page = 4; page < 16; page++) {
+        // Fix: Reset size before each read (MIFARE_Read modifies it)
+        byte size = sizeof(buffer);
+
         MFRC522::StatusCode status = _mfrc522->MIFARE_Read(page, buffer, &size);
-        if (status == MFRC522::STATUS_OK) {
+
+        // Fix: Validate returned size before accessing buffer
+        if (status == MFRC522::STATUS_OK && size >= 4) {
             for (byte i = 0; i < 4; i++) {
                 if (buffer[i] >= 32 && buffer[i] < 127) {
                     data += (char)buffer[i];

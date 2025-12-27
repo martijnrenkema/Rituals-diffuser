@@ -149,7 +149,11 @@ void onFrontButton(ButtonEvent event) {
         // Factory reset - blink red and reset
         Serial.println("[MAIN] Factory reset triggered!");
         ledController.showError();
-        delay(2000);
+        // Fix: Feed watchdog during delay to prevent timeout
+        for (int i = 0; i < 20; i++) {
+            delay(100);
+            yield();  // Feed watchdog
+        }
         storage.reset();
         ESP.restart();
     }

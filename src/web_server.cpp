@@ -30,10 +30,22 @@ void WebServer::begin() {
         Serial.println("[WEB] SPIFFS mount failed");
     }
 
+    // Fix: Check for allocation failure
     _server = new AsyncWebServer(WEBSERVER_PORT);
+    if (_server == nullptr) {
+        Serial.println("[WEB] CRITICAL: Server allocation failed");
+        return;
+    }
 
-    // Initialize WebSocket
+    // Initialize WebSocket - Fix: Check for allocation failure
     _ws = new AsyncWebSocket("/ws");
+    if (_ws == nullptr) {
+        Serial.println("[WEB] CRITICAL: WebSocket allocation failed");
+        delete _server;
+        _server = nullptr;
+        return;
+    }
+
     _ws->onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client,
                        AwsEventType type, void *arg, uint8_t *data, size_t len) {
         this->onWebSocketEvent(server, client, type, arg, data, len);

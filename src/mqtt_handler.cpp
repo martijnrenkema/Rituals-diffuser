@@ -440,7 +440,9 @@ void MQTTHandler::publishState() {
     // Runtime statistics (in hours)
     float totalHours = fanController.getTotalRuntimeMinutes() / 60.0;
     float cartridgeHours = fanController.getCartridgeRuntimeMinutes() / 60.0;
-    char buf[10];
+    // Fix: Increase buffer to 16 bytes to prevent overflow with large values
+    // Max value: 71582788.2 hours = 11 chars + null = 12 bytes (16 is safe)
+    char buf[16];
     snprintf(buf, sizeof(buf), "%.1f", totalHours);
     _mqttClient.publish((base + "/total_runtime").c_str(), buf, true);
     snprintf(buf, sizeof(buf), "%.1f", cartridgeHours);
