@@ -133,10 +133,20 @@
                     <div class="info">
                         <span>Platform: <b id="diag-platform">--</b></span>
                         <span>Fan PWM: <b>G<span id="diag-fan-pwm">--</span></b></span>
-                        <span>Fan Speed: <b>G<span id="diag-fan-speed">--</span></b></span>
+                        <span>Fan Tacho: <b>G<span id="diag-fan-tacho">--</span></b></span>
                         <span>LED: <b>G<span id="diag-led">--</span></b></span>
                         <span>Btn Front: <b>G<span id="diag-btn-front">--</span></b></span>
                         <span>Btn Rear: <b>G<span id="diag-btn-rear">--</span></b></span>
+                    </div>
+                </div>
+                <div class="diag-section">
+                    <h4>Fan Test</h4>
+                    <div class="diag-status">Status: <span id="fan-status" class="dot"></span> <span id="fan-status-text">--</span></div>
+                    <div class="diag-status">RPM: <b id="fan-rpm">0</b></div>
+                    <div class="diag-btns">
+                        <button class="btn-sm diag-fan" data-action="test">Test Cycle</button>
+                        <button class="btn-sm diag-fan" data-action="on">On</button>
+                        <button class="btn-sm diag-fan" data-action="off">Off</button>
                     </div>
                 </div>
                 <div class="diag-section">
@@ -148,15 +158,6 @@
                         <button class="btn-sm diag-led" data-color="green" style="background:#27ae60">Green</button>
                         <button class="btn-sm diag-led" data-color="blue" style="background:#3498db">Blue</button>
                         <button class="btn-sm diag-led" data-color="reset">Reset</button>
-                    </div>
-                </div>
-                <div class="diag-section">
-                    <h4>Fan Test</h4>
-                    <div class="diag-status">Status: <span id="fan-status" class="dot"></span> <span id="fan-status-text">--</span></div>
-                    <div class="diag-btns">
-                        <button class="btn-sm diag-fan" data-action="test">Test Cycle</button>
-                        <button class="btn-sm diag-fan" data-action="on">On</button>
-                        <button class="btn-sm diag-fan" data-action="off">Off</button>
                     </div>
                 </div>
                 <div class="diag-section">

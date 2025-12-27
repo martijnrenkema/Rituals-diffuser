@@ -429,13 +429,16 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
 void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
     StaticJsonDocument<512> doc;
 
-    // Fan status
-    doc["fan"]["connected"] = true;  // Assume connected if we can control it
+    // Fan status - connected if we detect RPM when running
+    uint16_t rpm = fanController.getRPM();
+    bool fanConnected = (fanController.isOn() && rpm > 0) || !fanController.isOn();
+    doc["fan"]["connected"] = fanConnected;
     doc["fan"]["on"] = fanController.isOn();
     doc["fan"]["speed"] = fanController.getSpeed();
+    doc["fan"]["rpm"] = rpm;
 
     // LED status
-    doc["led"]["connected"] = true;
+    doc["led"]["connected"] = true;  // Cannot detect, assume connected
     doc["led"]["mode"] = (int)ledController.getMode();
     doc["led"]["brightness"] = ledController.getBrightness();
 
@@ -452,14 +455,14 @@ void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
 #ifdef PLATFORM_ESP8266
     doc["pins"]["platform"] = "ESP8266";
     doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
-    doc["pins"]["fan_speed"] = FAN_SPEED_PIN;
+    doc["pins"]["fan_tacho"] = FAN_TACHO_PIN;
     doc["pins"]["led"] = LED_DATA_PIN;
     doc["pins"]["btn_front"] = BUTTON_FRONT_PIN;
     doc["pins"]["btn_rear"] = BUTTON_REAR_PIN;
 #else
     doc["pins"]["platform"] = "ESP32";
     doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
-    doc["pins"]["fan_speed"] = FAN_SPEED_PIN;
+    doc["pins"]["fan_tacho"] = FAN_TACHO_PIN;
     doc["pins"]["led"] = LED_DATA_PIN;
     doc["pins"]["btn_front"] = BUTTON_FRONT_PIN;
     doc["pins"]["btn_rear"] = BUTTON_REAR_PIN;

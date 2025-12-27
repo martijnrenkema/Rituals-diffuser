@@ -249,7 +249,7 @@ function updateDiagnostic(d){
     if(d.pins){
         $('#diag-platform').textContent=d.pins.platform;
         $('#diag-fan-pwm').textContent=d.pins.fan_pwm;
-        $('#diag-fan-speed').textContent=d.pins.fan_speed;
+        $('#diag-fan-tacho').textContent=d.pins.fan_tacho;
         $('#diag-led').textContent=d.pins.led;
         $('#diag-btn-front').textContent=d.pins.btn_front;
         $('#diag-btn-rear').textContent=d.pins.btn_rear;
@@ -275,8 +275,15 @@ function updateDiagnostic(d){
 
     // Fan status
     if(d.fan){
-        $('#fan-status').classList.toggle('on',d.fan.on);
-        $('#fan-status-text').textContent=d.fan.on?'Running at '+d.fan.speed+'%':'Off';
+        const connected=d.fan.connected;
+        const running=d.fan.on&&d.fan.rpm>0;
+        $('#fan-status').classList.toggle('on',running);
+        $('#fan-rpm').textContent=d.fan.rpm;
+        if(d.fan.on){
+            $('#fan-status-text').textContent=d.fan.rpm>0?'Running at '+d.fan.speed+'%':'No RPM detected!';
+        }else{
+            $('#fan-status-text').textContent='Off';
+        }
     }
 
     // RFID status
