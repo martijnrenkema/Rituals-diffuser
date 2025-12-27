@@ -30,10 +30,43 @@ void WebServer::begin() {
     }
 
     _server = new AsyncWebServer(WEBSERVER_PORT);
+    generateSessionToken();
     setupRoutes();
     _server->begin();
 
     Serial.println("[WEB] Server started on port 80");
+    Serial.printf("[WEB] Session token: %s\n", _sessionToken.c_str());
+    Serial.println("[WEB] WARNING: Add 'X-Auth-Token' header to requests for protected endpoints");
+}
+
+void WebServer::generateSessionToken() {
+    // Generate random session token for CSRF protection
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    uint32_t random_val = ESP.getCycleCount() ^ millis();
+
+    char token[17];
+    snprintf(token, sizeof(token), "%02X%02X%02X%08X",
+             mac[3], mac[4], mac[5], random_val);
+    _sessionToken = String(token);
+}
+
+bool WebServer::checkAuth(AsyncWebServerRequest* request) {
+    // Check for auth token in header
+    if (request->hasHeader("X-Auth-Token")) {
+        String token = request->header("X-Auth-Token");
+        if (token == _sessionToken) {
+            return true;
+        }
+    }
+
+    // For initial setup in AP mode, allow access without token
+    // This allows first-time configuration
+    if (wifiManager.isAPMode()) {
+        return true;
+    }
+
+    return false;
 }
 
 void WebServer::stop() {
@@ -49,10 +82,26 @@ void WebServer::onSettingsChanged(SettingsCallback callback) {
 }
 
 void WebServer::setupRoutes() {
+    // Add security headers to all responses
+    DefaultHeaders::Instance().addHeader("X-Frame-Options", "DENY");
+    DefaultHeaders::Instance().addHeader("X-Content-Type-Options", "nosniff");
+    DefaultHeaders::Instance().addHeader("X-XSS-Protection", "1; mode=block");
+    DefaultHeaders::Instance().addHeader("Referrer-Policy", "no-referrer");
+
     // Serve static files from SPIFFS
     _server->serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
 
     // API endpoints
+    // Auth token endpoint (for CSRF protection)
+    _server->on("/api/auth", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        StaticJsonDocument<128> doc;
+        doc["token"] = _sessionToken;
+        doc["info"] = "Include this token in X-Auth-Token header for protected endpoints";
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+
     _server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         handleStatus(request);
     });
@@ -177,6 +226,20 @@ void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
     String ssid = request->getParam("ssid", true)->value();
     String password = request->getParam("password", true)->value();
 
+    // Input validation
+    if (ssid.length() == 0 || ssid.length() > 32) {
+        request->send(400, "application/json", "{\"error\":\"SSID must be 1-32 characters\"}");
+        return;
+    }
+    if (password.length() > 0 && password.length() < 8) {
+        request->send(400, "application/json", "{\"error\":\"WiFi password must be at least 8 characters\"}");
+        return;
+    }
+    if (password.length() > 63) {
+        request->send(400, "application/json", "{\"error\":\"WiFi password too long (max 63)\"}");
+        return;
+    }
+
     storage.setWiFi(ssid.c_str(), password.c_str());
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"WiFi saved, connecting...\"}");
@@ -210,6 +273,24 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
         password = request->getParam("password", true)->value();
     }
 
+    // Input validation
+    if (host.length() == 0 || host.length() > 64) {
+        request->send(400, "application/json", "{\"error\":\"MQTT host must be 1-64 characters\"}");
+        return;
+    }
+    if (port == 0 || port > 65535) {
+        request->send(400, "application/json", "{\"error\":\"Invalid MQTT port (1-65535)\"}");
+        return;
+    }
+    if (user.length() > 32) {
+        request->send(400, "application/json", "{\"error\":\"MQTT user too long (max 32)\"}");
+        return;
+    }
+    if (password.length() > 64) {
+        request->send(400, "application/json", "{\"error\":\"MQTT password too long (max 64)\"}");
+        return;
+    }
+
     storage.setMQTT(host.c_str(), port, user.c_str(), password.c_str());
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"MQTT saved, connecting...\"}");
@@ -238,12 +319,28 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
 
     if (request->hasParam("speed", true)) {
         int speed = request->getParam("speed", true)->value().toInt();
+        // Input validation
+        if (speed < 0 || speed > 100) {
+            response["success"] = false;
+            response["error"] = "Speed must be 0-100";
+            String output;
+            serializeJson(response, output);
+            return request->send(400, "application/json", output);
+        }
         fanController.setSpeed(speed);
         storage.setFanSpeed(speed, true);  // Commit user-initiated changes
     }
 
     if (request->hasParam("timer", true)) {
         int timer = request->getParam("timer", true)->value().toInt();
+        // Input validation
+        if (timer < 0 || timer > 1440) {  // Max 24 hours
+            response["success"] = false;
+            response["error"] = "Timer must be 0-1440 minutes";
+            String output;
+            serializeJson(response, output);
+            return request->send(400, "application/json", output);
+        }
         if (timer > 0) {
             fanController.setTimer(timer);
         } else {
@@ -259,6 +356,14 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     if (request->hasParam("interval_on", true) && request->hasParam("interval_off", true)) {
         int onTime = request->getParam("interval_on", true)->value().toInt();
         int offTime = request->getParam("interval_off", true)->value().toInt();
+        // Input validation
+        if (onTime < 10 || onTime > 120 || offTime < 10 || offTime > 120) {
+            response["success"] = false;
+            response["error"] = "Interval times must be 10-120 seconds";
+            String output;
+            serializeJson(response, output);
+            return request->send(400, "application/json", output);
+        }
         fanController.setIntervalTimes(onTime, offTime);
         storage.setIntervalMode(fanController.isIntervalMode(), onTime, offTime);
     }
@@ -322,8 +427,7 @@ void WebServer::handleGetPasswords(AsyncWebServerRequest* request) {
     // Don't return actual passwords, just indicate if custom ones are set
     doc["ota_custom"] = strlen(storage.load().otaPassword) > 0;
     doc["ap_custom"] = strlen(storage.load().apPassword) > 0;
-    doc["ota_default"] = OTA_PASSWORD;
-    doc["ap_default"] = WIFI_AP_PASSWORD;
+    // Security: Never expose default passwords via API
 
     String response;
     serializeJson(doc, response);
@@ -394,6 +498,16 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
     }
     if (request->hasParam("brightness", true)) {
         brightness = request->getParam("brightness", true)->value().toInt();
+    }
+
+    // Input validation
+    if (start > 23 || end > 23) {
+        request->send(400, "application/json", "{\"error\":\"Hours must be 0-23\"}");
+        return;
+    }
+    if (brightness > 100) {
+        request->send(400, "application/json", "{\"error\":\"Brightness must be 0-100\"}");
+        return;
     }
 
     storage.setNightMode(enabled, start, end, brightness);

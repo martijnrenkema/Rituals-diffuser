@@ -16,8 +16,11 @@ public:
 private:
     AsyncWebServer* _server = nullptr;
     SettingsCallback _settingsCallback = nullptr;
+    String _sessionToken = "";
 
     void setupRoutes();
+    void generateSessionToken();
+    bool checkAuth(AsyncWebServerRequest* request);
     void handleRoot(AsyncWebServerRequest* request);
     void handleStatus(AsyncWebServerRequest* request);
     void handleSaveWifi(AsyncWebServerRequest* request);
