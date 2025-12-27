@@ -6,8 +6,8 @@
 
 #ifdef PLATFORM_ESP8266
     #define FASTLED_ESP8266_RAW_PIN_ORDER
-    #include <FastLED.h>
 #endif
+#include <FastLED.h>
 
 enum class LedMode {
     OFF,
@@ -52,11 +52,9 @@ private:
     uint8_t _pulseValue = 0;
     bool _pulseDirection = true;
 
-#ifdef PLATFORM_ESP8266
     CRGB _leds[NUM_LEDS];
     uint32_t _currentColor = LED_COLOR_BLUE;
     uint8_t _brightness = 255;
-#endif
 
     void updateLed();
 };

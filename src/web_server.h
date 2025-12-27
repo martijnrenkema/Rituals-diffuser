@@ -30,6 +30,12 @@ private:
     void handleRFIDAction(AsyncWebServerRequest* request);
     void handleGetNightMode(AsyncWebServerRequest* request);
     void handleSaveNightMode(AsyncWebServerRequest* request);
+
+    // Hardware diagnostics
+    void handleDiagnostic(AsyncWebServerRequest* request);
+    void handleDiagnosticLed(AsyncWebServerRequest* request);
+    void handleDiagnosticFan(AsyncWebServerRequest* request);
+    void handleDiagnosticButtons(AsyncWebServerRequest* request);
 };
 
 extern WebServer webServer;

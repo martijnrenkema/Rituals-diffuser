@@ -3,6 +3,8 @@
 #include "storage.h"
 #include "wifi_manager.h"
 #include "fan_controller.h"
+#include "led_controller.h"
+#include "button_handler.h"
 #include "mqtt_handler.h"
 #include "rfid_handler.h"
 #include <ArduinoJson.h>
@@ -95,6 +97,23 @@ void WebServer::setupRoutes() {
 
     _server->on("/api/night", HTTP_POST, [this](AsyncWebServerRequest* request) {
         handleSaveNightMode(request);
+    });
+
+    // Hardware diagnostics
+    _server->on("/api/diagnostic", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleDiagnostic(request);
+    });
+
+    _server->on("/api/diagnostic/led", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        handleDiagnosticLed(request);
+    });
+
+    _server->on("/api/diagnostic/fan", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        handleDiagnosticFan(request);
+    });
+
+    _server->on("/api/diagnostic/buttons", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleDiagnosticButtons(request);
     });
 
     // Captive portal redirect
@@ -401,4 +420,184 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
     storage.setNightMode(enabled, start, end, brightness);
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Night mode settings saved\"}");
+}
+
+// =====================================================
+// Hardware Diagnostics
+// =====================================================
+
+void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
+    StaticJsonDocument<512> doc;
+
+    // Fan status
+    doc["fan"]["connected"] = true;  // Assume connected if we can control it
+    doc["fan"]["on"] = fanController.isOn();
+    doc["fan"]["speed"] = fanController.getSpeed();
+
+    // LED status
+    doc["led"]["connected"] = true;
+    doc["led"]["mode"] = (int)ledController.getMode();
+    doc["led"]["brightness"] = ledController.getBrightness();
+
+    // Button status
+    doc["buttons"]["front_pressed"] = buttonHandler.isFrontPressed();
+    doc["buttons"]["rear_pressed"] = buttonHandler.isRearPressed();
+
+    // RFID status
+    doc["rfid"]["connected"] = rfidHandler.isConfigured();
+    doc["rfid"]["tag_present"] = rfidHandler.isTagPresent();
+    doc["rfid"]["cartridge"] = rfidHandler.getCartridgeName();
+
+    // Pin configuration
+#ifdef PLATFORM_ESP8266
+    doc["pins"]["platform"] = "ESP8266";
+    doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
+    doc["pins"]["fan_speed"] = FAN_SPEED_PIN;
+    doc["pins"]["led"] = LED_DATA_PIN;
+    doc["pins"]["btn_front"] = BUTTON_FRONT_PIN;
+    doc["pins"]["btn_rear"] = BUTTON_REAR_PIN;
+#else
+    doc["pins"]["platform"] = "ESP32";
+    doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
+    doc["pins"]["fan_speed"] = FAN_SPEED_PIN;
+    doc["pins"]["led"] = LED_DATA_PIN;
+    doc["pins"]["btn_front"] = BUTTON_FRONT_PIN;
+    doc["pins"]["btn_rear"] = BUTTON_REAR_PIN;
+    doc["pins"]["rfid_sck"] = RFID_SCK_PIN;
+    doc["pins"]["rfid_miso"] = RFID_MISO_PIN;
+    doc["pins"]["rfid_mosi"] = RFID_MOSI_PIN;
+    doc["pins"]["rfid_ss"] = RFID_SS_PIN;
+    doc["pins"]["rfid_rst"] = RFID_RST_PIN;
+#endif
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void WebServer::handleDiagnosticLed(AsyncWebServerRequest* request) {
+    if (request->hasParam("action", true)) {
+        String action = request->getParam("action", true)->value();
+
+        if (action == "test") {
+            // Run LED color test sequence
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"LED test started\"}");
+
+            // Cycle through colors
+            ledController.setColor(LED_COLOR_RED);
+            ledController.setMode(LedMode::ON);
+            delay(500);
+            ledController.setColor(LED_COLOR_GREEN);
+            delay(500);
+            ledController.setColor(LED_COLOR_BLUE);
+            delay(500);
+            ledController.setColor(LED_COLOR_PURPLE);
+            delay(500);
+            ledController.setColor(LED_COLOR_ORANGE);
+            delay(500);
+            ledController.setColor(LED_COLOR_CYAN);
+            delay(500);
+            ledController.setColor(LED_COLOR_WHITE);
+            delay(500);
+
+            // Return to normal state
+            if (fanController.isOn()) {
+                ledController.showFanRunning();
+            } else if (wifiManager.isConnected()) {
+                ledController.showConnected();
+            } else {
+                ledController.showAPMode();
+            }
+        } else if (action == "red") {
+            ledController.setColor(LED_COLOR_RED);
+            ledController.setMode(LedMode::ON);
+            request->send(200, "application/json", "{\"success\":true,\"color\":\"red\"}");
+        } else if (action == "green") {
+            ledController.setColor(LED_COLOR_GREEN);
+            ledController.setMode(LedMode::ON);
+            request->send(200, "application/json", "{\"success\":true,\"color\":\"green\"}");
+        } else if (action == "blue") {
+            ledController.setColor(LED_COLOR_BLUE);
+            ledController.setMode(LedMode::ON);
+            request->send(200, "application/json", "{\"success\":true,\"color\":\"blue\"}");
+        } else if (action == "off") {
+            ledController.off();
+            request->send(200, "application/json", "{\"success\":true,\"color\":\"off\"}");
+        } else if (action == "reset") {
+            // Return to normal state
+            if (fanController.isOn()) {
+                ledController.showFanRunning();
+            } else if (wifiManager.isConnected()) {
+                ledController.showConnected();
+            } else {
+                ledController.showAPMode();
+            }
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"LED reset to normal\"}");
+        } else {
+            request->send(400, "application/json", "{\"error\":\"Unknown action\"}");
+        }
+    } else {
+        request->send(400, "application/json", "{\"error\":\"Missing action parameter\"}");
+    }
+}
+
+void WebServer::handleDiagnosticFan(AsyncWebServerRequest* request) {
+    if (request->hasParam("action", true)) {
+        String action = request->getParam("action", true)->value();
+
+        if (action == "test") {
+            // Run fan test sequence
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"Fan test started\"}");
+
+            // Test at different speeds
+            fanController.setSpeed(25);
+            fanController.turnOn();
+            delay(1000);
+            fanController.setSpeed(50);
+            delay(1000);
+            fanController.setSpeed(75);
+            delay(1000);
+            fanController.setSpeed(100);
+            delay(1000);
+            fanController.turnOff();
+        } else if (action == "on") {
+            fanController.turnOn();
+            request->send(200, "application/json", "{\"success\":true,\"fan\":\"on\"}");
+        } else if (action == "off") {
+            fanController.turnOff();
+            request->send(200, "application/json", "{\"success\":true,\"fan\":\"off\"}");
+        } else if (action == "speed") {
+            if (request->hasParam("value", true)) {
+                int speed = request->getParam("value", true)->value().toInt();
+                fanController.setSpeed(speed);
+                if (!fanController.isOn()) fanController.turnOn();
+
+                StaticJsonDocument<128> doc;
+                doc["success"] = true;
+                doc["speed"] = speed;
+                String response;
+                serializeJson(doc, response);
+                request->send(200, "application/json", response);
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Missing speed value\"}");
+            }
+        } else {
+            request->send(400, "application/json", "{\"error\":\"Unknown action\"}");
+        }
+    } else {
+        request->send(400, "application/json", "{\"error\":\"Missing action parameter\"}");
+    }
+}
+
+void WebServer::handleDiagnosticButtons(AsyncWebServerRequest* request) {
+    StaticJsonDocument<128> doc;
+
+    doc["front"]["pressed"] = buttonHandler.isFrontPressed();
+    doc["front"]["pin"] = BUTTON_FRONT_PIN;
+    doc["rear"]["pressed"] = buttonHandler.isRearPressed();
+    doc["rear"]["pin"] = BUTTON_REAR_PIN;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
 }
