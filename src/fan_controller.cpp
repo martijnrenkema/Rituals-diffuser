@@ -4,26 +4,33 @@
 
 FanController fanController;
 
-// Tachometer code verwijderd - Rituals Genie heeft geen tachometer
+// Tachometer interrupt voor RPM meting
+volatile uint32_t FanController::_tachoCount = 0;
+
+void IRAM_ATTR FanController::tachoISR() {
+    _tachoCount++;
+}
 
 void FanController::begin() {
 #ifdef PLATFORM_ESP8266
-    // ESP8266: Setup PWM pins
+    // ESP8266: Setup PWM pin
     pinMode(FAN_PWM_PIN, OUTPUT);
-    pinMode(FAN_SPEED_PIN, OUTPUT);
     analogWriteFreq(PWM_FREQUENCY);
     analogWriteRange(PWM_RANGE);
     analogWrite(FAN_PWM_PIN, 0);
-    analogWrite(FAN_SPEED_PIN, 0);
-#else
-    // ESP32: Setup LEDC PWM voor Rituals Genie hardware
-    // FAN_PWM_PIN = on/off control, FAN_SPEED_PIN = speed PWM
-    pinMode(FAN_PWM_PIN, OUTPUT);
-    digitalWrite(FAN_PWM_PIN, LOW);
 
-    ledcSetup(PWM_CHANNEL_SPEED, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcAttachPin(FAN_SPEED_PIN, PWM_CHANNEL_SPEED);
-    ledcWrite(PWM_CHANNEL_SPEED, 0);
+    // Setup tachometer input with interrupt
+    pinMode(FAN_TACHO_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(FAN_TACHO_PIN), tachoISR, FALLING);
+#else
+    // ESP32: Setup LEDC PWM
+    ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
+    ledcAttachPin(FAN_PWM_PIN, PWM_CHANNEL);
+    ledcWrite(PWM_CHANNEL, 0);
+
+    // Setup tachometer input with interrupt
+    pinMode(FAN_TACHO_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(FAN_TACHO_PIN), tachoISR, FALLING);
 #endif
 
     Serial.println("[FAN] Controller initialized");
@@ -31,6 +38,19 @@ void FanController::begin() {
 
 void FanController::loop() {
     unsigned long now = millis();
+
+    // Calculate RPM every second
+    if (now - _lastRpmCalc >= 1000) {
+        noInterrupts();
+        uint32_t count = _tachoCount;
+        _tachoCount = 0;
+        interrupts();
+
+        // RPM = (pulses per second / pulses per revolution) * 60
+        // Most fans have 2 pulses per revolution
+        _rpm = (count / TACHO_PULSES_PER_REV) * 60;
+        _lastRpmCalc = now;
+    }
 
     // Update runtime statistics every minute
     updateRuntimeStats();
@@ -202,23 +222,11 @@ void FanController::applyPWM(uint8_t percent) {
     uint8_t pwmValue = map(percent, 0, 100, 0, 255);
 
 #ifdef PLATFORM_ESP8266
-    // Rituals Genie: GPIO4 = on/off, GPIO5 = speed
-    if (percent > 0) {
-        digitalWrite(FAN_PWM_PIN, HIGH);  // Fan on
-        analogWrite(FAN_SPEED_PIN, pwmValue);  // Speed control
-    } else {
-        digitalWrite(FAN_PWM_PIN, LOW);   // Fan off
-        analogWrite(FAN_SPEED_PIN, 0);
-    }
+    // ESP8266: GPIO4 = PWM speed control
+    analogWrite(FAN_PWM_PIN, pwmValue);
 #else
-    // ESP32: Rituals Genie style control (same as ESP8266)
-    if (percent > 0) {
-        digitalWrite(FAN_PWM_PIN, HIGH);  // Fan on
-        ledcWrite(PWM_CHANNEL_SPEED, pwmValue);  // Speed control
-    } else {
-        digitalWrite(FAN_PWM_PIN, LOW);   // Fan off
-        ledcWrite(PWM_CHANNEL_SPEED, 0);
-    }
+    // ESP32: LEDC PWM speed control
+    ledcWrite(PWM_CHANNEL, pwmValue);
 #endif
 }
 

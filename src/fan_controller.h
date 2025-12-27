@@ -57,7 +57,10 @@ private:
     unsigned long _intervalNextToggle = 0;
     bool _intervalCurrentlyOn = true;
 
-    // RPM (niet beschikbaar op Rituals Genie - geen tachometer)
+    // RPM measurement via tachometer (GPIO5/TP17)
+    static volatile uint32_t _tachoCount;
+    static void IRAM_ATTR tachoISR();
+    unsigned long _lastRpmCalc = 0;
     uint16_t _rpm = 0;
 
     // Soft start

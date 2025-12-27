@@ -15,8 +15,8 @@
 // ===========================================
 #ifdef PLATFORM_ESP8266
     // Rituals Genie ESP-WROOM-02 pinout
-    #define FAN_PWM_PIN         4       // GPIO4 - Fan on/off & PWM (blue wire)
-    #define FAN_SPEED_PIN       5       // GPIO5 - Fan speed control (yellow wire)
+    #define FAN_PWM_PIN         4       // GPIO4 - Fan PWM speed control (blue wire)
+    #define FAN_TACHO_PIN       5       // GPIO5 - Fan tachometer/RPM (yellow wire, TP17)
     #define LED_DATA_PIN        15      // GPIO15 - WS2812 RGB LED
     #define BUTTON_FRONT_PIN    16      // GPIO16 - Connect button (front)
     #define BUTTON_REAR_PIN     3       // GPIO3 (RX) - Rear button
@@ -24,22 +24,21 @@
 #else
     // ESP32 DevKit pinout voor Rituals Genie
     // Sluit de Genie board draden aan op deze ESP32 pinnen:
-    #define FAN_PWM_PIN         25      // GPIO25 → Genie GPIO4 (fan on/off, blue wire)
-    #define FAN_SPEED_PIN       26      // GPIO26 → Genie GPIO5 (fan speed, yellow wire)
+    #define FAN_PWM_PIN         25      // GPIO25 → Genie GPIO4 (fan PWM, blue wire)
+    #define FAN_TACHO_PIN       26      // GPIO26 → Genie GPIO5/TP17 (tachometer, yellow wire)
     #define LED_DATA_PIN        27      // GPIO27 → Genie GPIO15 (WS2812 LED data)
     #define BUTTON_FRONT_PIN    32      // GPIO32 → Genie GPIO16 (front button)
     #define BUTTON_REAR_PIN     33      // GPIO33 → Genie GPIO3 (rear button)
     #define NUM_LEDS            1       // Single WS2812 LED
 
-    // RFID pins (VSPI)
+    // RFID pins (VSPI) - niet conflicteren met fan pinnen!
     #define RFID_SCK_PIN        18      // GPIO18 - SPI Clock
     #define RFID_MISO_PIN       19      // GPIO19 - SPI MISO
     #define RFID_MOSI_PIN       23      // GPIO23 - SPI MOSI
-    #define RFID_SS_PIN         5       // GPIO5  - SPI Slave Select
-    #define RFID_RST_PIN        4       // GPIO4  - Reset
+    #define RFID_SS_PIN         15      // GPIO15 - SPI Slave Select
+    #define RFID_RST_PIN        2       // GPIO2  - Reset
 
-    // Legacy aliases voor backwards compatibility
-    #define FAN_TACHO_PIN       34      // Optional: tachometer input (not used on Genie)
+    // Legacy alias
     #define LED_PIN             2       // Built-in LED (fallback)
 #endif
 
@@ -50,9 +49,8 @@
     #define PWM_FREQUENCY       1000    // ESP8266 default PWM freq
     #define PWM_RANGE           255     // 8-bit PWM
 #else
-    #define PWM_FREQUENCY       1000    // 1kHz - matches ESP8266
-    #define PWM_CHANNEL         0       // LEDC channel for fan on/off
-    #define PWM_CHANNEL_SPEED   1       // LEDC channel for fan speed
+    #define PWM_FREQUENCY       25000   // 25kHz - optimal for 4-wire fans
+    #define PWM_CHANNEL         0       // LEDC channel for fan PWM
     #define PWM_RESOLUTION      8       // 8-bit (0-255)
 #endif
 
