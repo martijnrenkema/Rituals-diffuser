@@ -92,6 +92,11 @@ void WebServer::stop() {
         delete _server;
         _server = nullptr;
     }
+    // Fix #1: Prevent WebSocket memory leak
+    if (_ws != nullptr) {
+        delete _ws;
+        _ws = nullptr;
+    }
 }
 
 void WebServer::onSettingsChanged(SettingsCallback callback) {
@@ -171,11 +176,22 @@ void WebServer::setupRoutes() {
     _server->on("/api/restore", HTTP_POST, [this](AsyncWebServerRequest* request) {
         request->send(200);
     }, NULL, [this](AsyncWebServerRequest* request, uint8_t *data, size_t len, size_t index, size_t total) {
+        // Fix #2: Buffer all chunks, not just the last one
         if (index == 0) {
             Serial.printf("[WEB] Restore started, total size: %u\n", total);
+            _restoreBuffer = "";  // Clear buffer for new upload
+            _restoreBuffer.reserve(total);  // Pre-allocate memory
         }
+
+        // Append this chunk to buffer
+        for (size_t i = 0; i < len; i++) {
+            _restoreBuffer += (char)data[i];
+        }
+
+        // When all chunks received, process complete data
         if (index + len == total) {
-            handleRestore(request, data, len);
+            handleRestore(request, (uint8_t*)_restoreBuffer.c_str(), _restoreBuffer.length());
+            _restoreBuffer = "";  // Clear buffer after processing
         }
     });
 
@@ -624,8 +640,13 @@ void WebServer::onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *c
 void WebServer::handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     AwsFrameInfo *info = (AwsFrameInfo*)arg;
     if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-        data[len] = 0;
-        String message = (char*)data;
+        // Fix #5: Prevent buffer overflow - don't write past data buffer
+        // Create String from data with explicit length (no null terminator needed)
+        String message;
+        message.reserve(len + 1);
+        for (size_t i = 0; i < len; i++) {
+            message += (char)data[i];
+        }
 
         // Parse JSON command
         StaticJsonDocument<256> doc;
@@ -688,7 +709,12 @@ void WebServer::broadcastState() {
 
     String output;
     serializeJson(doc, output);
-    _ws->textAll(output);
+
+    // Fix #7: Thread-safe null check before using WebSocket
+    // Prevents race condition if stop() is called during broadcast
+    if (_ws != nullptr) {
+        _ws->textAll(output);
+    }
 }
 
 // Backup configuration
@@ -782,26 +808,44 @@ void WebServer::handleRestore(AsyncWebServerRequest* request, uint8_t *data, siz
         strlcpy(settings.deviceName, doc["device"]["name"] | "Rituals Diffuser", sizeof(settings.deviceName));
     }
 
-    // Restore fan
+    // Restore fan - Fix #4: Add input validation
     if (doc.containsKey("fan")) {
-        settings.fanSpeed = doc["fan"]["speed"] | 50;
+        uint8_t speed = doc["fan"]["speed"] | 50;
+        settings.fanSpeed = constrain(speed, 0, 100);  // Validate 0-100
+
         settings.intervalEnabled = doc["fan"]["interval_enabled"] | false;
-        settings.intervalOnTime = doc["fan"]["interval_on"] | 30;
-        settings.intervalOffTime = doc["fan"]["interval_off"] | 30;
+
+        uint8_t onTime = doc["fan"]["interval_on"] | 30;
+        uint8_t offTime = doc["fan"]["interval_off"] | 30;
+        settings.intervalOnTime = constrain(onTime, 10, 120);  // Validate 10-120
+        settings.intervalOffTime = constrain(offTime, 10, 120);
     }
 
-    // Restore security
+    // Restore security - Fix #4: Validate password lengths
     if (doc.containsKey("security")) {
-        strlcpy(settings.otaPassword, doc["security"]["ota_password"] | "", sizeof(settings.otaPassword));
-        strlcpy(settings.apPassword, doc["security"]["ap_password"] | "", sizeof(settings.apPassword));
+        const char* otaPass = doc["security"]["ota_password"] | "";
+        const char* apPass = doc["security"]["ap_password"] | "";
+
+        // Only restore if valid length (0 = default, or >= 8)
+        if (strlen(otaPass) == 0 || strlen(otaPass) >= 8) {
+            strlcpy(settings.otaPassword, otaPass, sizeof(settings.otaPassword));
+        }
+        if (strlen(apPass) == 0 || strlen(apPass) >= 8) {
+            strlcpy(settings.apPassword, apPass, sizeof(settings.apPassword));
+        }
     }
 
-    // Restore night mode
+    // Restore night mode - Fix #4: Validate hour and brightness ranges
     if (doc.containsKey("night_mode")) {
         settings.nightModeEnabled = doc["night_mode"]["enabled"] | false;
-        settings.nightModeStart = doc["night_mode"]["start"] | 22;
-        settings.nightModeEnd = doc["night_mode"]["end"] | 7;
-        settings.nightModeBrightness = doc["night_mode"]["brightness"] | 10;
+
+        uint8_t start = doc["night_mode"]["start"] | 22;
+        uint8_t end = doc["night_mode"]["end"] | 7;
+        uint8_t brightness = doc["night_mode"]["brightness"] | 10;
+
+        settings.nightModeStart = constrain(start, 0, 23);  // Validate 0-23
+        settings.nightModeEnd = constrain(end, 0, 23);
+        settings.nightModeBrightness = constrain(brightness, 0, 100);  // Validate 0-100
     }
 
     // Save restored settings

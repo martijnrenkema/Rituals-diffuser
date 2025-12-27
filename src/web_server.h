@@ -23,6 +23,7 @@ private:
     SettingsCallback _settingsCallback = nullptr;
     String _sessionToken = "";
     unsigned long _lastBroadcast = 0;
+    String _restoreBuffer = "";  // Buffer for multi-chunk restore data
 
     void setupRoutes();
     void generateSessionToken();

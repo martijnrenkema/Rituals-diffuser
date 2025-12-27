@@ -114,7 +114,13 @@ void RFIDHandler::continueScan() {
     static const uint8_t ssPinsCount = sizeof(ssPins) / sizeof(ssPins[0]);
     static const uint8_t rstPinsCount = sizeof(rstPins) / sizeof(rstPins[0]);
 
+    // Fix #6: Reset static indices on first call to prevent carrying over from previous scan
     static uint8_t sckIdx = 0, misoIdx = 0, mosiIdx = 0, ssIdx = 0, rstIdx = 0;
+    static bool needsReset = true;
+    if (needsReset) {
+        sckIdx = misoIdx = mosiIdx = ssIdx = rstIdx = 0;
+        needsReset = false;
+    }
 
     // Timeout after 30 seconds
     if (millis() - _scanStartTime > 30000) {

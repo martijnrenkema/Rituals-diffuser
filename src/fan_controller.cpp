@@ -134,12 +134,13 @@ void FanController::turnOn() {
 }
 
 void FanController::turnOff() {
-    // Save final runtime before turning off
-    if (_isOn && _sessionStartTime > 0) {
-        uint32_t sessionMinutes = (millis() - _sessionStartTime) / 60000;
-        if (sessionMinutes > 0) {
-            storage.addRuntimeMinutes(sessionMinutes);
-            _sessionRuntime += sessionMinutes;
+    // Fix #3: Save only remaining runtime since last save (prevent double-counting)
+    if (_isOn && _lastRuntimeSave > 0) {
+        uint32_t minutesSinceLastSave = (millis() - _lastRuntimeSave) / 60000;
+        if (minutesSinceLastSave > 0) {
+            storage.addRuntimeMinutes(minutesSinceLastSave);
+            _sessionRuntime += minutesSinceLastSave;
+            Serial.printf("[FAN] Final runtime saved: +%d min\n", minutesSinceLastSave);
         }
     }
 
@@ -147,6 +148,7 @@ void FanController::turnOff() {
     applyPWM(0);
     _softStartTime = 0;
     _sessionStartTime = 0;
+    _lastRuntimeSave = 0;  // Reset for next session
     Serial.println("[FAN] Turned OFF");
     notifyStateChange();
 }
