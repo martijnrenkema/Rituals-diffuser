@@ -116,9 +116,12 @@ void Storage::setDeviceName(const char* name) {
     Serial.println("[STORAGE] Device name saved");
 }
 
-void Storage::setFanSpeed(uint8_t speed) {
+void Storage::setFanSpeed(uint8_t speed, bool commitNow) {
     _settings.fanSpeed = speed;
-    commit();
+    if (commitNow) {
+        commit();
+    }
+    // Otherwise, speed will be saved when fan turns off or via periodic runtime saves
 }
 
 void Storage::setIntervalMode(bool enabled, uint8_t onTime, uint8_t offTime) {

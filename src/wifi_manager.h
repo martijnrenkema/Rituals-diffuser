@@ -56,7 +56,10 @@ private:
 
     static const uint8_t MAX_RECONNECT_ATTEMPTS = 3;
     static const unsigned long AP_RETRY_INTERVAL = 300000; // 5 min: retry WiFi while in AP mode
+    static const unsigned long AP_CONNECT_CHECK_TIMEOUT = 10000; // 10 sec: timeout for AP mode reconnect attempts
     unsigned long _lastAPRetry = 0;
+    unsigned long _apConnectStartTime = 0;
+    bool _apConnectInProgress = false;
 
     void setState(WifiStatus state);
     void generateAPName();

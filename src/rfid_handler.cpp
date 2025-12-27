@@ -108,6 +108,12 @@ void RFIDHandler::continueScan() {
     static const uint8_t ssPins[] = {2, 0, 15, 4, 5};
     static const uint8_t rstPins[] = {0, 2, 16, 4, 5};
 
+    static const uint8_t sckPinsCount = sizeof(sckPins) / sizeof(sckPins[0]);
+    static const uint8_t misoPinsCount = sizeof(misoPins) / sizeof(misoPins[0]);
+    static const uint8_t mosiPinsCount = sizeof(mosiPins) / sizeof(mosiPins[0]);
+    static const uint8_t ssPinsCount = sizeof(ssPins) / sizeof(ssPins[0]);
+    static const uint8_t rstPinsCount = sizeof(rstPins) / sizeof(rstPins[0]);
+
     static uint8_t sckIdx = 0, misoIdx = 0, mosiIdx = 0, ssIdx = 0, rstIdx = 0;
 
     // Timeout after 30 seconds
@@ -153,19 +159,19 @@ void RFIDHandler::continueScan() {
 
     // Move to next combination
     rstIdx++;
-    if (rstIdx >= sizeof(rstPins)) {
+    if (rstIdx >= rstPinsCount) {
         rstIdx = 0;
         ssIdx++;
-        if (ssIdx >= sizeof(ssPins)) {
+        if (ssIdx >= ssPinsCount) {
             ssIdx = 0;
             mosiIdx++;
-            if (mosiIdx >= sizeof(mosiPins)) {
+            if (mosiIdx >= mosiPinsCount) {
                 mosiIdx = 0;
                 misoIdx++;
-                if (misoIdx >= sizeof(misoPins)) {
+                if (misoIdx >= misoPinsCount) {
                     misoIdx = 0;
                     sckIdx++;
-                    if (sckIdx >= sizeof(sckPins)) {
+                    if (sckIdx >= sckPinsCount) {
                         // All combinations tried
                         Serial.println("[RFID] Scan complete - no working configuration found");
                         _scanning = false;

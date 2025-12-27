@@ -68,7 +68,7 @@ public:
     void setWiFi(const char* ssid, const char* password);
     void setMQTT(const char* host, uint16_t port, const char* user, const char* password);
     void setDeviceName(const char* name);
-    void setFanSpeed(uint8_t speed);
+    void setFanSpeed(uint8_t speed, bool commitNow = false);  // Commit optional to reduce EEPROM wear
     void setIntervalMode(bool enabled, uint8_t onTime, uint8_t offTime);
     void setOTAPassword(const char* password);
     void setAPPassword(const char* password);

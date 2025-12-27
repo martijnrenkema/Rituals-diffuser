@@ -181,8 +181,7 @@ void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"WiFi saved, connecting...\"}");
 
-    // Connect to new network
-    delay(500);
+    // Connect to new network (async web server handles response independently)
     wifiManager.connect(ssid.c_str(), password.c_str());
 
     if (_settingsCallback) {
@@ -215,8 +214,7 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"MQTT saved, connecting...\"}");
 
-    // Reconnect MQTT
-    delay(500);
+    // Reconnect MQTT (async web server handles response independently)
     mqttHandler.disconnect();
     mqttHandler.connect(host.c_str(), port, user.c_str(), password.c_str());
 
@@ -241,7 +239,7 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     if (request->hasParam("speed", true)) {
         int speed = request->getParam("speed", true)->value().toInt();
         fanController.setSpeed(speed);
-        storage.setFanSpeed(speed);
+        storage.setFanSpeed(speed, true);  // Commit user-initiated changes
     }
 
     if (request->hasParam("timer", true)) {
@@ -282,7 +280,7 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
 void WebServer::handleReset(AsyncWebServerRequest* request) {
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Resetting...\"}");
 
-    delay(500);
+    // Reset storage and restart (async web server handles response independently)
     storage.reset();
     ESP.restart();
 }

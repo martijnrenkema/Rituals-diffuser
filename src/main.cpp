@@ -259,6 +259,8 @@ void loop() {
 #endif
 
     // Check night mode every minute
+    // Note: millis() overflow after ~49 days is handled correctly by unsigned arithmetic
+    // (now - lastCheck) works correctly even when millis() wraps around from 0xFFFFFFFF to 0
     unsigned long now = millis();
     if (now - lastNightModeCheck >= 60000) {
         checkNightMode();
