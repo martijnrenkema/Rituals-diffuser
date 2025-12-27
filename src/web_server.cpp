@@ -629,6 +629,12 @@ void WebServer::onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *c
                                  AwsEventType type, void *arg, uint8_t *data, size_t len) {
     switch(type) {
         case WS_EVT_CONNECT:
+            // Fix: Limit max WebSocket clients to prevent DoS attacks
+            if (_ws->count() > 5) {
+                Serial.printf("[WS] Client limit reached, rejecting client #%u\n", client->id());
+                client->close();
+                break;
+            }
             Serial.printf("[WS] Client #%u connected from %s\n", client->id(),
                          client->remoteIP().toString().c_str());
             // Send current state to new client

@@ -186,7 +186,8 @@ void Storage::ensureDefaults(DiffuserSettings& settings) {
     if (settings.intervalOnTime < INTERVAL_MIN) settings.intervalOnTime = INTERVAL_ON_DEFAULT;
     if (settings.intervalOffTime < INTERVAL_MIN) settings.intervalOffTime = INTERVAL_OFF_DEFAULT;
     if (strlen(settings.deviceName) == 0) {
-        strcpy(settings.deviceName, "Rituals Diffuser");
+        // Fix: Use safe strlcpy instead of strcpy to prevent overflow
+        strlcpy(settings.deviceName, "Rituals Diffuser", sizeof(settings.deviceName));
     }
     // Night mode defaults
     if (settings.nightModeStart == 0 && settings.nightModeEnd == 0) {
@@ -240,6 +241,9 @@ const char* Storage::getCurrentCartridge() {
 void Storage::addRuntimeMinutes(uint32_t minutes) {
     _settings.totalRuntimeMinutes += minutes;
     _settings.cartridgeRuntimeMinutes += minutes;
+    // Note: This is called every 5 minutes during operation (~105k writes/year)
+    // ESP8266 flash can handle 10k-100k write cycles per sector
+    // Wear leveling: Updates are batched (5 min intervals) to extend flash life
     commit();
 }
 

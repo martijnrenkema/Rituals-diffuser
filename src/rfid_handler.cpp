@@ -214,7 +214,11 @@ bool RFIDHandler::tryPinCombination(uint8_t sck, uint8_t miso, uint8_t mosi, uin
 
     _mfrc522->PCD_Init();
 
-    delay(50);  // Give it time to initialize
+    // Fix: Feed watchdog during initialization delay
+    for (int i = 0; i < 5; i++) {
+        delay(10);
+        yield();
+    }
 
     // Check if reader responds
     byte v = _mfrc522->PCD_ReadRegister(MFRC522::VersionReg);
@@ -253,7 +257,11 @@ void RFIDHandler::initReader(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss
 
     _mfrc522->PCD_Init();
 
-    delay(50);
+    // Fix: Feed watchdog during initialization delay
+    for (int i = 0; i < 5; i++) {
+        delay(10);
+        yield();
+    }
 }
 
 bool RFIDHandler::detectTag() {

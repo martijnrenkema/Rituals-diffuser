@@ -180,7 +180,10 @@ void WiFiManager::setState(WifiStatus state) {
 void WiFiManager::generateAPName() {
     uint8_t mac[6];
     WiFi.macAddress(mac);
-    char suffix[5];
+    // Fix: Increase buffer from 5 to 8 bytes for safety margin
+    // Current: 4 hex chars + null = 5 bytes (tight fit, risky)
+    // New: 8 bytes provides buffer for future format changes
+    char suffix[8];
     snprintf(suffix, sizeof(suffix), "%02X%02X", mac[4], mac[5]);
     _apName = String(WIFI_AP_SSID_PREFIX) + suffix;
 }
