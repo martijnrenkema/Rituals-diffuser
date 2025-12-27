@@ -6,6 +6,7 @@
 #include "mqtt_handler.h"
 #include "rfid_handler.h"
 #include <ArduinoJson.h>
+#include <Update.h>
 
 #ifdef PLATFORM_ESP8266
     #include <FS.h>
@@ -30,13 +31,29 @@ void WebServer::begin() {
     }
 
     _server = new AsyncWebServer(WEBSERVER_PORT);
+
+    // Initialize WebSocket
+    _ws = new AsyncWebSocket("/ws");
+    _ws->onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client,
+                       AwsEventType type, void *arg, uint8_t *data, size_t len) {
+        this->onWebSocketEvent(server, client, type, arg, data, len);
+    });
+    _server->addHandler(_ws);
+
     generateSessionToken();
     setupRoutes();
     _server->begin();
 
     Serial.println("[WEB] Server started on port 80");
+    Serial.println("[WEB] WebSocket available at ws://[ip]/ws");
     Serial.printf("[WEB] Session token: %s\n", _sessionToken.c_str());
     Serial.println("[WEB] WARNING: Add 'X-Auth-Token' header to requests for protected endpoints");
+}
+
+void WebServer::loop() {
+    if (_ws != nullptr) {
+        _ws->cleanupClients();
+    }
 }
 
 void WebServer::generateSessionToken() {
@@ -144,6 +161,69 @@ void WebServer::setupRoutes() {
 
     _server->on("/api/night", HTTP_POST, [this](AsyncWebServerRequest* request) {
         handleSaveNightMode(request);
+    });
+
+    // Backup/Restore endpoints
+    _server->on("/api/backup", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleBackup(request);
+    });
+
+    _server->on("/api/restore", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        request->send(200);
+    }, NULL, [this](AsyncWebServerRequest* request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (index == 0) {
+            Serial.printf("[WEB] Restore started, total size: %u\n", total);
+        }
+        if (index + len == total) {
+            handleRestore(request, data, len);
+        }
+    });
+
+    // Web OTA Update endpoint
+    _server->on("/update", HTTP_POST, [](AsyncWebServerRequest* request) {
+        bool success = !Update.hasError();
+        AsyncWebServerResponse *response = request->beginResponse(200, "application/json",
+            success ? "{\"success\":true,\"message\":\"Update successful. Rebooting...\"}" :
+                     "{\"success\":false,\"message\":\"Update failed\"}");
+        response->addHeader("Connection", "close");
+        request->send(response);
+
+        if (success) {
+            Serial.println("[WEB] OTA Update successful, rebooting...");
+            delay(1000);
+            ESP.restart();
+        }
+    }, [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t *data,
+         size_t len, bool final) {
+        if (index == 0) {
+            Serial.printf("[WEB] OTA Update started: %s\n", filename.c_str());
+
+            #ifdef PLATFORM_ESP8266
+            Update.runAsync(true);
+            uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+            if (!Update.begin(maxSketchSpace, U_FLASH)) {
+            #else
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+            #endif
+                Update.printError(Serial);
+                return;
+            }
+        }
+
+        if (len) {
+            if (Update.write(data, len) != len) {
+                Update.printError(Serial);
+                return;
+            }
+        }
+
+        if (final) {
+            if (Update.end(true)) {
+                Serial.printf("[WEB] OTA Update completed: %u bytes\n", index + len);
+            } else {
+                Update.printError(Serial);
+            }
+        }
     });
 
     // Captive portal redirect
@@ -513,4 +593,222 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
     storage.setNightMode(enabled, start, end, brightness);
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Night mode settings saved\"}");
+}
+}
+
+// WebSocket event handler
+void WebServer::onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
+                                 AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    switch(type) {
+        case WS_EVT_CONNECT:
+            Serial.printf("[WS] Client #%u connected from %s\n", client->id(),
+                         client->remoteIP().toString().c_str());
+            // Send current state to new client
+            broadcastState();
+            break;
+
+        case WS_EVT_DISCONNECT:
+            Serial.printf("[WS] Client #%u disconnected\n", client->id());
+            break;
+
+        case WS_EVT_DATA:
+            handleWebSocketMessage(arg, data, len);
+            break;
+
+        case WS_EVT_PONG:
+        case WS_EVT_ERROR:
+            break;
+    }
+}
+
+void WebServer::handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+    AwsFrameInfo *info = (AwsFrameInfo*)arg;
+    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+        data[len] = 0;
+        String message = (char*)data;
+
+        // Parse JSON command
+        StaticJsonDocument<256> doc;
+        DeserializationError error = deserializeJson(doc, message);
+        if (error) {
+            Serial.println("[WS] JSON parse error");
+            return;
+        }
+
+        // Handle commands
+        if (doc.containsKey("fan")) {
+            String cmd = doc["fan"];
+            if (cmd == "on") fanController.turnOn();
+            else if (cmd == "off") fanController.turnOff();
+            broadcastState();
+        }
+        if (doc.containsKey("speed")) {
+            fanController.setSpeed(doc["speed"]);
+            broadcastState();
+        }
+        if (doc.containsKey("request") && doc["request"] == "state") {
+            broadcastState();
+        }
+    }
+}
+
+void WebServer::broadcastState() {
+    if (_ws == nullptr || _ws->count() == 0) return;
+
+    // Throttle broadcasts to max 2 per second
+    unsigned long now = millis();
+    if (now - _lastBroadcast < 500) return;
+    _lastBroadcast = now;
+
+    DiffuserSettings settings = storage.load();
+    StaticJsonDocument<768> doc;
+
+    // Fan state
+    doc["fan"]["on"] = fanController.isOn();
+    doc["fan"]["speed"] = fanController.getSpeed();
+    doc["fan"]["timer_active"] = fanController.isTimerActive();
+    doc["fan"]["remaining_minutes"] = fanController.getRemainingMinutes();
+    doc["fan"]["interval_mode"] = fanController.isIntervalMode();
+
+    // WiFi state
+    doc["wifi"]["connected"] = wifiManager.isConnected();
+    doc["wifi"]["rssi"] = wifiManager.getRSSI();
+    doc["wifi"]["ip"] = wifiManager.getIP();
+
+    // MQTT state
+    doc["mqtt"]["connected"] = mqttHandler.isConnected();
+
+    // RFID state
+    doc["rfid"]["tag_present"] = rfidHandler.isTagPresent();
+    doc["rfid"]["cartridge"] = rfidHandler.getCartridgeName();
+
+    // Runtime stats
+    doc["runtime"]["total"] = fanController.getTotalRuntimeMinutes() / 60.0;
+    doc["runtime"]["session"] = fanController.getSessionRuntimeMinutes();
+
+    String output;
+    serializeJson(doc, output);
+    _ws->textAll(output);
+}
+
+// Backup configuration
+void WebServer::handleBackup(AsyncWebServerRequest* request) {
+    DiffuserSettings settings = storage.load();
+    DynamicJsonDocument doc(2048);
+
+    // WiFi
+    doc["wifi"]["ssid"] = settings.wifiSsid;
+    doc["wifi"]["password"] = settings.wifiPassword;
+
+    // MQTT
+    doc["mqtt"]["host"] = settings.mqttHost;
+    doc["mqtt"]["port"] = settings.mqttPort;
+    doc["mqtt"]["user"] = settings.mqttUser;
+    doc["mqtt"]["password"] = settings.mqttPassword;
+
+    // Device
+    doc["device"]["name"] = settings.deviceName;
+
+    // Fan
+    doc["fan"]["speed"] = settings.fanSpeed;
+    doc["fan"]["interval_enabled"] = settings.intervalEnabled;
+    doc["fan"]["interval_on"] = settings.intervalOnTime;
+    doc["fan"]["interval_off"] = settings.intervalOffTime;
+
+    // Security
+    doc["security"]["ota_password"] = settings.otaPassword;
+    doc["security"]["ap_password"] = settings.apPassword;
+
+    // RFID
+    doc["rfid"]["configured"] = settings.rfidConfigured;
+    if (settings.rfidConfigured) {
+        doc["rfid"]["pins"]["sck"] = settings.rfidPinSCK;
+        doc["rfid"]["pins"]["miso"] = settings.rfidPinMISO;
+        doc["rfid"]["pins"]["mosi"] = settings.rfidPinMOSI;
+        doc["rfid"]["pins"]["ss"] = settings.rfidPinSS;
+        doc["rfid"]["pins"]["rst"] = settings.rfidPinRST;
+    }
+
+    // Night mode
+    doc["night_mode"]["enabled"] = settings.nightModeEnabled;
+    doc["night_mode"]["start"] = settings.nightModeStart;
+    doc["night_mode"]["end"] = settings.nightModeEnd;
+    doc["night_mode"]["brightness"] = settings.nightModeBrightness;
+
+    // Metadata
+    doc["backup_version"] = "1.1.0";
+    doc["backup_timestamp"] = millis() / 1000;
+
+    String output;
+    serializeJson(doc, output);
+
+    AsyncWebServerResponse *response = request->beginResponse(200, "application/json", output);
+    response->addHeader("Content-Disposition", "attachment; filename=rituals-diffuser-backup.json");
+    request->send(response);
+
+    Serial.println("[WEB] Configuration backup downloaded");
+}
+
+// Restore configuration
+void WebServer::handleRestore(AsyncWebServerRequest* request, uint8_t *data, size_t len) {
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, data, len);
+
+    if (error) {
+        request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        return;
+    }
+
+    DiffuserSettings settings;
+    memset(&settings, 0, sizeof(settings));
+    settings.magic = SETTINGS_MAGIC;
+
+    // Restore WiFi
+    if (doc.containsKey("wifi")) {
+        strlcpy(settings.wifiSsid, doc["wifi"]["ssid"] | "", sizeof(settings.wifiSsid));
+        strlcpy(settings.wifiPassword, doc["wifi"]["password"] | "", sizeof(settings.wifiPassword));
+    }
+
+    // Restore MQTT
+    if (doc.containsKey("mqtt")) {
+        strlcpy(settings.mqttHost, doc["mqtt"]["host"] | "", sizeof(settings.mqttHost));
+        settings.mqttPort = doc["mqtt"]["port"] | 1883;
+        strlcpy(settings.mqttUser, doc["mqtt"]["user"] | "", sizeof(settings.mqttUser));
+        strlcpy(settings.mqttPassword, doc["mqtt"]["password"] | "", sizeof(settings.mqttPassword));
+    }
+
+    // Restore device
+    if (doc.containsKey("device")) {
+        strlcpy(settings.deviceName, doc["device"]["name"] | "Rituals Diffuser", sizeof(settings.deviceName));
+    }
+
+    // Restore fan
+    if (doc.containsKey("fan")) {
+        settings.fanSpeed = doc["fan"]["speed"] | 50;
+        settings.intervalEnabled = doc["fan"]["interval_enabled"] | false;
+        settings.intervalOnTime = doc["fan"]["interval_on"] | 30;
+        settings.intervalOffTime = doc["fan"]["interval_off"] | 30;
+    }
+
+    // Restore security
+    if (doc.containsKey("security")) {
+        strlcpy(settings.otaPassword, doc["security"]["ota_password"] | "", sizeof(settings.otaPassword));
+        strlcpy(settings.apPassword, doc["security"]["ap_password"] | "", sizeof(settings.apPassword));
+    }
+
+    // Restore night mode
+    if (doc.containsKey("night_mode")) {
+        settings.nightModeEnabled = doc["night_mode"]["enabled"] | false;
+        settings.nightModeStart = doc["night_mode"]["start"] | 22;
+        settings.nightModeEnd = doc["night_mode"]["end"] | 7;
+        settings.nightModeBrightness = doc["night_mode"]["brightness"] | 10;
+    }
+
+    // Save restored settings
+    storage.save(settings);
+
+    request->send(200, "application/json", 
+                 "{\"success\":true,\"message\":\"Configuration restored. Restart device to apply.\"}");
+
+    Serial.println("[WEB] Configuration restored from backup");
 }

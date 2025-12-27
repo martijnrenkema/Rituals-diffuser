@@ -116,6 +116,9 @@ void onFanStateChange(bool on, uint8_t speed) {
     // Publish state to MQTT
     mqttHandler.publishState();
 
+    // Broadcast state to WebSocket clients
+    webServer.broadcastState();
+
     // Save speed to storage
     storage.setFanSpeed(speed);
 }
@@ -249,6 +252,7 @@ void loop() {
     // Run all component loops
     wifiManager.loop();
     mqttHandler.loop();
+    webServer.loop();  // WebSocket cleanup
     fanController.loop();
     ledController.loop();
     otaHandler.loop();
