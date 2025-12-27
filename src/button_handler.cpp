@@ -7,54 +7,43 @@ void ButtonHandler::begin() {
 #ifdef PLATFORM_ESP8266
     // GPIO16 needs special handling - no internal pullup
     pinMode(BUTTON_FRONT_PIN, INPUT);
-
     // GPIO3 (RX) - configure as input with pullup
     // Note: This disables serial RX, but we can still TX for debugging
     pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
-
     Serial.println("[BTN] Button handler initialized");
     Serial.println("[BTN] Front: GPIO16, Rear: GPIO3");
+#else
+    // ESP32: Both pins support internal pullup
+    pinMode(BUTTON_FRONT_PIN, INPUT_PULLUP);
+    pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
+    Serial.printf("[BTN] Button handler initialized\n");
+    Serial.printf("[BTN] Front: GPIO%d, Rear: GPIO%d\n", BUTTON_FRONT_PIN, BUTTON_REAR_PIN);
 #endif
 }
 
 void ButtonHandler::loop() {
-#ifdef PLATFORM_ESP8266
     handleButton(BUTTON_FRONT_PIN, _frontLastState, _frontPressTime,
                  _frontLongPressFired, _frontCallback);
     handleButton(BUTTON_REAR_PIN, _rearLastState, _rearPressTime,
                  _rearLongPressFired, _rearCallback);
-#endif
 }
 
 void ButtonHandler::onFrontButton(ButtonCallback callback) {
-#ifdef PLATFORM_ESP8266
     _frontCallback = callback;
-#endif
 }
 
 void ButtonHandler::onRearButton(ButtonCallback callback) {
-#ifdef PLATFORM_ESP8266
     _rearCallback = callback;
-#endif
 }
 
 bool ButtonHandler::isFrontPressed() {
-#ifdef PLATFORM_ESP8266
     return digitalRead(BUTTON_FRONT_PIN) == LOW;
-#else
-    return false;
-#endif
 }
 
 bool ButtonHandler::isRearPressed() {
-#ifdef PLATFORM_ESP8266
     return digitalRead(BUTTON_REAR_PIN) == LOW;
-#else
-    return false;
-#endif
 }
 
-#ifdef PLATFORM_ESP8266
 void ButtonHandler::handleButton(uint8_t pin, bool& lastState, unsigned long& pressTime,
                                   bool& longPressFired, ButtonCallback callback) {
     bool currentState = digitalRead(pin);
@@ -90,4 +79,3 @@ void ButtonHandler::handleButton(uint8_t pin, bool& lastState, unsigned long& pr
 
     lastState = currentState;
 }
-#endif

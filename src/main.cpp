@@ -10,9 +10,7 @@
 #include "ota_handler.h"
 #include "rfid_handler.h"
 
-#ifdef PLATFORM_ESP8266
 #include "button_handler.h"
-#endif
 
 // Global settings
 DiffuserSettings settings;
@@ -130,7 +128,6 @@ void onOTAEnd() {
     ledController.off();
 }
 
-#ifdef PLATFORM_ESP8266
 // Button handlers for Rituals Genie
 void onFrontButton(ButtonEvent event) {
     if (event == ButtonEvent::SHORT_PRESS) {
@@ -174,7 +171,6 @@ void onRearButton(ButtonEvent event) {
         Serial.printf("[MAIN] Interval mode: %s\n", newState ? "ON" : "OFF");
     }
 }
-#endif
 
 void setup() {
     // Initialize serial
@@ -203,12 +199,10 @@ void setup() {
     fanController.setIntervalMode(settings.intervalEnabled);
     fanController.setIntervalTimes(settings.intervalOnTime, settings.intervalOffTime);
 
-#ifdef PLATFORM_ESP8266
-    // Initialize buttons (Rituals Genie only)
+    // Initialize buttons
     buttonHandler.begin();
     buttonHandler.onFrontButton(onFrontButton);
     buttonHandler.onRearButton(onRearButton);
-#endif
 
     // Initialize WiFi
     wifiManager.begin();
@@ -253,10 +247,7 @@ void loop() {
     ledController.loop();
     otaHandler.loop();
     rfidHandler.loop();
-
-#ifdef PLATFORM_ESP8266
     buttonHandler.loop();
-#endif
 
     // Check night mode every minute
     unsigned long now = millis();

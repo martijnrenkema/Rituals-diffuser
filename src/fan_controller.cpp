@@ -4,13 +4,7 @@
 
 FanController fanController;
 
-#ifdef PLATFORM_ESP32
-volatile uint32_t FanController::_tachoCount = 0;
-
-void IRAM_ATTR FanController::tachoISR() {
-    _tachoCount++;
-}
-#endif
+// Tachometer code verwijderd - Rituals Genie heeft geen tachometer
 
 void FanController::begin() {
 #ifdef PLATFORM_ESP8266
@@ -22,14 +16,14 @@ void FanController::begin() {
     analogWrite(FAN_PWM_PIN, 0);
     analogWrite(FAN_SPEED_PIN, 0);
 #else
-    // ESP32: Setup LEDC PWM
-    ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcAttachPin(FAN_PWM_PIN, PWM_CHANNEL);
-    ledcWrite(PWM_CHANNEL, 0);
+    // ESP32: Setup LEDC PWM voor Rituals Genie hardware
+    // FAN_PWM_PIN = on/off control, FAN_SPEED_PIN = speed PWM
+    pinMode(FAN_PWM_PIN, OUTPUT);
+    digitalWrite(FAN_PWM_PIN, LOW);
 
-    // Setup tachometer input with interrupt
-    pinMode(FAN_TACHO_PIN, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(FAN_TACHO_PIN), tachoISR, FALLING);
+    ledcSetup(PWM_CHANNEL_SPEED, PWM_FREQUENCY, PWM_RESOLUTION);
+    ledcAttachPin(FAN_SPEED_PIN, PWM_CHANNEL_SPEED);
+    ledcWrite(PWM_CHANNEL_SPEED, 0);
 #endif
 
     Serial.println("[FAN] Controller initialized");
@@ -37,20 +31,6 @@ void FanController::begin() {
 
 void FanController::loop() {
     unsigned long now = millis();
-
-#ifdef PLATFORM_ESP32
-    // Calculate RPM every second (ESP32 only)
-    if (now - _lastRpmCalc >= 1000) {
-        noInterrupts();
-        uint32_t count = _tachoCount;
-        _tachoCount = 0;
-        interrupts();
-
-        // RPM = (pulses per second / pulses per revolution) * 60
-        _rpm = (count / TACHO_PULSES_PER_REV) * 60;
-        _lastRpmCalc = now;
-    }
-#endif
 
     // Update runtime statistics every minute
     updateRuntimeStats();
@@ -231,7 +211,14 @@ void FanController::applyPWM(uint8_t percent) {
         analogWrite(FAN_SPEED_PIN, 0);
     }
 #else
-    ledcWrite(PWM_CHANNEL, pwmValue);
+    // ESP32: Rituals Genie style control (same as ESP8266)
+    if (percent > 0) {
+        digitalWrite(FAN_PWM_PIN, HIGH);  // Fan on
+        ledcWrite(PWM_CHANNEL_SPEED, pwmValue);  // Speed control
+    } else {
+        digitalWrite(FAN_PWM_PIN, LOW);   // Fan off
+        ledcWrite(PWM_CHANNEL_SPEED, 0);
+    }
 #endif
 }
 

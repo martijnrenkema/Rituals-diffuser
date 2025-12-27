@@ -230,3 +230,120 @@ update=function(d){
     originalUpdate(d);
     updateExtended(d);
 };
+
+// =====================================================
+// Hardware Diagnostics
+// =====================================================
+
+// Fetch diagnostic data
+async function fetchDiagnostic(){
+    try{
+        const r=await fetch('/api/diagnostic');
+        const d=await r.json();
+        updateDiagnostic(d);
+    }catch(e){console.error(e)}
+}
+
+function updateDiagnostic(d){
+    // Pin configuration
+    if(d.pins){
+        $('#diag-platform').textContent=d.pins.platform;
+        $('#diag-fan-pwm').textContent=d.pins.fan_pwm;
+        $('#diag-fan-speed').textContent=d.pins.fan_speed;
+        $('#diag-led').textContent=d.pins.led;
+        $('#diag-btn-front').textContent=d.pins.btn_front;
+        $('#diag-btn-rear').textContent=d.pins.btn_rear;
+        $('#btn-front-pin').textContent=d.pins.btn_front;
+        $('#btn-rear-pin').textContent=d.pins.btn_rear;
+
+        // RFID pins (ESP32 only)
+        if(d.pins.rfid_sck!==undefined){
+            $('#rfid-pins-info').style.display='flex';
+            $('#diag-rfid-sck').textContent=d.pins.rfid_sck;
+            $('#diag-rfid-miso').textContent=d.pins.rfid_miso;
+            $('#diag-rfid-mosi').textContent=d.pins.rfid_mosi;
+            $('#diag-rfid-ss').textContent=d.pins.rfid_ss;
+            $('#diag-rfid-rst').textContent=d.pins.rfid_rst;
+        }
+    }
+
+    // LED status
+    if(d.led){
+        $('#led-status').classList.toggle('on',d.led.connected);
+        $('#led-status-text').textContent=d.led.connected?'Connected (mode: '+d.led.mode+')':'Not connected';
+    }
+
+    // Fan status
+    if(d.fan){
+        $('#fan-status').classList.toggle('on',d.fan.on);
+        $('#fan-status-text').textContent=d.fan.on?'Running at '+d.fan.speed+'%':'Off';
+    }
+
+    // RFID status
+    if(d.rfid){
+        $('#rfid-diag-status').classList.toggle('on',d.rfid.connected);
+        if(d.rfid.connected){
+            $('#rfid-diag-text').textContent=d.rfid.tag_present?'Tag: '+d.rfid.cartridge:'Ready, no tag';
+        }else{
+            $('#rfid-diag-text').textContent='Not detected';
+        }
+    }
+}
+
+// Poll button status
+async function pollButtons(){
+    try{
+        const r=await fetch('/api/diagnostic/buttons');
+        const d=await r.json();
+
+        $('#btn-front-status').classList.toggle('on',d.front.pressed);
+        $('#btn-front-text').textContent=d.front.pressed?'PRESSED':'Released';
+
+        $('#btn-rear-status').classList.toggle('on',d.rear.pressed);
+        $('#btn-rear-text').textContent=d.rear.pressed?'PRESSED':'Released';
+    }catch(e){}
+}
+
+// LED test buttons
+$$('.diag-led').forEach(btn=>{
+    btn.onclick=async()=>{
+        const color=btn.dataset.color;
+        try{
+            await fetch('/api/diagnostic/led',{method:'POST',body:new URLSearchParams({action:color})});
+            if(color==='test'){
+                $('#led-status-text').textContent='Testing colors...';
+                setTimeout(()=>fetchDiagnostic(),4000);
+            }
+        }catch(e){console.error(e)}
+    };
+});
+
+// Fan test buttons
+$$('.diag-fan').forEach(btn=>{
+    btn.onclick=async()=>{
+        const action=btn.dataset.action;
+        try{
+            await fetch('/api/diagnostic/fan',{method:'POST',body:new URLSearchParams({action:action})});
+            if(action==='test'){
+                $('#fan-status-text').textContent='Testing speeds...';
+                setTimeout(()=>fetchDiagnostic(),5000);
+            }else{
+                setTimeout(()=>fetchDiagnostic(),500);
+            }
+        }catch(e){console.error(e)}
+    };
+});
+
+// Initial diagnostic fetch
+fetchDiagnostic();
+
+// Poll buttons every 200ms when diagnostic section is open
+let buttonPollInterval=null;
+document.querySelector('details:has(.diag-section)')?.addEventListener('toggle',function(e){
+    if(this.open){
+        fetchDiagnostic();
+        buttonPollInterval=setInterval(pollButtons,200);
+    }else{
+        if(buttonPollInterval)clearInterval(buttonPollInterval);
+    }
+});

@@ -127,6 +127,62 @@
             </details>
 
             <details class="card">
+                <summary>Hardware Diagnostics</summary>
+                <div class="diag-section">
+                    <h4>Pin Configuration</h4>
+                    <div class="info">
+                        <span>Platform: <b id="diag-platform">--</b></span>
+                        <span>Fan PWM: <b>G<span id="diag-fan-pwm">--</span></b></span>
+                        <span>Fan Speed: <b>G<span id="diag-fan-speed">--</span></b></span>
+                        <span>LED: <b>G<span id="diag-led">--</span></b></span>
+                        <span>Btn Front: <b>G<span id="diag-btn-front">--</span></b></span>
+                        <span>Btn Rear: <b>G<span id="diag-btn-rear">--</span></b></span>
+                    </div>
+                </div>
+                <div class="diag-section">
+                    <h4>LED Test</h4>
+                    <div class="diag-status">Status: <span id="led-status" class="dot"></span> <span id="led-status-text">--</span></div>
+                    <div class="diag-btns">
+                        <button class="btn-sm diag-led" data-color="test">Test All</button>
+                        <button class="btn-sm diag-led" data-color="red" style="background:#e74c3c">Red</button>
+                        <button class="btn-sm diag-led" data-color="green" style="background:#27ae60">Green</button>
+                        <button class="btn-sm diag-led" data-color="blue" style="background:#3498db">Blue</button>
+                        <button class="btn-sm diag-led" data-color="reset">Reset</button>
+                    </div>
+                </div>
+                <div class="diag-section">
+                    <h4>Fan Test</h4>
+                    <div class="diag-status">Status: <span id="fan-status" class="dot"></span> <span id="fan-status-text">--</span></div>
+                    <div class="diag-btns">
+                        <button class="btn-sm diag-fan" data-action="test">Test Cycle</button>
+                        <button class="btn-sm diag-fan" data-action="on">On</button>
+                        <button class="btn-sm diag-fan" data-action="off">Off</button>
+                    </div>
+                </div>
+                <div class="diag-section">
+                    <h4>Button Test</h4>
+                    <div class="diag-status">
+                        Front (G<span id="btn-front-pin">--</span>): <span id="btn-front-status" class="dot"></span> <span id="btn-front-text">Released</span>
+                    </div>
+                    <div class="diag-status">
+                        Rear (G<span id="btn-rear-pin">--</span>): <span id="btn-rear-status" class="dot"></span> <span id="btn-rear-text">Released</span>
+                    </div>
+                    <small class="hint">Press buttons on device to test</small>
+                </div>
+                <div class="diag-section">
+                    <h4>RFID Reader</h4>
+                    <div class="diag-status">Status: <span id="rfid-diag-status" class="dot"></span> <span id="rfid-diag-text">--</span></div>
+                    <div class="info" id="rfid-pins-info" style="display:none">
+                        <span>SCK: <b>G<span id="diag-rfid-sck">--</span></b></span>
+                        <span>MISO: <b>G<span id="diag-rfid-miso">--</span></b></span>
+                        <span>MOSI: <b>G<span id="diag-rfid-mosi">--</span></b></span>
+                        <span>SS: <b>G<span id="diag-rfid-ss">--</span></b></span>
+                        <span>RST: <b>G<span id="diag-rfid-rst">--</span></b></span>
+                    </div>
+                </div>
+            </details>
+
+            <details class="card">
                 <summary>Statistics</summary>
                 <div class="info">
                     <span>Total runtime: <b id="total-runtime">--</b> hours</span>

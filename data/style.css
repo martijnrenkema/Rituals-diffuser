@@ -71,3 +71,9 @@ input:focus{outline:none;border-color:var(--gold)}
 .night-cfg input[type=range]{width:100%}
 footer{text-align:center;padding:20px 0 10px;color:var(--dim)}
 .version{font-size:.75rem}
+.diag-section{margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #333}
+.diag-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.diag-section h4{font-size:.8rem;color:var(--gold);margin-bottom:10px;font-weight:500}
+.diag-status{font-size:.85rem;color:var(--dim);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.diag-btns{display:flex;flex-wrap:wrap;gap:8px}
+.diag-btns .btn-sm{padding:6px 12px;font-size:.8rem}

@@ -384,19 +384,188 @@ void RFIDHandler::onCartridgeChange(CartridgeCallback callback) {
 }
 
 #else
-// ESP32 stubs
-void RFIDHandler::begin() {}
-void RFIDHandler::loop() {}
-void RFIDHandler::startScan() {}
+// ESP32 implementation
+
+void RFIDHandler::begin() {
+    Serial.println("[RFID] Initializing on ESP32...");
+
+    // Initialize SPI with defined pins
+    SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SS_PIN);
+
+    // Create MFRC522 instance
+    _mfrc522 = new MFRC522(RFID_SS_PIN, RFID_RST_PIN);
+    _mfrc522->PCD_Init();
+
+    delay(50);
+
+    // Check if reader responds
+    byte v = _mfrc522->PCD_ReadRegister(MFRC522::VersionReg);
+
+    if (v == 0x91 || v == 0x92 || v == 0x88 || v == 0x12) {
+        Serial.printf("[RFID] Reader found! Version: 0x%02X\n", v);
+        _status = RFIDStatus::CONFIGURED;
+    } else if (v == 0x00 || v == 0xFF) {
+        Serial.println("[RFID] No reader detected (check wiring)");
+        _status = RFIDStatus::NOT_CONFIGURED;
+    } else {
+        Serial.printf("[RFID] Unknown version: 0x%02X\n", v);
+        _status = RFIDStatus::NOT_CONFIGURED;
+    }
+}
+
+void RFIDHandler::loop() {
+    if (_status != RFIDStatus::CONFIGURED && _status != RFIDStatus::TAG_PRESENT) {
+        return;
+    }
+
+    // Check for tags every 500ms
+    unsigned long now = millis();
+    if (now - _lastCheck < 500) return;
+    _lastCheck = now;
+
+    if (detectTag()) {
+        String data = readTagData();
+        String scent = extractScentName(data);
+
+        if (scent.length() > 0 && scent != _cartridgeName) {
+            _cartridgeName = scent;
+            storage.setCurrentCartridge(scent.c_str());
+            Serial.printf("[RFID] New cartridge detected: %s\n", scent.c_str());
+
+            if (_callback) {
+                _callback(scent.c_str());
+            }
+        }
+
+        _tagPresent = true;
+        _status = RFIDStatus::TAG_PRESENT;
+    } else {
+        if (_tagPresent) {
+            Serial.println("[RFID] Cartridge removed");
+            _tagPresent = false;
+            _status = RFIDStatus::CONFIGURED;
+        }
+    }
+
+    // Halt and stop crypto to prepare for next read
+    if (_mfrc522) {
+        _mfrc522->PICC_HaltA();
+        _mfrc522->PCD_StopCrypto1();
+    }
+}
+
+void RFIDHandler::startScan() {
+    // On ESP32, just re-init with fixed pins
+    begin();
+    _scanComplete = true;
+    _scanSuccess = (_status == RFIDStatus::CONFIGURED);
+}
+
 bool RFIDHandler::isScanning() { return false; }
-bool RFIDHandler::isScanComplete() { return false; }
-bool RFIDHandler::isScanSuccess() { return false; }
-RFIDStatus RFIDHandler::getStatus() { return RFIDStatus::NOT_CONFIGURED; }
-bool RFIDHandler::isConfigured() { return false; }
-bool RFIDHandler::isTagPresent() { return false; }
-String RFIDHandler::getCartridgeName() { return ""; }
-String RFIDHandler::getTagUID() { return ""; }
-void RFIDHandler::configurePins(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t) {}
-void RFIDHandler::clearConfig() {}
-void RFIDHandler::onCartridgeChange(CartridgeCallback) {}
+bool RFIDHandler::isScanComplete() { return _scanComplete; }
+bool RFIDHandler::isScanSuccess() { return _scanSuccess; }
+RFIDStatus RFIDHandler::getStatus() { return _status; }
+bool RFIDHandler::isConfigured() { return _status == RFIDStatus::CONFIGURED || _status == RFIDStatus::TAG_PRESENT; }
+bool RFIDHandler::isTagPresent() { return _tagPresent; }
+String RFIDHandler::getCartridgeName() { return _cartridgeName; }
+String RFIDHandler::getTagUID() { return _tagUID; }
+
+void RFIDHandler::configurePins(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss, uint8_t rst) {
+    // On ESP32, we use fixed VSPI pins, ignore parameters
+    begin();
+}
+
+void RFIDHandler::clearConfig() {
+    storage.clearRFIDConfig();
+    if (_mfrc522) {
+        delete _mfrc522;
+        _mfrc522 = nullptr;
+    }
+    _status = RFIDStatus::NOT_CONFIGURED;
+    _cartridgeName = "";
+    _tagPresent = false;
+}
+
+void RFIDHandler::onCartridgeChange(CartridgeCallback callback) {
+    _callback = callback;
+}
+
+bool RFIDHandler::detectTag() {
+    if (!_mfrc522) return false;
+
+    if (!_mfrc522->PICC_IsNewCardPresent()) {
+        return false;
+    }
+
+    if (!_mfrc522->PICC_ReadCardSerial()) {
+        return false;
+    }
+
+    String uid = "";
+    for (byte i = 0; i < _mfrc522->uid.size; i++) {
+        if (_mfrc522->uid.uidByte[i] < 0x10) uid += "0";
+        uid += String(_mfrc522->uid.uidByte[i], HEX);
+    }
+    uid.toUpperCase();
+    _tagUID = uid;
+
+    return true;
+}
+
+String RFIDHandler::readTagData() {
+    if (!_mfrc522) return "";
+
+    String data = "";
+    byte buffer[18];
+    byte size = sizeof(buffer);
+
+    for (byte page = 4; page < 16; page++) {
+        MFRC522::StatusCode status = _mfrc522->MIFARE_Read(page, buffer, &size);
+        if (status == MFRC522::STATUS_OK) {
+            for (byte i = 0; i < 4; i++) {
+                if (buffer[i] >= 32 && buffer[i] < 127) {
+                    data += (char)buffer[i];
+                }
+            }
+        }
+    }
+
+    return data;
+}
+
+String RFIDHandler::extractScentName(const String& data) {
+    String scent = "";
+    String lowerData = data;
+    lowerData.toLowerCase();
+
+    const char* scents[] = {
+        "Sakura", "Karma", "Dao", "Hammam", "Mehr",
+        "Samurai", "Jing", "Amsterdam", "Private Collection",
+        "The Ritual of", "Oriental", "Ayurveda"
+    };
+
+    for (const char* s : scents) {
+        String lowerScent = s;
+        lowerScent.toLowerCase();
+        if (lowerData.indexOf(lowerScent) >= 0) {
+            scent = s;
+            break;
+        }
+    }
+
+    if (scent.length() == 0 && data.length() > 3) {
+        for (unsigned int i = 0; i < data.length() && scent.length() < 30; i++) {
+            char c = data[i];
+            if (c >= 'A' && c <= 'z') {
+                scent += c;
+            } else if (c == ' ' && scent.length() > 0) {
+                scent += c;
+            }
+        }
+        scent.trim();
+    }
+
+    return scent;
+}
+
 #endif

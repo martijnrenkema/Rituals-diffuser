@@ -25,7 +25,6 @@ public:
     bool isRearPressed();
 
 private:
-#ifdef PLATFORM_ESP8266
     // Front button (Connect)
     bool _frontLastState = HIGH;
     unsigned long _frontPressTime = 0;
@@ -40,7 +39,6 @@ private:
 
     void handleButton(uint8_t pin, bool& lastState, unsigned long& pressTime,
                       bool& longPressFired, ButtonCallback callback);
-#endif
 };
 
 extern ButtonHandler buttonHandler;

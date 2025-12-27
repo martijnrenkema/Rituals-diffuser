@@ -2,12 +2,9 @@
 #define RFID_HANDLER_H
 
 #include <Arduino.h>
-#include "config.h"
-
-#ifdef PLATFORM_ESP8266
 #include <SPI.h>
 #include <MFRC522.h>
-#endif
+#include "config.h"
 
 enum class RFIDStatus {
     NOT_CONFIGURED,
@@ -56,9 +53,7 @@ private:
     unsigned long _scanStartTime = 0;
     CartridgeCallback _callback = nullptr;
 
-#ifdef PLATFORM_ESP8266
     MFRC522* _mfrc522 = nullptr;
-#endif
 
     // Pin combinations to try during scan
     static const uint8_t SCAN_PINS[];

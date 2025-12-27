@@ -57,12 +57,7 @@ private:
     unsigned long _intervalNextToggle = 0;
     bool _intervalCurrentlyOn = true;
 
-    // RPM measurement (ESP32 only)
-#ifdef PLATFORM_ESP32
-    static volatile uint32_t _tachoCount;
-    static void IRAM_ATTR tachoISR();
-    unsigned long _lastRpmCalc = 0;
-#endif
+    // RPM (niet beschikbaar op Rituals Genie - geen tachometer)
     uint16_t _rpm = 0;
 
     // Soft start
