@@ -419,7 +419,3 @@ uint32_t FanController::getSessionRuntimeMinutes() {
 uint32_t FanController::getTotalRuntimeMinutes() {
     return storage.getTotalRuntimeMinutes() + getSessionRuntimeMinutes();
 }
-
-uint32_t FanController::getCartridgeRuntimeMinutes() {
-    return storage.getCartridgeRuntimeMinutes() + getSessionRuntimeMinutes();
-}

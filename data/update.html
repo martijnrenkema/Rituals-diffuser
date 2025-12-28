@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -162,22 +162,22 @@
 <body>
     <div class="container">
         <h1>Firmware Update</h1>
-        <a href="/" class="back-link">&larr; Terug naar dashboard</a>
+        <a href="/" class="back-link">&larr; Back to dashboard</a>
 
         <!-- Firmware Update -->
         <div class="card">
-            <h2>Firmware uploaden</h2>
-            <p>Upload een nieuw .bin bestand om de firmware te updaten.</p>
+            <h2>Upload Firmware</h2>
+            <p>Upload a new .bin file to update the firmware.</p>
             <div class="warning">
-                Let op: Onderbreek het update proces niet! De diffuser herstart automatisch na een succesvolle update.
+                Warning: Do not interrupt the update process! The diffuser will restart automatically after a successful update.
             </div>
             <div class="upload-area" id="fw-upload-area">
                 <input type="file" id="fw-file" accept=".bin">
                 <div class="upload-icon">+</div>
-                <div>Klik of sleep een .bin bestand</div>
+                <div>Click or drag a .bin file here</div>
                 <div class="file-name" id="fw-file-name"></div>
             </div>
-            <button class="btn btn-primary" id="fw-upload-btn" disabled>Firmware Uploaden</button>
+            <button class="btn btn-primary" id="fw-upload-btn" disabled>Upload Firmware</button>
             <div class="progress-container" id="fw-progress">
                 <div class="progress-bar">
                     <div class="progress-fill" id="fw-progress-fill"></div>
@@ -189,15 +189,15 @@
 
         <!-- Filesystem Update -->
         <div class="card">
-            <h2>Webinterface uploaden</h2>
-            <p>Upload een SPIFFS/LittleFS .bin bestand om de webinterface te updaten.</p>
+            <h2>Upload Web Interface</h2>
+            <p>Upload a SPIFFS/LittleFS .bin file to update the web interface.</p>
             <div class="upload-area" id="fs-upload-area">
                 <input type="file" id="fs-file" accept=".bin">
                 <div class="upload-icon">+</div>
-                <div>Klik of sleep een .bin bestand</div>
+                <div>Click or drag a .bin file here</div>
                 <div class="file-name" id="fs-file-name"></div>
             </div>
-            <button class="btn btn-primary" id="fs-upload-btn" disabled>Webinterface Uploaden</button>
+            <button class="btn btn-primary" id="fs-upload-btn" disabled>Upload Web Interface</button>
             <div class="progress-container" id="fs-progress">
                 <div class="progress-bar">
                     <div class="progress-fill" id="fs-progress-fill"></div>
@@ -208,7 +208,7 @@
         </div>
 
         <div class="version-info" id="version-info">
-            Laden...
+            Loading...
         </div>
     </div>
 
@@ -289,20 +289,20 @@
                 xhr.addEventListener('load', () => {
                     if (xhr.status === 200) {
                         status.className = 'status show success';
-                        status.textContent = 'Update succesvol! Herstarten...';
+                        status.textContent = 'Update successful! Restarting...';
                         setTimeout(() => {
                             window.location.href = '/';
                         }, 5000);
                     } else {
                         status.className = 'status show error';
-                        status.textContent = 'Fout: ' + (xhr.responseText || 'Upload mislukt');
+                        status.textContent = 'Error: ' + (xhr.responseText || 'Upload failed');
                         btn.disabled = false;
                     }
                 });
 
                 xhr.addEventListener('error', () => {
                     status.className = 'status show error';
-                    status.textContent = 'Verbindingsfout tijdens upload';
+                    status.textContent = 'Connection error during upload';
                     btn.disabled = false;
                 });
 
@@ -319,10 +319,10 @@
             .then(r => r.json())
             .then(d => {
                 document.getElementById('version-info').textContent =
-                    'Firmware: v1.1.0 | MAC: ' + (d.device?.mac || 'Unknown');
+                    'Firmware: v1.2.0 | MAC: ' + (d.device?.mac || 'Unknown');
             })
             .catch(() => {
-                document.getElementById('version-info').textContent = 'Versie info niet beschikbaar';
+                document.getElementById('version-info').textContent = 'Version info not available';
             });
     </script>
 </body>

@@ -271,8 +271,8 @@ void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"WiFi saved, connecting...\"}");
 
-    // Connect to new network
-    delay(500);
+    // Connect to new network (small delay to let response send)
+    delay(100);
     wifiManager.connect(ssid.c_str(), password.c_str());
 
     if (_settingsCallback) {
@@ -305,8 +305,8 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"MQTT saved, connecting...\"}");
 
-    // Reconnect MQTT
-    delay(500);
+    // Reconnect MQTT (small delay to let response send)
+    delay(100);
     mqttHandler.disconnect();
     mqttHandler.connect(host.c_str(), port, user.c_str(), password.c_str());
 
@@ -367,14 +367,14 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     serializeJson(response, output);
     request->send(200, "application/json", output);
 
-    // Publish state to MQTT
-    mqttHandler.publishState();
+    // Request MQTT state publish (non-blocking)
+    mqttHandler.requestStatePublish();
 }
 
 void WebServer::handleReset(AsyncWebServerRequest* request) {
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Resetting...\"}");
 
-    delay(500);
+    delay(100);
     storage.reset();
     ESP.restart();
 }

@@ -51,10 +51,11 @@ details summary::before{content:'';display:inline-block;width:6px;height:6px;bor
 details[open] summary::before{transform:rotate(45deg)}
 details>*:not(summary){margin-top:16px}
 form{display:flex;flex-direction:column;gap:12px}
-input[type=text],input[type=password],input[type=number]{padding:12px;border:1px solid rgba(255,255,255,0.2);border-radius:10px;background:rgba(0,0,0,0.2);color:var(--text);font-size:1rem}
+input[type=text],input[type=password],input[type=number]{padding:12px;border:1px solid rgba(255,255,255,0.2);border-radius:10px;background:rgba(0,0,0,0.2);color:var(--text);font-size:1rem;-webkit-appearance:none;-moz-appearance:textfield}
 input::placeholder{color:#666}
 input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,0.2)}
 .row-2{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+.row-2>*{min-width:0}
 .btn{padding:14px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:1rem;font-weight:600;cursor:pointer;transition:all .2s}
 .btn:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(99,102,241,.4)}
 .btn.danger{background:linear-gradient(135deg,var(--red),#dc2626);color:#fff}

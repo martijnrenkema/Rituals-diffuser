@@ -39,11 +39,18 @@ void MQTTHandler::loop() {
                 if (_mqttClient.connect(clientId.c_str(), _user.c_str(), _password.c_str(),
                                         (getBaseTopic() + "/availability").c_str(), 0, true, "offline")) {
                     Serial.println("[MQTT] Connected");
+
                     publishAvailability(true);
 
+                    // Start discovery state machine (non-blocking)
                     if (!_discoveryPublished) {
-                        publishDiscovery();
-                        _discoveryPublished = true;
+                        _publishState = MqttPublishState::DISC_FAN;
+                        _lastPublishStep = millis();
+                        Serial.println("[MQTT] Starting discovery publish...");
+                    } else {
+                        // Just publish state
+                        _publishState = MqttPublishState::STATE_FAN;
+                        _lastPublishStep = millis();
                     }
 
                     // Subscribe to command topics
@@ -53,8 +60,6 @@ void MQTTHandler::loop() {
                     _mqttClient.subscribe((getBaseTopic() + "/interval/set").c_str());
                     _mqttClient.subscribe((getBaseTopic() + "/interval_on/set").c_str());
                     _mqttClient.subscribe((getBaseTopic() + "/interval_off/set").c_str());
-
-                    publishState();
                 } else {
                     Serial.printf("[MQTT] Connection failed, rc=%d\n", _mqttClient.state());
                 }
@@ -63,13 +68,157 @@ void MQTTHandler::loop() {
     } else {
         _mqttClient.loop();
 
+        // Process non-blocking publish state machine
+        processPublishStateMachine();
+
+        // Handle state publish requests
+        if (_statePublishRequested && _publishState == MqttPublishState::IDLE) {
+            _statePublishRequested = false;
+            _publishState = MqttPublishState::STATE_FAN;
+            _lastPublishStep = millis();
+        }
+
         // Publish state periodically
         unsigned long now = millis();
-        if (now - _lastStatePublish >= 30000) { // Every 30 seconds
-            publishState();
+        if (now - _lastStatePublish >= 30000 && _publishState == MqttPublishState::IDLE) {
+            _publishState = MqttPublishState::STATE_FAN;
+            _lastPublishStep = millis();
             _lastStatePublish = now;
         }
     }
+}
+
+void MQTTHandler::processPublishStateMachine() {
+    if (_publishState == MqttPublishState::IDLE) return;
+    if (!_mqttClient.connected()) {
+        _publishState = MqttPublishState::IDLE;
+        return;
+    }
+
+    unsigned long now = millis();
+    if (now - _lastPublishStep < PUBLISH_STEP_DELAY) return;
+
+    _lastPublishStep = now;
+    String base = getBaseTopic();
+
+    switch (_publishState) {
+        // Discovery states
+        case MqttPublishState::DISC_FAN:
+            publishFanDiscovery();
+            _publishState = MqttPublishState::DISC_INTERVAL_SWITCH;
+            break;
+
+        case MqttPublishState::DISC_INTERVAL_SWITCH:
+            publishIntervalSwitchDiscovery();
+            _publishState = MqttPublishState::DISC_INTERVAL_ON;
+            break;
+
+        case MqttPublishState::DISC_INTERVAL_ON:
+            publishIntervalOnTimeDiscovery();
+            _publishState = MqttPublishState::DISC_INTERVAL_OFF;
+            break;
+
+        case MqttPublishState::DISC_INTERVAL_OFF:
+            publishIntervalOffTimeDiscovery();
+            _publishState = MqttPublishState::DISC_REMAINING;
+            break;
+
+        case MqttPublishState::DISC_REMAINING:
+            publishRemainingTimeSensorDiscovery();
+            _publishState = MqttPublishState::DISC_RPM;
+            break;
+
+        case MqttPublishState::DISC_RPM:
+            publishRPMSensorDiscovery();
+            _publishState = MqttPublishState::DISC_WIFI;
+            break;
+
+        case MqttPublishState::DISC_WIFI:
+            publishWiFiSensorDiscovery();
+            _publishState = MqttPublishState::DISC_RUNTIME;
+            break;
+
+        case MqttPublishState::DISC_RUNTIME:
+            publishTotalRuntimeSensorDiscovery();
+            _publishState = MqttPublishState::DISC_DONE;
+            break;
+
+        case MqttPublishState::DISC_DONE:
+            Serial.println("[MQTT] Discovery published");
+            _discoveryPublished = true;
+            // Continue to state publish
+            _publishState = MqttPublishState::STATE_FAN;
+            break;
+
+        // State publish states
+        case MqttPublishState::STATE_FAN:
+            _mqttClient.publish((base + "/fan/state").c_str(), fanController.isOn() ? "ON" : "OFF", true);
+            _publishState = MqttPublishState::STATE_SPEED;
+            break;
+
+        case MqttPublishState::STATE_SPEED:
+            _mqttClient.publish((base + "/fan/speed").c_str(), String(fanController.getSpeed()).c_str(), true);
+            _publishState = MqttPublishState::STATE_PRESET;
+            break;
+
+        case MqttPublishState::STATE_PRESET:
+            {
+                String preset = "Continuous";
+                if (fanController.isTimerActive()) {
+                    uint16_t remaining = fanController.getRemainingMinutes();
+                    if (remaining <= 30) preset = "30 min";
+                    else if (remaining <= 60) preset = "60 min";
+                    else if (remaining <= 90) preset = "90 min";
+                    else preset = "120 min";
+                }
+                _mqttClient.publish((base + "/fan/preset").c_str(), preset.c_str(), true);
+            }
+            _publishState = MqttPublishState::STATE_INTERVAL;
+            break;
+
+        case MqttPublishState::STATE_INTERVAL:
+            _mqttClient.publish((base + "/interval/state").c_str(), fanController.isIntervalMode() ? "ON" : "OFF", true);
+            _publishState = MqttPublishState::STATE_INTERVAL_TIMES;
+            break;
+
+        case MqttPublishState::STATE_INTERVAL_TIMES:
+            _mqttClient.publish((base + "/interval_on/state").c_str(), String(fanController.getIntervalOnTime()).c_str(), true);
+            _mqttClient.publish((base + "/interval_off/state").c_str(), String(fanController.getIntervalOffTime()).c_str(), true);
+            _publishState = MqttPublishState::STATE_REMAINING;
+            break;
+
+        case MqttPublishState::STATE_REMAINING:
+            _mqttClient.publish((base + "/remaining_time").c_str(), String(fanController.getRemainingMinutes()).c_str(), true);
+            _publishState = MqttPublishState::STATE_RPM_WIFI;
+            break;
+
+        case MqttPublishState::STATE_RPM_WIFI:
+            _mqttClient.publish((base + "/rpm").c_str(), String(fanController.getRPM()).c_str(), true);
+            _mqttClient.publish((base + "/wifi_signal").c_str(), String(wifiManager.getRSSI()).c_str(), true);
+            _publishState = MqttPublishState::STATE_RUNTIME;
+            break;
+
+        case MqttPublishState::STATE_RUNTIME:
+            {
+                float totalHours = fanController.getTotalRuntimeMinutes() / 60.0;
+                char buf[10];
+                snprintf(buf, sizeof(buf), "%.1f", totalHours);
+                _mqttClient.publish((base + "/total_runtime").c_str(), buf, true);
+            }
+            _publishState = MqttPublishState::STATE_DONE;
+            break;
+
+        case MqttPublishState::STATE_DONE:
+            _publishState = MqttPublishState::IDLE;
+            break;
+
+        default:
+            _publishState = MqttPublishState::IDLE;
+            break;
+    }
+
+    // Give system time after each publish
+    _mqttClient.loop();
 }
 
 void MQTTHandler::connect(const char* host, uint16_t port, const char* user, const char* password) {
@@ -151,8 +300,8 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         fanController.setIntervalTimes(fanController.getIntervalOnTime(), p.toInt());
     }
 
-    // Publish updated state
-    publishState();
+    // Request state publish (non-blocking)
+    requestStatePublish();
 
     // Notify callback
     if (_commandCallback) {
@@ -174,7 +323,7 @@ String MQTTHandler::getDeviceJson() {
     device["name"] = "Rituals Diffuser";
     device["model"] = "Perfume Genie 2.0";
     device["manufacturer"] = "Rituals (Custom FW)";
-    device["sw_version"] = "1.1.0";
+    device["sw_version"] = "1.2.0";
 
     String output;
     serializeJson(device, output);
@@ -182,25 +331,12 @@ String MQTTHandler::getDeviceJson() {
 }
 
 void MQTTHandler::publishDiscovery() {
-    Serial.println("[MQTT] Publishing Home Assistant discovery...");
-
-    publishFanDiscovery();
-    yield();  // Give AsyncTCP time
-    publishIntervalSwitchDiscovery();
-    yield();
-    publishIntervalOnTimeDiscovery();
-    yield();
-    publishIntervalOffTimeDiscovery();
-    yield();
-    publishRemainingTimeSensorDiscovery();
-    yield();
-    publishRPMSensorDiscovery();
-    yield();
-    publishWiFiSensorDiscovery();
-    yield();
-    publishTotalRuntimeSensorDiscovery();
-
-    Serial.println("[MQTT] Discovery published");
+    // Start the discovery state machine (non-blocking)
+    if (_publishState == MqttPublishState::IDLE) {
+        _publishState = MqttPublishState::DISC_FAN;
+        _lastPublishStep = millis();
+        Serial.println("[MQTT] Publishing Home Assistant discovery...");
+    }
 }
 
 void MQTTHandler::publishFanDiscovery() {
@@ -224,11 +360,8 @@ void MQTTHandler::publishFanDiscovery() {
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/fan/rd_" + _deviceId + "/config";
 
-    Serial.printf("[MQTT] Fan discovery payload size: %d bytes\n", p.length());
-    Serial.printf("[MQTT] Topic: %s\n", topic.c_str());
-
-    bool success = _mqttClient.publish(topic.c_str(), p.c_str(), true);
-    Serial.printf("[MQTT] Fan discovery publish: %s\n", success ? "OK" : "FAILED");
+    Serial.printf("[MQTT] Fan discovery: %d bytes\n", p.length());
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
 }
 
 void MQTTHandler::publishIntervalSwitchDiscovery() {
@@ -361,44 +494,11 @@ void MQTTHandler::removeDiscovery() {
 }
 
 void MQTTHandler::publishState() {
-    if (!_mqttClient.connected()) return;
-
-    String base = getBaseTopic();
-
-    // Fan state
-    _mqttClient.publish((base + "/fan/state").c_str(), fanController.isOn() ? "ON" : "OFF", true);
-    _mqttClient.publish((base + "/fan/speed").c_str(), String(fanController.getSpeed()).c_str(), true);
-    yield();  // Give AsyncTCP time
-
-    // Preset mode
-    String preset = "Continuous";
-    if (fanController.isTimerActive()) {
-        uint16_t remaining = fanController.getRemainingMinutes();
-        if (remaining <= 30) preset = "30 min";
-        else if (remaining <= 60) preset = "60 min";
-        else if (remaining <= 90) preset = "90 min";
-        else preset = "120 min";
+    // Start the state publish state machine (non-blocking)
+    if (_publishState == MqttPublishState::IDLE) {
+        _publishState = MqttPublishState::STATE_FAN;
+        _lastPublishStep = millis();
     }
-    _mqttClient.publish((base + "/fan/preset").c_str(), preset.c_str(), true);
-    yield();
-
-    // Interval mode
-    _mqttClient.publish((base + "/interval/state").c_str(), fanController.isIntervalMode() ? "ON" : "OFF", true);
-    _mqttClient.publish((base + "/interval_on/state").c_str(), String(fanController.getIntervalOnTime()).c_str(), true);
-    _mqttClient.publish((base + "/interval_off/state").c_str(), String(fanController.getIntervalOffTime()).c_str(), true);
-    yield();
-
-    // Sensors
-    _mqttClient.publish((base + "/remaining_time").c_str(), String(fanController.getRemainingMinutes()).c_str(), true);
-    _mqttClient.publish((base + "/rpm").c_str(), String(fanController.getRPM()).c_str(), true);
-    _mqttClient.publish((base + "/wifi_signal").c_str(), String(wifiManager.getRSSI()).c_str(), true);
-    yield();
-
-    // Runtime statistics (in hours)
-    float totalHours = fanController.getTotalRuntimeMinutes() / 60.0;
-    char buf[10];
-    snprintf(buf, sizeof(buf), "%.1f", totalHours);
-    _mqttClient.publish((base + "/total_runtime").c_str(), buf, true);
 }
 
 void MQTTHandler::publishAvailability(bool online) {

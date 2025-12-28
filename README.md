@@ -2,9 +2,10 @@
 
 Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-dependent Rituals firmware with fully local control via Home Assistant.
 
-![Version](https://img.shields.io/badge/Version-1.1.0-brightgreen)
-![ESP-WROOM-02](https://img.shields.io/badge/ESP-WROOM--02-blue)
-![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP8266-orange)
+![Version](https://img.shields.io/badge/Version-1.2.0-brightgreen)
+![ESP32](https://img.shields.io/badge/ESP32-Supported-blue)
+![ESP8266](https://img.shields.io/badge/ESP8266-Supported-blue)
+![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT-41BDF5)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -16,121 +17,141 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 - **Interval Mode** - Pulsing mode to save fragrance
 - **Night Mode** - Auto-dim LED during configured hours
 - **Usage Statistics** - Track total runtime
-- **OTA Updates** - Wireless firmware updates (via web interface or ArduinoOTA)
+- **OTA Updates** - Wireless firmware updates via web interface
 - **Web Interface** - Configure WiFi, MQTT, passwords, and control the diffuser
 - **RGB LED Status** - Visual feedback for device state
-- **Physical Buttons** - Front (SW2) and rear (SW1) button support
+- **Physical Buttons** - Front and rear button support
+
+## Quick Start
+
+### Option 1: Pre-built Binaries (Easiest)
+
+1. Download the latest release from [Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases)
+2. Flash using esptool or web flasher (see Installation section)
+
+### Option 2: Build from Source
+
+```bash
+# Clone repository
+git clone https://github.com/martijnrenkema/Rituals-diffuser.git
+cd Rituals-diffuser
+
+# Build for ESP32 (recommended)
+pio run -e esp32dev
+
+# Or build for ESP8266 (original chip)
+pio run -e esp8266
+```
 
 ## Hardware
 
-This firmware supports both the original **ESP-WROOM-02** (ESP8266) and **ESP32** as a drop-in replacement.
+This firmware supports both **ESP32** (recommended) and the original **ESP-WROOM-02** (ESP8266).
 
-### ESP32 GPIO Pinout (Recommended)
+### ESP32 Wiring (Recommended for new builds)
 
-| ESP32 GPIO | Rituals Pin | Function |
-|------------|-------------|----------|
-| GPIO25 | IO4 | Fan PWM speed control |
-| GPIO26 | IO5/TP17 | Fan tachometer (RPM) |
-| GPIO27 | IO15 | WS2812 RGB LED |
-| GPIO13 | IO16 | Front button (SW2 - Connect) |
-| GPIO14 | IO14 | Rear button (SW1 - Cold reset) |
+Connect your ESP32 DevKit to the Rituals Genie board:
 
-### ESP8266 GPIO Pinout (Original)
+| ESP32 GPIO | Genie Board | Wire Color | Function |
+|------------|-------------|------------|----------|
+| GPIO25 | IO4 | Blue | Fan PWM speed control |
+| GPIO26 | IO5/TP17 | Yellow | Fan tachometer (RPM) |
+| GPIO27 | IO15 | Green | WS2812 RGB LED data |
+| GPIO13 | SW2 | - | Front button (Connect) |
+| GPIO14 | SW1 | - | Rear button (Reset) |
+| GND | GND | Black | Ground |
+| 3.3V | 3.3V | Red | Power |
+
+### ESP8266 Pinout (Original chip)
 
 | GPIO | Function | Description |
 |------|----------|-------------|
-| GPIO4 | Fan PWM | Speed control |
-| GPIO5 | Fan Tacho | RPM feedback |
+| GPIO4 | Fan PWM | Speed control (blue wire) |
+| GPIO5 | Fan Tacho | RPM feedback (yellow wire) |
 | GPIO15 | LED | WS2812 RGB LED |
 | GPIO14 | SW2 | Connect button |
 | GPIO13 | SW1 | Cold reset button |
 
-## ⚠️ Backup Original Firmware First!
-
-**Before flashing custom firmware, backup the original Rituals firmware so you can restore it if needed.**
-
-```bash
-# Connect USB-to-serial adapter and identify port
-ls /dev/cu.usbserial-*
-
-# Backup original firmware (2MB flash)
-esptool.py --port /dev/cu.usbserial-XXXX read_flash 0x00000 0x200000 rituals_original_firmware.bin
-```
-
-To restore original firmware:
-```bash
-esptool.py --port /dev/cu.usbserial-XXXX erase_flash
-esptool.py --port /dev/cu.usbserial-XXXX write_flash 0x00000 rituals_original_firmware.bin
-```
-
 ## Installation
 
-### Prerequisites
+### Step 1: Backup Original Firmware (Important!)
 
-- [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
-- USB-to-Serial adapter (FTDI, CP2102, or NodeMCU as programmer)
-- Dupont wires
-
-### First Flash (Serial)
-
-1. **Connect the programmer:**
-   ```
-   USB Adapter    →  Genie Board (pin header)
-   TX             →  RX
-   RX             →  TX
-   GND            →  GND
-   3.3V           →  VCC
-   ```
-
-2. **Enter flash mode:**
-   - Hold GPIO0 low during power-on, OR
-   - Hold the "Connect" button while powering on
-
-3. **Flash the firmware:**
-   ```bash
-   # Clone the repository
-   git clone https://github.com/martijnrenkema/Rituals-diffuser.git
-   cd Rituals-diffuser
-
-   # Flash firmware
-   pio run -e esp8266 -t upload --upload-port /dev/cu.usbserial-XXXX
-
-   # Flash web files (SPIFFS)
-   pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
-   ```
-
-### OTA Updates (After First Flash)
-
-Once the firmware is installed and connected to WiFi:
+Before flashing, backup the original Rituals firmware:
 
 ```bash
-pio run -e esp8266_ota -t upload
+# Find your serial port
+ls /dev/cu.usbserial-*
+
+# Backup (2MB flash for ESP8266)
+esptool.py --port /dev/cu.usbserial-XXXX read_flash 0x00000 0x200000 rituals_backup.bin
 ```
 
-| Parameter | Value |
-|-----------|-------|
-| Hostname | `rituals-diffuser.local` |
-| Port | 3232 |
-| Password | `diffuser-ota` |
+### Step 2: Flash Firmware
 
-## WiFi Setup
+#### Method A: Using PlatformIO (Recommended)
 
-1. **Connect to AP:** `Rituals-Diffuser-XXXX` (password: `diffuser123`)
-2. **Open browser:** `http://192.168.4.1`
-3. **Configure WiFi** credentials
-4. Device restarts and connects to your network
+```bash
+# For ESP32
+pio run -e esp32dev -t upload --upload-port /dev/cu.usbserial-XXXX
+pio run -e esp32dev -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 
-## Home Assistant
+# For ESP8266
+pio run -e esp8266 -t upload --upload-port /dev/cu.usbserial-XXXX
+pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
+```
+
+#### Method B: Using esptool (Pre-built binaries)
+
+```bash
+# For ESP32
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 --baud 460800 \
+  write_flash -z 0x10000 firmware.bin
+
+# For ESP8266
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 --baud 460800 \
+  write_flash 0x0 firmware.bin
+```
+
+### Step 3: Initial Setup
+
+1. Power on the device - LED will pulse orange (AP mode)
+2. Connect to WiFi network: `Rituals-Diffuser-XXXX`
+3. Password: `diffuser123`
+4. Open browser: `http://192.168.4.1`
+5. Configure your WiFi credentials
+6. Device restarts and connects to your network
+
+### Step 4: Configure MQTT (Optional)
+
+1. Find device IP in your router or use `rituals-diffuser.local`
+2. Open web interface
+3. Enter MQTT broker settings
+4. Device appears automatically in Home Assistant
+
+## Updating Firmware (OTA)
+
+Once installed, you can update wirelessly via the web interface:
+
+1. Open web interface: `http://rituals-diffuser.local` or device IP
+2. Click "Firmware Update" at bottom
+3. Upload new `.bin` file
+4. Wait for restart
+
+Or via command line:
+```bash
+pio run -e esp32dev_ota -t upload
+```
+
+## Home Assistant Integration
 
 ### MQTT Auto-Discovery
 
-The device automatically appears in Home Assistant when MQTT auto-discovery is enabled.
+The device automatically appears in Home Assistant when MQTT auto-discovery is enabled. No manual configuration needed!
 
-### Entities
+### Entities Created
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| Diffuser | Fan | On/off, speed 0-100%, presets |
+| Diffuser | Fan | On/off, speed 0-100%, timer presets |
 | Interval Mode | Switch | Pulsing mode toggle |
 | Interval On | Number | On-time (10-120 sec) |
 | Interval Off | Number | Off-time (10-120 sec) |
@@ -153,96 +174,124 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 | Action | Function |
 |--------|----------|
 | Short press | Toggle fan on/off |
-| Long press (3s) | Start AP mode (WiFi config) |
+| Long press (3s) | Start AP mode for WiFi config |
 
 ### Rear Button (SW1 - Cold Reset)
 | Action | Function |
 |--------|----------|
-| Short press | Restart ESP |
-| Long press (3s) | Factory reset (clear all settings) |
+| Short press | Restart device |
+| Long press (3s) | Factory reset (clears all settings) |
 
-## LED Status
+## LED Status Indicators
 
 | Color | Pattern | Status |
 |-------|---------|--------|
-| Red | Solid | Startup / Error |
+| Red | Blinking | Startup / Error |
 | Cyan | Fast blink | Connecting to WiFi |
-| Green | Solid | WiFi connected (fan off or on) |
+| Green | Solid | Connected, fan running |
+| Blue | Solid | Timer active |
 | Purple | Solid | Interval mode active |
-| Orange | Pulsing | AP mode active |
+| Orange | Pulsing | AP mode (WiFi config) |
 | Purple | Fast blink | OTA update in progress |
 
 ## Configuration
 
 ### Default Passwords
 
-| Function | Default | Configurable |
-|----------|---------|--------------|
-| WiFi AP | `diffuser123` | Yes, via web interface |
-| OTA Updates | `diffuser-ota` | Yes, via web interface |
+| Function | Default Password | Changeable |
+|----------|------------------|------------|
+| WiFi AP | `diffuser123` | Yes |
+| OTA Updates | `diffuser-ota` | Yes |
 
-Passwords can be changed in the web interface under "Security". Minimum 8 characters required. Device restart needed after changing.
+Change passwords in web interface under "Security". Minimum 8 characters. Restart required after change.
 
-### MQTT Topics
+### Night Mode
 
-```
-rituals_diffuser/fan/state        → ON/OFF
-rituals_diffuser/fan/speed        → 0-100
-rituals_diffuser/fan/preset       → Timer preset
-rituals_diffuser/availability     → online/offline
-```
+Automatically dims the LED during specified hours:
+- Configure start/end hour (0-23)
+- Set dimmed brightness (0-100%)
+- Enable/disable via web interface
+
+## Troubleshooting
+
+### Device won't connect to WiFi
+1. Long press front button (3s) to enter AP mode
+2. Connect to `Rituals-Diffuser-XXXX`
+3. Reconfigure WiFi settings
+
+### Device not appearing in Home Assistant
+1. Verify MQTT broker settings
+2. Check MQTT broker is reachable
+3. Power cycle the device
+4. Wait 30 seconds for discovery
+
+### OTA upload fails
+1. Ensure device is on same network
+2. Try using IP address instead of hostname
+3. Check port 3232 is not blocked
+4. Fallback: flash via serial connection
+
+### Fan not spinning
+1. Check wiring connections
+2. Go to Hardware Diagnostics in web interface
+3. Try "Test Cycle" to verify fan works
+4. Adjust Min PWM if fan needs higher starting voltage
 
 ## Project Structure
 
 ```
 ├── src/
-│   ├── main.cpp              # Entry point
-│   ├── config.h              # Configuration & pin definitions
-│   ├── fan_controller.*      # Fan control, timer, interval, RPM
+│   ├── main.cpp              # Main entry point
+│   ├── config.h              # Pin definitions & settings
+│   ├── fan_controller.*      # Fan control, timer, interval
 │   ├── led_controller.*      # WS2812 RGB LED
-│   ├── button_handler.*      # Button handling
-│   ├── storage.*             # NVS/EEPROM storage
-│   ├── wifi_manager.*        # WiFi management
-│   ├── web_server.*          # Web interface + OTA upload
+│   ├── button_handler.*      # Button input handling
+│   ├── storage.*             # Settings persistence
+│   ├── wifi_manager.*        # WiFi connection
+│   ├── web_server.*          # Web interface + OTA
 │   ├── mqtt_handler.*        # MQTT + HA discovery
-│   └── ota_handler.*         # ArduinoOTA updates
+│   └── ota_handler.*         # ArduinoOTA
 ├── data/                     # Web files (SPIFFS)
-│   ├── index.html            # Main control page
-│   ├── update.html           # OTA firmware upload
-│   ├── style.css             # Styling
-│   └── script.js             # UI logic
-├── platformio.ini            # PlatformIO config
+│   ├── index.html
+│   ├── update.html
+│   ├── style.css
+│   └── script.js
+├── platformio.ini
 └── README.md
+```
+
+## Building from Source
+
+### Prerequisites
+- [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
+- USB-to-Serial adapter
+
+### Build Commands
+
+```bash
+# Build firmware
+pio run -e esp32dev        # ESP32
+pio run -e esp8266         # ESP8266
+
+# Build filesystem
+pio run -e esp32dev -t buildfs
+pio run -e esp8266 -t buildfs
+
+# Upload firmware
+pio run -e esp32dev -t upload
+pio run -e esp8266 -t upload
+
+# Upload filesystem
+pio run -e esp32dev -t uploadfs
+pio run -e esp8266 -t uploadfs
 ```
 
 ## Dependencies
 
-- [PubSubClient](https://github.com/knolleary/pubsubclient) - MQTT
-- [ArduinoJson](https://github.com/bblanchon/ArduinoJson) - JSON
-- [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer) - Web server
-- [FastLED](https://github.com/FastLED/FastLED) - LED control
-
-## Troubleshooting
-
-### OTA upload fails
-- Check WiFi: `ping rituals-diffuser.local`
-- Try using IP address instead of hostname
-- Ensure port 3232 is not blocked
-- Fallback: flash via serial
-
-### Device not found in Home Assistant
-- Check MQTT broker connection
-- Remove old device from HA
-- Power cycle the ESP
-- Wait 30 seconds for discovery
-
-### WiFi won't connect
-- Factory reset: hold front button for 3 seconds
-- Connect to AP mode and reconfigure
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- [PubSubClient](https://github.com/knolleary/pubsubclient) - MQTT client
+- [ArduinoJson](https://github.com/bblanchon/ArduinoJson) - JSON parsing
+- [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer) - Async web server
+- [FastLED](https://github.com/FastLED/FastLED) - WS2812 LED control
 
 ## Credits
 
@@ -256,3 +305,26 @@ MIT License - feel free to use and modify.
 ## Disclaimer
 
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
+
+## Changelog
+
+### v1.2.0
+- Fixed AsyncTCP watchdog crashes with non-blocking MQTT publishing
+- Improved stability with state machine approach for MQTT
+- Translated web interface to English
+- Fixed WiFi manager blocking delays
+
+### v1.1.0
+- Added ESP32 support
+- Added fan tachometer/RPM support
+- Added night mode
+- Added usage statistics
+- Added hardware diagnostics page
+- Improved button handling
+
+### v1.0.0
+- Initial release
+- ESP8266 support
+- MQTT Home Assistant integration
+- Web interface
+- Timer and interval modes
