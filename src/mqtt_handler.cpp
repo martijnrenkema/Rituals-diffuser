@@ -7,6 +7,9 @@
 
 // WiFi library is included via mqtt_handler.h
 
+// External function from main.cpp for LED priority system
+extern void updateLedStatus();
+
 MQTTHandler mqttHandler;
 MQTTHandler* MQTTHandler::_instance = nullptr;
 
@@ -289,9 +292,11 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
             fanController.cancelTimer();
             if (!fanController.isOn()) fanController.turnOn();
         }
+        updateLedStatus();
     } else if (t.endsWith("/interval/set")) {
         // Interval mode switch
         fanController.setIntervalMode(p == "ON");
+        updateLedStatus();
     } else if (t.endsWith("/interval_on/set")) {
         // Interval on time
         fanController.setIntervalTimes(p.toInt(), fanController.getIntervalOffTime());
