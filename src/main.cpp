@@ -69,7 +69,8 @@ void onWiFiStateChange(WifiStatus state) {
             if (fanController.isOn()) {
                 ledController.showFanRunning();
             } else {
-                ledController.showConnected();
+                // Standby mode: LED off when fan is not running
+                ledController.off();
             }
             // Start OTA when connected
             otaHandler.begin();
@@ -99,10 +100,11 @@ void onFanStateChange(bool on, uint8_t speed) {
                 ledController.showFanRunning();    // Green for normal
             }
         } else {
-            if (wifiManager.isConnected()) {
-                ledController.showConnected();
-            } else {
+            // Fan off: LED off in standby (except AP mode needs indicator)
+            if (wifiManager.isAPMode()) {
                 ledController.showAPMode();
+            } else {
+                ledController.off();  // Standby: LED off
             }
         }
     }
