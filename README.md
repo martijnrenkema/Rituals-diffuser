@@ -2,6 +2,10 @@
 
 Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-dependent Rituals firmware with fully local control via Home Assistant.
 
+<p align="center">
+  <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
+</p>
+
 ![Version](https://img.shields.io/badge/Version-1.2.0-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Supported-blue)
@@ -147,6 +151,10 @@ pio run -e esp32dev_ota -t upload
 
 The device automatically appears in Home Assistant when MQTT auto-discovery is enabled. No manual configuration needed!
 
+<p align="center">
+  <img src="docs/images/home-assistant.png" alt="Home Assistant MQTT Integration" width="700"/>
+</p>
+
 ### Entities Created
 
 | Entity | Type | Description |
@@ -236,6 +244,10 @@ Automatically dims the LED during specified hours:
 2. Go to Hardware Diagnostics in web interface
 3. Try "Test Cycle" to verify fan works
 4. Adjust Min PWM if fan needs higher starting voltage
+
+<p align="center">
+  <img src="docs/images/hardware-diagnostics.png" alt="Hardware Diagnostics" width="250"/>
+</p>
 
 ## Project Structure
 
