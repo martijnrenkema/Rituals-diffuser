@@ -18,17 +18,17 @@
     #define FAN_PWM_PIN         4       // GPIO4 - Fan PWM speed control (blue wire)
     #define FAN_TACHO_PIN       5       // GPIO5 - Fan tachometer/RPM (yellow wire, TP17)
     #define LED_DATA_PIN        15      // GPIO15 - WS2812 RGB LED
-    #define BUTTON_FRONT_PIN    16      // GPIO16 - Connect button (front)
-    #define BUTTON_REAR_PIN     3       // GPIO3 (RX) - Rear button
+    #define BUTTON_FRONT_PIN    14      // GPIO14 - Connect button (SW2)
+    #define BUTTON_REAR_PIN     13      // GPIO13 - Cold reset button (SW1)
     #define NUM_LEDS            1       // Single WS2812 LED
 #else
     // ESP32 DevKit pinout voor Rituals Genie
     // Sluit de Genie board draden aan op deze ESP32 pinnen:
-    #define FAN_PWM_PIN         25      // GPIO25 → Genie GPIO4 (fan PWM, blue wire)
-    #define FAN_TACHO_PIN       26      // GPIO26 → Genie GPIO5/TP17 (tachometer, yellow wire)
-    #define LED_DATA_PIN        27      // GPIO27 → Genie GPIO15 (WS2812 LED data)
-    #define BUTTON_FRONT_PIN    32      // GPIO32 → Genie GPIO16 (front button)
-    #define BUTTON_REAR_PIN     33      // GPIO33 → Genie GPIO3 (rear button)
+    #define FAN_PWM_PIN         25      // GPIO25 → Genie IO4 (fan PWM, blue wire)
+    #define FAN_TACHO_PIN       26      // GPIO26 → Genie IO5/TP17 (tachometer, yellow wire)
+    #define LED_DATA_PIN        27      // GPIO27 → Genie IO15 (WS2812 LED data)
+    #define BUTTON_FRONT_PIN    32      // GPIO32 → Genie IO14 (Connect button SW2)
+    #define BUTTON_REAR_PIN     33      // GPIO33 → Genie IO13 (Cold reset SW1)
     #define NUM_LEDS            1       // Single WS2812 LED
 
     // RFID pins (VSPI) - niet conflicteren met fan pinnen!
