@@ -26,6 +26,12 @@
                 </button>
                 <div class="speed-ring" id="speed-ring">
                     <svg viewBox="0 0 120 120">
+                        <defs>
+                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#6366f1"/>
+                                <stop offset="100%" style="stop-color:#8b5cf6"/>
+                            </linearGradient>
+                        </defs>
                         <circle class="bg" cx="60" cy="60" r="54"/>
                         <circle class="progress" cx="60" cy="60" r="54" id="speed-circle"/>
                     </svg>
@@ -88,19 +94,6 @@
             </details>
 
             <details class="card">
-                <summary>Cartridge <span id="rfid-dot" class="dot small"></span></summary>
-                <div class="info">
-                    <span>Scent: <b id="cartridge">--</b></span>
-                    <span>Cartridge runtime: <b id="cart-runtime">--</b> hours</span>
-                </div>
-                <div class="row-2">
-                    <button id="rfid-scan" class="btn">Scan RFID</button>
-                    <button id="rfid-clear" class="btn-sm">Clear</button>
-                </div>
-                <small id="rfid-status" class="hint"></small>
-            </details>
-
-            <details class="card">
                 <summary>Night Mode</summary>
                 <div class="row">
                     <span>Enable night mode</span>
@@ -142,11 +135,19 @@
                 <div class="diag-section">
                     <h4>Fan Test</h4>
                     <div class="diag-status">Status: <span id="fan-status" class="dot"></span> <span id="fan-status-text">--</span></div>
-                    <div class="diag-status">RPM: <b id="fan-rpm">0</b></div>
+                    <div class="diag-status">RPM: <b id="fan-rpm">0</b> | PWM: <b id="fan-pwm">0</b></div>
                     <div class="diag-btns">
                         <button class="btn-sm diag-fan" data-action="test">Test Cycle</button>
                         <button class="btn-sm diag-fan" data-action="on">On</button>
                         <button class="btn-sm diag-fan" data-action="off">Off</button>
+                    </div>
+                    <div class="field-group" style="margin-top:10px">
+                        <label>Min PWM (huidige: <b id="min-pwm-val">0</b>)</label>
+                        <div class="diag-btns">
+                            <input type="number" id="min-pwm-input" min="0" max="255" value="0" style="width:60px">
+                            <button class="btn-sm" id="set-min-btn">Set</button>
+                        </div>
+                        <small class="hint">Minimum PWM waarde voordat fan begint te draaien</small>
                     </div>
                 </div>
                 <div class="diag-section">
@@ -169,17 +170,6 @@
                         Rear (G<span id="btn-rear-pin">--</span>): <span id="btn-rear-status" class="dot"></span> <span id="btn-rear-text">Released</span>
                     </div>
                     <small class="hint">Press buttons on device to test</small>
-                </div>
-                <div class="diag-section">
-                    <h4>RFID Reader</h4>
-                    <div class="diag-status">Status: <span id="rfid-diag-status" class="dot"></span> <span id="rfid-diag-text">--</span></div>
-                    <div class="info" id="rfid-pins-info" style="display:none">
-                        <span>SCK: <b>G<span id="diag-rfid-sck">--</span></b></span>
-                        <span>MISO: <b>G<span id="diag-rfid-miso">--</span></b></span>
-                        <span>MOSI: <b>G<span id="diag-rfid-mosi">--</span></b></span>
-                        <span>SS: <b>G<span id="diag-rfid-ss">--</span></b></span>
-                        <span>RST: <b>G<span id="diag-rfid-rst">--</span></b></span>
-                    </div>
                 </div>
             </details>
 
@@ -217,6 +207,7 @@
             </details>
         </main>
         <footer>
+            <a href="/update.html">Firmware Update</a>
             <span class="version">v1.1.0</span>
         </footer>
     </div>

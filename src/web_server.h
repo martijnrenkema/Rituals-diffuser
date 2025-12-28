@@ -26,8 +26,6 @@ private:
     void handleReset(AsyncWebServerRequest* request);
     void handleSavePasswords(AsyncWebServerRequest* request);
     void handleGetPasswords(AsyncWebServerRequest* request);
-    void handleGetRFID(AsyncWebServerRequest* request);
-    void handleRFIDAction(AsyncWebServerRequest* request);
     void handleGetNightMode(AsyncWebServerRequest* request);
     void handleSaveNightMode(AsyncWebServerRequest* request);
 

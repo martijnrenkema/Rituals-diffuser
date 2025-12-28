@@ -117,16 +117,44 @@ void Storage::setDeviceName(const char* name) {
 }
 
 void Storage::setFanSpeed(uint8_t speed) {
-    _settings.fanSpeed = speed;
+    // Only save if value actually changed (reduces flash wear)
+    if (_settings.fanSpeed != speed) {
+        _settings.fanSpeed = speed;
+        commit();
+    }
+}
+
+void Storage::setFanMinPWM(uint8_t minPWM) {
+    _settings.fanMinPWM = minPWM;
+#ifdef PLATFORM_ESP8266
     commit();
+#else
+    // ESP32: Save directly to NVS to ensure persistence
+    prefs.putUChar(NVS_FAN_MIN_PWM, minPWM);
+#endif
+    Serial.printf("[STORAGE] Fan minPWM saved: %d\n", minPWM);
+}
+
+uint8_t Storage::getFanMinPWM() {
+#ifdef PLATFORM_ESP8266
+    return _settings.fanMinPWM;
+#else
+    // ESP32: Read directly from NVS
+    return prefs.getUChar(NVS_FAN_MIN_PWM, 0);
+#endif
 }
 
 void Storage::setIntervalMode(bool enabled, uint8_t onTime, uint8_t offTime) {
-    _settings.intervalEnabled = enabled;
-    _settings.intervalOnTime = onTime;
-    _settings.intervalOffTime = offTime;
-    commit();
-    Serial.println("[STORAGE] Interval settings saved");
+    // Only save if values actually changed (reduces flash wear)
+    if (_settings.intervalEnabled != enabled ||
+        _settings.intervalOnTime != onTime ||
+        _settings.intervalOffTime != offTime) {
+        _settings.intervalEnabled = enabled;
+        _settings.intervalOnTime = onTime;
+        _settings.intervalOffTime = offTime;
+        commit();
+        Serial.println("[STORAGE] Interval settings saved");
+    }
 }
 
 void Storage::setOTAPassword(const char* password) {

@@ -33,23 +33,81 @@ void FanController::begin() {
     attachInterrupt(digitalPinToInterrupt(FAN_TACHO_PIN), tachoISR, FALLING);
 #endif
 
-    Serial.println("[FAN] Controller initialized");
+    // Load calibration from storage
+    _minPWM = storage.getFanMinPWM();
+    Serial.printf("[FAN] Controller initialized (minPWM: %d)\n", _minPWM);
 }
 
 void FanController::loop() {
     unsigned long now = millis();
 
-    // Calculate RPM every second
-    if (now - _lastRpmCalc >= 1000) {
+    // Calculate RPM every second (or faster during calibration)
+    unsigned long rpmInterval = _calibrating ? 400 : 1000;
+    if (now - _lastRpmCalc >= rpmInterval) {
         noInterrupts();
         uint32_t count = _tachoCount;
         _tachoCount = 0;
         interrupts();
 
-        // RPM = (pulses per second / pulses per revolution) * 60
-        // Most fans have 2 pulses per revolution
-        _rpm = (count / TACHO_PULSES_PER_REV) * 60;
+        // RPM = (pulses per interval / pulses per revolution) * 60 * (1000/interval)
+        // Simplified: RPM = count * 60000 / (pulses_per_rev * interval_ms)
+        if (rpmInterval > 0) {
+            _rpm = (count * 60000UL) / (TACHO_PULSES_PER_REV * rpmInterval);
+        }
         _lastRpmCalc = now;
+
+        if (_calibrating) {
+            Serial.printf("[FAN] RPM calc: count=%lu, rpm=%d\n", count, _rpm);
+        }
+    }
+
+    // Handle calibration - takes over fan control completely
+    if (_calibrating) {
+        // Wait at least 800ms between steps to allow RPM to stabilize
+        if (now - _lastCalibrationStep >= 800) {
+            _lastCalibrationStep = now;
+
+            Serial.printf("[FAN] Calibrating... PWM=%d, RPM=%d\n", _calibrationPWM, _rpm);
+
+            if (_rpm > 200) {
+                // Fan is spinning! Found the minimum PWM (threshold 200 RPM to avoid noise)
+                _minPWM = _calibrationPWM;
+                storage.setFanMinPWM(_minPWM);
+                _calibrating = false;
+                _isOn = false;
+
+                // Turn off fan after calibration
+#ifdef PLATFORM_ESP8266
+                analogWrite(FAN_PWM_PIN, 0);
+#else
+                ledcWrite(PWM_CHANNEL, 0);
+#endif
+                _currentPWM = 0;
+
+                Serial.printf("[FAN] Calibration complete! minPWM = %d\n", _minPWM);
+            } else if (_calibrationPWM < 250) {
+                // Increase PWM and try again
+                _calibrationPWM += 5;
+#ifdef PLATFORM_ESP8266
+                analogWrite(FAN_PWM_PIN, _calibrationPWM);
+#else
+                ledcWrite(PWM_CHANNEL, _calibrationPWM);
+#endif
+                _currentPWM = _calibrationPWM;
+            } else {
+                // Reached max PWM, something is wrong
+                _calibrating = false;
+                _isOn = false;
+#ifdef PLATFORM_ESP8266
+                analogWrite(FAN_PWM_PIN, 0);
+#else
+                ledcWrite(PWM_CHANNEL, 0);
+#endif
+                _currentPWM = 0;
+                Serial.println("[FAN] Calibration failed - no RPM detected");
+            }
+        }
+        return;  // Skip normal fan logic during calibration
     }
 
     // Update runtime statistics every minute
@@ -94,6 +152,9 @@ void FanController::setSpeed(uint8_t percent) {
     if (percent > 100) percent = 100;
     _speed = percent;
     _targetSpeed = percent;
+
+    // Cancel soft start if active - direct speed change
+    _softStartTime = 0;
 
     if (_isOn) {
         if (_intervalMode && !_intervalCurrentlyOn) {
@@ -147,6 +208,13 @@ void FanController::turnOff() {
     applyPWM(0);
     _softStartTime = 0;
     _sessionStartTime = 0;
+
+    // Cancel timer when fan is turned off
+    if (_timerActive) {
+        _timerActive = false;
+        Serial.println("[FAN] Timer cancelled (fan turned off)");
+    }
+
     Serial.println("[FAN] Turned OFF");
     notifyStateChange();
 }
@@ -182,12 +250,20 @@ bool FanController::isTimerActive() {
 
 void FanController::setIntervalMode(bool enabled) {
     _intervalMode = enabled;
-    if (enabled && _isOn) {
+    if (enabled) {
+        // Interval mode requires fan to be on
+        if (!_isOn) {
+            _isOn = true;
+            if (_speed == 0) _speed = 50;  // Default speed if not set
+        }
         _intervalCurrentlyOn = true;
         _intervalNextToggle = millis() + (_intervalOnTime * 1000UL);
         applyPWM(_speed);
-    } else if (!enabled && _isOn) {
+        notifyStateChange();
+    } else if (_isOn) {
+        // Interval mode off, but fan stays on at constant speed
         applyPWM(_speed);
+        notifyStateChange();
     }
     Serial.printf("[FAN] Interval mode: %s\n", enabled ? "ON" : "OFF");
 }
@@ -219,7 +295,24 @@ void FanController::onStateChange(StateChangeCallback callback) {
 }
 
 void FanController::applyPWM(uint8_t percent) {
-    uint8_t pwmValue = map(percent, 0, 100, 0, 255);
+    uint8_t pwmValue;
+
+    if (percent == 0) {
+        pwmValue = 0;  // Off is always 0
+    } else {
+        // Map 1-100% to minPWM-255
+        pwmValue = map(percent, 1, 100, _minPWM, 255);
+    }
+
+    // Apply inversion if enabled
+    if (_invertPWM) {
+        pwmValue = 255 - pwmValue;
+    }
+
+    _currentPWM = pwmValue;
+
+    Serial.printf("[FAN] PWM: %d%% -> raw=%d (min=%d, invert=%s)\n",
+                  percent, pwmValue, _minPWM, _invertPWM ? "yes" : "no");
 
 #ifdef PLATFORM_ESP8266
     // ESP8266: GPIO4 = PWM speed control
@@ -228,6 +321,70 @@ void FanController::applyPWM(uint8_t percent) {
     // ESP32: LEDC PWM speed control
     ledcWrite(PWM_CHANNEL, pwmValue);
 #endif
+}
+
+void FanController::setRawPWM(uint8_t value) {
+    _currentPWM = value;
+    Serial.printf("[FAN] Raw PWM set to: %d\n", value);
+
+#ifdef PLATFORM_ESP8266
+    analogWrite(FAN_PWM_PIN, value);
+#else
+    ledcWrite(PWM_CHANNEL, value);
+#endif
+}
+
+void FanController::setInvertPWM(bool invert) {
+    _invertPWM = invert;
+    Serial.printf("[FAN] PWM invert: %s\n", invert ? "enabled" : "disabled");
+
+    // Re-apply current speed with new inversion setting
+    if (_isOn) {
+        applyPWM(_speed);
+    }
+}
+
+void FanController::startCalibration() {
+    if (_calibrating) return;
+
+    Serial.println("[FAN] Starting calibration...");
+
+    // Ensure fan is off and state is clean
+    _isOn = false;
+    _softStartTime = 0;
+    _timerActive = false;
+
+    // Reset tachometer counter for fresh measurement
+    noInterrupts();
+    _tachoCount = 0;
+    interrupts();
+    _rpm = 0;
+    _lastRpmCalc = millis();
+
+    // Start calibration
+    _calibrating = true;
+    _calibrationPWM = 0;
+    _calibrationStart = millis();
+    _lastCalibrationStep = millis() - 500;  // Allow first step soon
+
+    // Start with PWM 0
+#ifdef PLATFORM_ESP8266
+    analogWrite(FAN_PWM_PIN, 0);
+#else
+    ledcWrite(PWM_CHANNEL, 0);
+#endif
+    _currentPWM = 0;
+}
+
+void FanController::setMinPWM(uint8_t value) {
+    _minPWM = value;
+    storage.setFanMinPWM(value);
+    Serial.printf("[FAN] minPWM set to: %d\n", value);
+
+    // Re-apply current speed with new minimum
+    if (_isOn) {
+        applyPWM(_speed);
+    }
 }
 
 void FanController::notifyStateChange() {

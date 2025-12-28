@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firmware Update - Rituals Diffuser</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            color: #888;
+            text-decoration: none;
+            margin-bottom: 30px;
+        }
+        .back-link:hover { color: #fff; }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            font-size: 1.1em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card p {
+            color: #888;
+            font-size: 0.85em;
+            margin-bottom: 16px;
+        }
+        .upload-area {
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 16px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #6366f1;
+            background: rgba(99, 102, 241, 0.1);
+        }
+        .upload-area.has-file {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.1);
+        }
+        .upload-area input[type="file"] {
+            display: none;
+        }
+        .upload-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .file-name {
+            color: #22c55e;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+        }
+        .progress-container {
+            display: none;
+            margin-top: 16px;
+        }
+        .progress-container.show { display: block; }
+        .progress-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #22c55e);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            font-size: 0.85em;
+            color: #888;
+            text-align: center;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 16px;
+            display: none;
+            text-align: center;
+        }
+        .status.show { display: block; }
+        .status.success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+        .status.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        .warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            margin-bottom: 16px;
+        }
+        .version-info {
+            text-align: center;
+            color: #666;
+            font-size: 0.8em;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Firmware Update</h1>
+        <a href="/" class="back-link">&larr; Terug naar dashboard</a>
+
+        <!-- Firmware Update -->
+        <div class="card">
+            <h2>Firmware uploaden</h2>
+            <p>Upload een nieuw .bin bestand om de firmware te updaten.</p>
+            <div class="warning">
+                Let op: Onderbreek het update proces niet! De diffuser herstart automatisch na een succesvolle update.
+            </div>
+            <div class="upload-area" id="fw-upload-area">
+                <input type="file" id="fw-file" accept=".bin">
+                <div class="upload-icon">+</div>
+                <div>Klik of sleep een .bin bestand</div>
+                <div class="file-name" id="fw-file-name"></div>
+            </div>
+            <button class="btn btn-primary" id="fw-upload-btn" disabled>Firmware Uploaden</button>
+            <div class="progress-container" id="fw-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="fw-progress-fill"></div>
+                </div>
+                <div class="progress-text" id="fw-progress-text">0%</div>
+            </div>
+            <div class="status" id="fw-status"></div>
+        </div>
+
+        <!-- Filesystem Update -->
+        <div class="card">
+            <h2>Webinterface uploaden</h2>
+            <p>Upload een SPIFFS/LittleFS .bin bestand om de webinterface te updaten.</p>
+            <div class="upload-area" id="fs-upload-area">
+                <input type="file" id="fs-file" accept=".bin">
+                <div class="upload-icon">+</div>
+                <div>Klik of sleep een .bin bestand</div>
+                <div class="file-name" id="fs-file-name"></div>
+            </div>
+            <button class="btn btn-primary" id="fs-upload-btn" disabled>Webinterface Uploaden</button>
+            <div class="progress-container" id="fs-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="fs-progress-fill"></div>
+                </div>
+                <div class="progress-text" id="fs-progress-text">0%</div>
+            </div>
+            <div class="status" id="fs-status"></div>
+        </div>
+
+        <div class="version-info" id="version-info">
+            Laden...
+        </div>
+    </div>
+
+    <script>
+        // File upload handling
+        function setupUpload(areaId, fileId, btnId, progressId, fillId, textId, statusId, endpoint) {
+            const area = document.getElementById(areaId);
+            const fileInput = document.getElementById(fileId);
+            const btn = document.getElementById(btnId);
+            const progress = document.getElementById(progressId);
+            const fill = document.getElementById(fillId);
+            const text = document.getElementById(textId);
+            const status = document.getElementById(statusId);
+            const fileName = document.getElementById(fileId.replace('-file', '-file-name'));
+
+            // Click to select file
+            area.addEventListener('click', () => fileInput.click());
+
+            // Drag and drop
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.classList.add('dragover');
+            });
+            area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    updateFileName();
+                }
+            });
+
+            // File selected
+            fileInput.addEventListener('change', updateFileName);
+
+            function updateFileName() {
+                if (fileInput.files.length) {
+                    const file = fileInput.files[0];
+                    fileName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+                    area.classList.add('has-file');
+                    btn.disabled = false;
+                } else {
+                    fileName.textContent = '';
+                    area.classList.remove('has-file');
+                    btn.disabled = true;
+                }
+            }
+
+            // Upload
+            btn.addEventListener('click', () => {
+                if (!fileInput.files.length) return;
+
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', endpoint, true);
+
+                // Progress
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        fill.style.width = percent + '%';
+                        text.textContent = percent + '%';
+                    }
+                });
+
+                xhr.addEventListener('loadstart', () => {
+                    btn.disabled = true;
+                    progress.classList.add('show');
+                    status.classList.remove('show');
+                    fill.style.width = '0%';
+                    text.textContent = 'Uploading...';
+                });
+
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
+                        status.className = 'status show success';
+                        status.textContent = 'Update succesvol! Herstarten...';
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 5000);
+                    } else {
+                        status.className = 'status show error';
+                        status.textContent = 'Fout: ' + (xhr.responseText || 'Upload mislukt');
+                        btn.disabled = false;
+                    }
+                });
+
+                xhr.addEventListener('error', () => {
+                    status.className = 'status show error';
+                    status.textContent = 'Verbindingsfout tijdens upload';
+                    btn.disabled = false;
+                });
+
+                xhr.send(formData);
+            });
+        }
+
+        // Setup both upload areas
+        setupUpload('fw-upload-area', 'fw-file', 'fw-upload-btn', 'fw-progress', 'fw-progress-fill', 'fw-progress-text', 'fw-status', '/api/update/firmware');
+        setupUpload('fs-upload-area', 'fs-file', 'fs-upload-btn', 'fs-progress', 'fs-progress-fill', 'fs-progress-text', 'fs-status', '/api/update/filesystem');
+
+        // Fetch version info
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('version-info').textContent =
+                    'Firmware: v1.1.0 | MAC: ' + (d.device?.mac || 'Unknown');
+            })
+            .catch(() => {
+                document.getElementById('version-info').textContent = 'Versie info niet beschikbaar';
+            });
+    </script>
+</body>
+</html>

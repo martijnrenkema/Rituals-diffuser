@@ -34,10 +34,11 @@ public:
     void setColor(uint8_t r, uint8_t g, uint8_t b);
 
     // Status shortcuts
-    void showConnected();       // Blue - WiFi connected, idle
+    void showConnected();       // Green - WiFi connected, idle
     void showConnecting();      // Cyan blinking - WiFi connecting
     void showAPMode();          // Orange blinking - AP mode
     void showFanRunning();      // Green - Fan active
+    void showIntervalMode();    // Purple - Interval mode active
     void showOTA();             // Purple fast blink - OTA update
     void showError();           // Red - Error
 

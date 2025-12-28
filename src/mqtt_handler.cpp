@@ -2,7 +2,6 @@
 #include "config.h"
 #include "fan_controller.h"
 #include "wifi_manager.h"
-#include "rfid_handler.h"
 #include "storage.h"
 #include <ArduinoJson.h>
 
@@ -186,15 +185,20 @@ void MQTTHandler::publishDiscovery() {
     Serial.println("[MQTT] Publishing Home Assistant discovery...");
 
     publishFanDiscovery();
+    yield();  // Give AsyncTCP time
     publishIntervalSwitchDiscovery();
+    yield();
     publishIntervalOnTimeDiscovery();
+    yield();
     publishIntervalOffTimeDiscovery();
+    yield();
     publishRemainingTimeSensorDiscovery();
+    yield();
     publishRPMSensorDiscovery();
+    yield();
     publishWiFiSensorDiscovery();
-    publishCartridgeSensorDiscovery();
+    yield();
     publishTotalRuntimeSensorDiscovery();
-    publishCartridgeRuntimeSensorDiscovery();
 
     Serial.println("[MQTT] Discovery published");
 }
@@ -324,21 +328,6 @@ void MQTTHandler::publishWiFiSensorDiscovery() {
     _mqttClient.publish(topic.c_str(), p.c_str(), true);
 }
 
-void MQTTHandler::publishCartridgeSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
-
-    String p = "{\"name\":\"Cartridge\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_cart\",";
-    p += "\"stat_t\":\"" + b + "/cartridge\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"ic\":\"mdi:spray\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
-
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_cart/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
-}
-
 void MQTTHandler::publishTotalRuntimeSensorDiscovery() {
     String b = getBaseTopic();
     String devId = "rituals_" + _deviceId;
@@ -352,21 +341,6 @@ void MQTTHandler::publishTotalRuntimeSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_trun/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
-}
-
-void MQTTHandler::publishCartridgeRuntimeSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
-
-    String p = "{\"name\":\"Cartridge Runtime\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_crun\",";
-    p += "\"stat_t\":\"" + b + "/cartridge_runtime\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"unit_of_meas\":\"h\",\"ic\":\"mdi:clock-outline\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
-
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_crun/config";
     _mqttClient.publish(topic.c_str(), p.c_str(), true);
 }
 
@@ -394,6 +368,7 @@ void MQTTHandler::publishState() {
     // Fan state
     _mqttClient.publish((base + "/fan/state").c_str(), fanController.isOn() ? "ON" : "OFF", true);
     _mqttClient.publish((base + "/fan/speed").c_str(), String(fanController.getSpeed()).c_str(), true);
+    yield();  // Give AsyncTCP time
 
     // Preset mode
     String preset = "Continuous";
@@ -405,35 +380,25 @@ void MQTTHandler::publishState() {
         else preset = "120 min";
     }
     _mqttClient.publish((base + "/fan/preset").c_str(), preset.c_str(), true);
+    yield();
 
     // Interval mode
     _mqttClient.publish((base + "/interval/state").c_str(), fanController.isIntervalMode() ? "ON" : "OFF", true);
     _mqttClient.publish((base + "/interval_on/state").c_str(), String(fanController.getIntervalOnTime()).c_str(), true);
     _mqttClient.publish((base + "/interval_off/state").c_str(), String(fanController.getIntervalOffTime()).c_str(), true);
+    yield();
 
     // Sensors
     _mqttClient.publish((base + "/remaining_time").c_str(), String(fanController.getRemainingMinutes()).c_str(), true);
     _mqttClient.publish((base + "/rpm").c_str(), String(fanController.getRPM()).c_str(), true);
     _mqttClient.publish((base + "/wifi_signal").c_str(), String(wifiManager.getRSSI()).c_str(), true);
-
-    // Cartridge (from RFID or storage)
-    String cartridge = rfidHandler.getCartridgeName();
-    if (cartridge.length() == 0) {
-        cartridge = storage.getCurrentCartridge();
-    }
-    if (cartridge.length() == 0) {
-        cartridge = "Unknown";
-    }
-    _mqttClient.publish((base + "/cartridge").c_str(), cartridge.c_str(), true);
+    yield();
 
     // Runtime statistics (in hours)
     float totalHours = fanController.getTotalRuntimeMinutes() / 60.0;
-    float cartridgeHours = fanController.getCartridgeRuntimeMinutes() / 60.0;
     char buf[10];
     snprintf(buf, sizeof(buf), "%.1f", totalHours);
     _mqttClient.publish((base + "/total_runtime").c_str(), buf, true);
-    snprintf(buf, sizeof(buf), "%.1f", cartridgeHours);
-    _mqttClient.publish((base + "/cartridge_runtime").c_str(), buf, true);
 }
 
 void MQTTHandler::publishAvailability(bool online) {

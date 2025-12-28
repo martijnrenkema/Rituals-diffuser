@@ -23,6 +23,7 @@ struct DiffuserSettings {
 
     // Fan
     uint8_t fanSpeed;
+    uint8_t fanMinPWM;  // Calibrated minimum PWM for fan to start
     bool intervalEnabled;
     uint8_t intervalOnTime;
     uint8_t intervalOffTime;
@@ -52,14 +53,17 @@ struct DiffuserSettings {
     uint8_t nightModeBrightness;  // LED brightness during night (0-100)
 };
 
-#define SETTINGS_MAGIC 0xD1FF0003  // Magic number for valid settings (incremented for new fields)
+#define SETTINGS_MAGIC 0xD1FF0004  // Magic number for valid settings (incremented for new fields)
 
 class Storage {
 public:
     void begin();
 
-    // Load all settings
+    // Load all settings (from NVS - use sparingly)
     DiffuserSettings load();
+
+    // Get cached settings (fast, no NVS read)
+    const DiffuserSettings& getSettings() { return _settings; }
 
     // Save all settings
     void save(const DiffuserSettings& settings);
@@ -69,6 +73,8 @@ public:
     void setMQTT(const char* host, uint16_t port, const char* user, const char* password);
     void setDeviceName(const char* name);
     void setFanSpeed(uint8_t speed);
+    void setFanMinPWM(uint8_t minPWM);
+    uint8_t getFanMinPWM();
     void setIntervalMode(bool enabled, uint8_t onTime, uint8_t offTime);
     void setOTAPassword(const char* password);
     void setAPPassword(const char* password);

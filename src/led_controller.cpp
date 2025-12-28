@@ -128,7 +128,7 @@ void LedController::setColor(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void LedController::showConnected() {
-    setColor(LED_COLOR_BLUE);
+    setColor(LED_COLOR_GREEN);
     setMode(LedMode::ON);
 }
 
@@ -139,11 +139,16 @@ void LedController::showConnecting() {
 
 void LedController::showAPMode() {
     setColor(LED_COLOR_ORANGE);
-    setMode(LedMode::BLINK_SLOW);
+    setMode(LedMode::PULSE);
 }
 
 void LedController::showFanRunning() {
     setColor(LED_COLOR_GREEN);
+    setMode(LedMode::ON);
+}
+
+void LedController::showIntervalMode() {
+    setColor(LED_COLOR_PURPLE);
     setMode(LedMode::ON);
 }
 

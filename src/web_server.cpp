@@ -6,14 +6,18 @@
 #include "led_controller.h"
 #include "button_handler.h"
 #include "mqtt_handler.h"
-#include "rfid_handler.h"
 #include <ArduinoJson.h>
+#include <Update.h>
 
 #ifdef PLATFORM_ESP8266
     #include <FS.h>
 #else
     #include <SPIFFS.h>
 #endif
+
+// Track upload progress
+static size_t updateContentLength = 0;
+static bool updateIsFS = false;
 
 WebServer webServer;
 
@@ -83,14 +87,6 @@ void WebServer::setupRoutes() {
         handleGetPasswords(request);
     });
 
-    _server->on("/api/rfid", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        handleGetRFID(request);
-    });
-
-    _server->on("/api/rfid", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        handleRFIDAction(request);
-    });
-
     _server->on("/api/night", HTTP_GET, [this](AsyncWebServerRequest* request) {
         handleGetNightMode(request);
     });
@@ -116,6 +112,88 @@ void WebServer::setupRoutes() {
         handleDiagnosticButtons(request);
     });
 
+    // OTA Update - Firmware
+    _server->on("/api/update/firmware", HTTP_POST,
+        [](AsyncWebServerRequest* request) {
+            // Upload complete handler
+            bool success = !Update.hasError();
+            AsyncWebServerResponse* response = request->beginResponse(
+                success ? 200 : 500,
+                "text/plain",
+                success ? "OK" : "Update failed"
+            );
+            response->addHeader("Connection", "close");
+            request->send(response);
+            if (success) {
+                delay(1000);
+                ESP.restart();
+            }
+        },
+        [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
+            // Upload data handler
+            if (!index) {
+                Serial.printf("[OTA] Firmware update start: %s\n", filename.c_str());
+                ledController.showOTA();
+                updateContentLength = request->contentLength();
+                #ifdef PLATFORM_ESP8266
+                Update.begin(updateContentLength, U_FLASH);
+                #else
+                Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+                #endif
+            }
+            if (len) {
+                Update.write(data, len);
+            }
+            if (final) {
+                if (Update.end(true)) {
+                    Serial.printf("[OTA] Firmware update success: %u bytes\n", index + len);
+                } else {
+                    Serial.printf("[OTA] Firmware update failed: %s\n", Update.errorString());
+                }
+            }
+        }
+    );
+
+    // OTA Update - Filesystem
+    _server->on("/api/update/filesystem", HTTP_POST,
+        [](AsyncWebServerRequest* request) {
+            bool success = !Update.hasError();
+            AsyncWebServerResponse* response = request->beginResponse(
+                success ? 200 : 500,
+                "text/plain",
+                success ? "OK" : "Update failed"
+            );
+            response->addHeader("Connection", "close");
+            request->send(response);
+            if (success) {
+                delay(1000);
+                ESP.restart();
+            }
+        },
+        [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
+            if (!index) {
+                Serial.printf("[OTA] Filesystem update start: %s\n", filename.c_str());
+                ledController.showOTA();
+                #ifdef PLATFORM_ESP8266
+                size_t fsSize = ((size_t)FS_end - (size_t)FS_start);
+                Update.begin(fsSize, U_FS);
+                #else
+                Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS);
+                #endif
+            }
+            if (len) {
+                Update.write(data, len);
+            }
+            if (final) {
+                if (Update.end(true)) {
+                    Serial.printf("[OTA] Filesystem update success: %u bytes\n", index + len);
+                } else {
+                    Serial.printf("[OTA] Filesystem update failed: %s\n", Update.errorString());
+                }
+            }
+        }
+    );
+
     // Captive portal redirect
     _server->onNotFound([](AsyncWebServerRequest* request) {
         request->redirect("/");
@@ -134,7 +212,7 @@ void WebServer::setupRoutes() {
 }
 
 void WebServer::handleStatus(AsyncWebServerRequest* request) {
-    DiffuserSettings settings = storage.load();
+    const DiffuserSettings& settings = storage.getSettings();  // Use cache, no NVS read
 
     StaticJsonDocument<1536> doc;
 
@@ -167,13 +245,6 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     // Statistics
     doc["stats"]["total_runtime"] = storage.getTotalRuntimeMinutes() / 60.0;  // hours
     doc["stats"]["session_runtime"] = fanController.getSessionRuntimeMinutes();  // minutes
-    doc["stats"]["cartridge_runtime"] = storage.getCartridgeRuntimeMinutes() / 60.0;  // hours
-
-    // RFID status
-    doc["rfid"]["configured"] = rfidHandler.isConfigured();
-    doc["rfid"]["scanning"] = rfidHandler.isScanning();
-    doc["rfid"]["tag_present"] = rfidHandler.isTagPresent();
-    doc["rfid"]["cartridge"] = rfidHandler.getCartridgeName();
 
     // Night mode
     doc["night"]["enabled"] = settings.nightModeEnabled;
@@ -275,6 +346,8 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     if (request->hasParam("interval", true)) {
         bool interval = request->getParam("interval", true)->value() == "true";
         fanController.setIntervalMode(interval);
+        // Save interval state immediately
+        storage.setIntervalMode(interval, fanController.getIntervalOnTime(), fanController.getIntervalOffTime());
     }
 
     if (request->hasParam("interval_on", true) && request->hasParam("interval_off", true)) {
@@ -341,8 +414,8 @@ void WebServer::handleSavePasswords(AsyncWebServerRequest* request) {
 void WebServer::handleGetPasswords(AsyncWebServerRequest* request) {
     StaticJsonDocument<256> doc;
     // Don't return actual passwords, just indicate if custom ones are set
-    doc["ota_custom"] = strlen(storage.load().otaPassword) > 0;
-    doc["ap_custom"] = strlen(storage.load().apPassword) > 0;
+    doc["ota_custom"] = strlen(storage.getSettings().otaPassword) > 0;
+    doc["ap_custom"] = strlen(storage.getSettings().apPassword) > 0;
     doc["ota_default"] = OTA_PASSWORD;
     doc["ap_default"] = WIFI_AP_PASSWORD;
 
@@ -351,42 +424,9 @@ void WebServer::handleGetPasswords(AsyncWebServerRequest* request) {
     request->send(200, "application/json", response);
 }
 
-void WebServer::handleGetRFID(AsyncWebServerRequest* request) {
-    StaticJsonDocument<256> doc;
-
-    doc["configured"] = rfidHandler.isConfigured();
-    doc["scanning"] = rfidHandler.isScanning();
-    doc["tag_present"] = rfidHandler.isTagPresent();
-    doc["cartridge"] = rfidHandler.getCartridgeName();
-    doc["uid"] = rfidHandler.getTagUID();
-    doc["runtime"] = storage.getCartridgeRuntimeMinutes() / 60.0;  // hours
-
-    String response;
-    serializeJson(doc, response);
-    request->send(200, "application/json", response);
-}
-
-void WebServer::handleRFIDAction(AsyncWebServerRequest* request) {
-    if (request->hasParam("action", true)) {
-        String action = request->getParam("action", true)->value();
-
-        if (action == "scan") {
-            rfidHandler.startScan();
-            request->send(200, "application/json", "{\"success\":true,\"message\":\"Scanning for RFID reader...\"}");
-        } else if (action == "clear") {
-            rfidHandler.clearConfig();
-            request->send(200, "application/json", "{\"success\":true,\"message\":\"RFID configuration cleared\"}");
-        } else {
-            request->send(400, "application/json", "{\"error\":\"Unknown action\"}");
-        }
-    } else {
-        request->send(400, "application/json", "{\"error\":\"Missing action parameter\"}");
-    }
-}
-
 void WebServer::handleGetNightMode(AsyncWebServerRequest* request) {
     StaticJsonDocument<256> doc;
-    DiffuserSettings settings = storage.load();
+    const DiffuserSettings& settings = storage.getSettings();
 
     doc["enabled"] = settings.nightModeEnabled;
     doc["start"] = settings.nightModeStart;
@@ -436,6 +476,10 @@ void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
     doc["fan"]["on"] = fanController.isOn();
     doc["fan"]["speed"] = fanController.getSpeed();
     doc["fan"]["rpm"] = rpm;
+    doc["fan"]["pwm"] = fanController.getCurrentPWMValue();
+    doc["fan"]["invert"] = fanController.isInvertPWM();
+    doc["fan"]["min_pwm"] = fanController.getMinPWM();
+    doc["fan"]["calibrating"] = fanController.isCalibrating();
 
     // LED status
     doc["led"]["connected"] = true;  // Cannot detect, assume connected
@@ -446,32 +490,13 @@ void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
     doc["buttons"]["front_pressed"] = buttonHandler.isFrontPressed();
     doc["buttons"]["rear_pressed"] = buttonHandler.isRearPressed();
 
-    // RFID status
-    doc["rfid"]["connected"] = rfidHandler.isConfigured();
-    doc["rfid"]["tag_present"] = rfidHandler.isTagPresent();
-    doc["rfid"]["cartridge"] = rfidHandler.getCartridgeName();
-
     // Pin configuration
-#ifdef PLATFORM_ESP8266
-    doc["pins"]["platform"] = "ESP8266";
-    doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
-    doc["pins"]["fan_tacho"] = FAN_TACHO_PIN;
-    doc["pins"]["led"] = LED_DATA_PIN;
-    doc["pins"]["btn_front"] = BUTTON_FRONT_PIN;
-    doc["pins"]["btn_rear"] = BUTTON_REAR_PIN;
-#else
     doc["pins"]["platform"] = "ESP32";
     doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
     doc["pins"]["fan_tacho"] = FAN_TACHO_PIN;
     doc["pins"]["led"] = LED_DATA_PIN;
     doc["pins"]["btn_front"] = BUTTON_FRONT_PIN;
     doc["pins"]["btn_rear"] = BUTTON_REAR_PIN;
-    doc["pins"]["rfid_sck"] = RFID_SCK_PIN;
-    doc["pins"]["rfid_miso"] = RFID_MISO_PIN;
-    doc["pins"]["rfid_mosi"] = RFID_MOSI_PIN;
-    doc["pins"]["rfid_ss"] = RFID_SS_PIN;
-    doc["pins"]["rfid_rst"] = RFID_RST_PIN;
-#endif
 
     String response;
     serializeJson(doc, response);
@@ -483,34 +508,10 @@ void WebServer::handleDiagnosticLed(AsyncWebServerRequest* request) {
         String action = request->getParam("action", true)->value();
 
         if (action == "test") {
-            // Run LED color test sequence
-            request->send(200, "application/json", "{\"success\":true,\"message\":\"LED test started\"}");
-
-            // Cycle through colors
-            ledController.setColor(LED_COLOR_RED);
-            ledController.setMode(LedMode::ON);
-            delay(500);
-            ledController.setColor(LED_COLOR_GREEN);
-            delay(500);
-            ledController.setColor(LED_COLOR_BLUE);
-            delay(500);
+            // Just show a quick color, don't block
             ledController.setColor(LED_COLOR_PURPLE);
-            delay(500);
-            ledController.setColor(LED_COLOR_ORANGE);
-            delay(500);
-            ledController.setColor(LED_COLOR_CYAN);
-            delay(500);
-            ledController.setColor(LED_COLOR_WHITE);
-            delay(500);
-
-            // Return to normal state
-            if (fanController.isOn()) {
-                ledController.showFanRunning();
-            } else if (wifiManager.isConnected()) {
-                ledController.showConnected();
-            } else {
-                ledController.showAPMode();
-            }
+            ledController.setMode(LedMode::BLINK_FAST);
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"LED test mode (purple blink)\"}");
         } else if (action == "red") {
             ledController.setColor(LED_COLOR_RED);
             ledController.setMode(LedMode::ON);
@@ -549,20 +550,10 @@ void WebServer::handleDiagnosticFan(AsyncWebServerRequest* request) {
         String action = request->getParam("action", true)->value();
 
         if (action == "test") {
-            // Run fan test sequence
-            request->send(200, "application/json", "{\"success\":true,\"message\":\"Fan test started\"}");
-
-            // Test at different speeds
-            fanController.setSpeed(25);
-            fanController.turnOn();
-            delay(1000);
+            // Just turn on at 50% to test, don't block with delays
             fanController.setSpeed(50);
-            delay(1000);
-            fanController.setSpeed(75);
-            delay(1000);
-            fanController.setSpeed(100);
-            delay(1000);
-            fanController.turnOff();
+            fanController.turnOn();
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"Fan test: running at 50%\"}");
         } else if (action == "on") {
             fanController.turnOn();
             request->send(200, "application/json", "{\"success\":true,\"fan\":\"on\"}");
@@ -583,6 +574,56 @@ void WebServer::handleDiagnosticFan(AsyncWebServerRequest* request) {
                 request->send(200, "application/json", response);
             } else {
                 request->send(400, "application/json", "{\"error\":\"Missing speed value\"}");
+            }
+        } else if (action == "rawpwm") {
+            // Direct PWM value test (0-255)
+            if (request->hasParam("value", true)) {
+                int pwm = request->getParam("value", true)->value().toInt();
+                pwm = constrain(pwm, 0, 255);
+                fanController.setRawPWM(pwm);
+
+                StaticJsonDocument<128> doc;
+                doc["success"] = true;
+                doc["raw_pwm"] = pwm;
+                String response;
+                serializeJson(doc, response);
+                request->send(200, "application/json", response);
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Missing PWM value (0-255)\"}");
+            }
+        } else if (action == "invert") {
+            // Toggle PWM inversion
+            bool newInvert = !fanController.isInvertPWM();
+            if (request->hasParam("value", true)) {
+                newInvert = request->getParam("value", true)->value() == "true";
+            }
+            fanController.setInvertPWM(newInvert);
+
+            StaticJsonDocument<128> doc;
+            doc["success"] = true;
+            doc["invert"] = newInvert;
+            String response;
+            serializeJson(doc, response);
+            request->send(200, "application/json", response);
+        } else if (action == "calibrate") {
+            // Start auto-calibration
+            fanController.startCalibration();
+            request->send(200, "application/json", "{\"success\":true,\"message\":\"Calibration started\"}");
+        } else if (action == "setmin") {
+            // Manually set minimum PWM
+            if (request->hasParam("value", true)) {
+                int minPwm = request->getParam("value", true)->value().toInt();
+                minPwm = constrain(minPwm, 0, 255);
+                fanController.setMinPWM(minPwm);
+
+                StaticJsonDocument<128> doc;
+                doc["success"] = true;
+                doc["min_pwm"] = minPwm;
+                String response;
+                serializeJson(doc, response);
+                request->send(200, "application/json", response);
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Missing min PWM value\"}");
             }
         } else {
             request->send(400, "application/json", "{\"error\":\"Unknown action\"}");

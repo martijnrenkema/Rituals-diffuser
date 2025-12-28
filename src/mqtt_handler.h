@@ -61,9 +61,7 @@ private:
     void publishRemainingTimeSensorDiscovery();
     void publishRPMSensorDiscovery();
     void publishWiFiSensorDiscovery();
-    void publishCartridgeSensorDiscovery();
     void publishTotalRuntimeSensorDiscovery();
-    void publishCartridgeRuntimeSensorDiscovery();
 
     String getBaseTopic();
     String getDeviceJson();
