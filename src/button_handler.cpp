@@ -4,21 +4,11 @@
 ButtonHandler buttonHandler;
 
 void ButtonHandler::begin() {
-#ifdef PLATFORM_ESP8266
-    // GPIO16 needs special handling - no internal pullup
-    pinMode(BUTTON_FRONT_PIN, INPUT);
-    // GPIO3 (RX) - configure as input with pullup
-    // Note: This disables serial RX, but we can still TX for debugging
-    pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
-    Serial.println("[BTN] Button handler initialized");
-    Serial.println("[BTN] Front: GPIO16, Rear: GPIO3");
-#else
-    // ESP32: Both pins support internal pullup
+    // GPIO14 (SW2) and GPIO13 (SW1) both support internal pullup
     pinMode(BUTTON_FRONT_PIN, INPUT_PULLUP);
     pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
-    Serial.printf("[BTN] Button handler initialized\n");
-    Serial.printf("[BTN] Front: GPIO%d, Rear: GPIO%d\n", BUTTON_FRONT_PIN, BUTTON_REAR_PIN);
-#endif
+    Serial.println("[BTN] Button handler initialized");
+    Serial.printf("[BTN] Front (SW2): GPIO%d, Rear (SW1): GPIO%d\n", BUTTON_FRONT_PIN, BUTTON_REAR_PIN);
 }
 
 void ButtonHandler::loop() {
