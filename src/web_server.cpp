@@ -9,6 +9,10 @@
 #include <ArduinoJson.h>
 #include <Update.h>
 
+// External function and flag from main.cpp for LED priority system
+extern void updateLedStatus();
+extern bool otaInProgress;
+
 #ifdef PLATFORM_ESP8266
     #include <FS.h>
 #else
@@ -133,7 +137,8 @@ void WebServer::setupRoutes() {
             // Upload data handler
             if (!index) {
                 Serial.printf("[OTA] Firmware update start: %s\n", filename.c_str());
-                ledController.showOTA();
+                otaInProgress = true;
+                updateLedStatus();
                 updateContentLength = request->contentLength();
                 #ifdef PLATFORM_ESP8266
                 Update.begin(updateContentLength, U_FLASH);
@@ -173,7 +178,8 @@ void WebServer::setupRoutes() {
         [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
             if (!index) {
                 Serial.printf("[OTA] Filesystem update start: %s\n", filename.c_str());
-                ledController.showOTA();
+                otaInProgress = true;
+                updateLedStatus();
                 #ifdef PLATFORM_ESP8266
                 size_t fsSize = ((size_t)FS_end - (size_t)FS_start);
                 Update.begin(fsSize, U_FS);
@@ -341,6 +347,7 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
         } else {
             fanController.cancelTimer();
         }
+        updateLedStatus();
     }
 
     if (request->hasParam("interval", true)) {
@@ -348,6 +355,7 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
         fanController.setIntervalMode(interval);
         // Save interval state immediately
         storage.setIntervalMode(interval, fanController.getIntervalOnTime(), fanController.getIntervalOffTime());
+        updateLedStatus();
     }
 
     if (request->hasParam("interval_on", true) && request->hasParam("interval_off", true)) {
@@ -528,14 +536,8 @@ void WebServer::handleDiagnosticLed(AsyncWebServerRequest* request) {
             ledController.off();
             request->send(200, "application/json", "{\"success\":true,\"color\":\"off\"}");
         } else if (action == "reset") {
-            // Return to normal state
-            if (fanController.isOn()) {
-                ledController.showFanRunning();
-            } else if (wifiManager.isConnected()) {
-                ledController.showConnected();
-            } else {
-                ledController.showAPMode();
-            }
+            // Return to normal state using priority system
+            updateLedStatus();
             request->send(200, "application/json", "{\"success\":true,\"message\":\"LED reset to normal\"}");
         } else {
             request->send(400, "application/json", "{\"error\":\"Unknown action\"}");

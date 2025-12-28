@@ -18,6 +18,9 @@ DiffuserSettings settings;
 bool timeConfigured = false;
 unsigned long lastNightModeCheck = 0;
 
+// OTA state tracking
+bool otaInProgress = false;
+
 // Configure NTP time sync
 void setupTimeSync() {
     // Configure time for Europe/Amsterdam timezone (CET/CEST)
@@ -59,55 +62,75 @@ void checkNightMode() {
     }
 }
 
+// Central LED status update - determines LED color based on priority
+// Priority (highest first):
+// 1. OTA in progress (purple fast blink)
+// 2. AP mode (orange pulsing)
+// 3. WiFi connecting (cyan blinking)
+// 4. WiFi disconnected (red)
+// 5. Timer active + fan on (blue solid)
+// 6. Interval mode + fan on (purple solid)
+// 7. Fan on (green solid)
+// 8. Standby / fan off (LED off)
+void updateLedStatus() {
+    // 1. OTA has highest priority
+    if (otaInProgress) {
+        ledController.showOTA();
+        return;
+    }
+
+    // 2. AP mode
+    if (wifiManager.isAPMode()) {
+        ledController.showAPMode();
+        return;
+    }
+
+    // 3. WiFi connecting
+    if (wifiManager.getState() == WifiStatus::CONNECTING) {
+        ledController.showConnecting();
+        return;
+    }
+
+    // 4. WiFi disconnected (but not AP mode or connecting)
+    if (!wifiManager.isConnected() && !wifiManager.isAPMode()) {
+        ledController.showError();
+        return;
+    }
+
+    // 5-7. Fan states (only when WiFi is connected)
+    if (fanController.isOn()) {
+        if (fanController.isTimerActive()) {
+            // 5. Timer active - blue solid
+            ledController.setColor(LED_COLOR_BLUE);
+            ledController.setMode(LedMode::ON);
+        } else if (fanController.isIntervalMode()) {
+            // 6. Interval mode - purple solid
+            ledController.showIntervalMode();
+        } else {
+            // 7. Normal fan on - green solid
+            ledController.showFanRunning();
+        }
+        return;
+    }
+
+    // 8. Standby - LED off
+    ledController.off();
+}
+
 // WiFi state change handler
 void onWiFiStateChange(WifiStatus state) {
-    switch (state) {
-        case WifiStatus::CONNECTING:
-            ledController.showConnecting();
-            break;
-        case WifiStatus::CONNECTED:
-            if (fanController.isOn()) {
-                ledController.showFanRunning();
-            } else {
-                // Standby mode: LED off when fan is not running
-                ledController.off();
-            }
-            // Start OTA when connected
-            otaHandler.begin();
-            // Setup NTP time sync
-            setupTimeSync();
-            break;
-        case WifiStatus::AP_MODE:
-            ledController.showAPMode();
-            break;
-        case WifiStatus::DISCONNECTED:
-            ledController.showError();
-            break;
+    if (state == WifiStatus::CONNECTED) {
+        // Start OTA when connected
+        otaHandler.begin();
+        // Setup NTP time sync
+        setupTimeSync();
     }
+    updateLedStatus();
 }
 
 // Fan state change handler
 void onFanStateChange(bool on, uint8_t speed) {
-    if (wifiManager.isConnected() || wifiManager.isAPMode()) {
-        if (on) {
-            // Priority: Timer > Interval > Normal
-            if (fanController.isTimerActive()) {
-                ledController.setColor(LED_COLOR_BLUE);  // Blue for timer
-                ledController.setMode(LedMode::ON);
-            } else if (fanController.isIntervalMode()) {
-                ledController.showIntervalMode();  // Purple for interval mode
-            } else {
-                ledController.showFanRunning();    // Green for normal
-            }
-        } else {
-            // Fan off: LED off in standby (except AP mode needs indicator)
-            if (wifiManager.isAPMode()) {
-                ledController.showAPMode();
-            } else {
-                ledController.off();  // Standby: LED off
-            }
-        }
-    }
+    updateLedStatus();
 
     // Publish state to MQTT
     mqttHandler.publishState();
@@ -122,12 +145,14 @@ void onFanStateChange(bool on, uint8_t speed) {
 
 // OTA handlers
 void onOTAStart() {
-    ledController.showOTA();
+    otaInProgress = true;
+    updateLedStatus();
     fanController.turnOff();
 }
 
 void onOTAEnd() {
-    ledController.off();
+    otaInProgress = false;
+    updateLedStatus();
 }
 
 // Button handlers for Rituals Genie
@@ -142,8 +167,8 @@ void onFrontButton(ButtonEvent event) {
     } else if (event == ButtonEvent::LONG_PRESS) {
         // Start AP mode for WiFi configuration
         Serial.println("[MAIN] AP mode triggered by button!");
-        ledController.showAPMode();
         wifiManager.startAP();
+        updateLedStatus();
     }
 }
 
