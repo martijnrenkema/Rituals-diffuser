@@ -8,7 +8,6 @@
 #include "fan_controller.h"
 #include "led_controller.h"
 #include "ota_handler.h"
-#include "rfid_handler.h"
 
 #include "button_handler.h"
 
@@ -60,12 +59,6 @@ void checkNightMode() {
     }
 }
 
-// RFID cartridge change handler
-void onCartridgeChange(const char* name) {
-    Serial.printf("[MAIN] New cartridge: %s\n", name);
-    mqttHandler.publishState();
-}
-
 // WiFi state change handler
 void onWiFiStateChange(WifiStatus state) {
     switch (state) {
@@ -82,8 +75,6 @@ void onWiFiStateChange(WifiStatus state) {
             otaHandler.begin();
             // Setup NTP time sync
             setupTimeSync();
-            // Initialize RFID after WiFi (needs SPI)
-            rfidHandler.begin();
             break;
         case WifiStatus::AP_MODE:
             ledController.showAPMode();
@@ -98,7 +89,12 @@ void onWiFiStateChange(WifiStatus state) {
 void onFanStateChange(bool on, uint8_t speed) {
     if (wifiManager.isConnected() || wifiManager.isAPMode()) {
         if (on) {
-            ledController.showFanRunning();
+            // Check interval mode first, then timer
+            if (fanController.isIntervalMode()) {
+                ledController.showIntervalMode();  // Purple for interval mode
+            } else {
+                ledController.showFanRunning();    // Green for normal
+            }
             if (fanController.isTimerActive()) {
                 ledController.setMode(LedMode::PULSE);
             }
@@ -114,8 +110,12 @@ void onFanStateChange(bool on, uint8_t speed) {
     // Publish state to MQTT
     mqttHandler.publishState();
 
-    // Save speed to storage
-    storage.setFanSpeed(speed);
+    // Only save speed if it actually changed (avoid flash wear)
+    static uint8_t lastSavedSpeed = 0;
+    if (speed != lastSavedSpeed && speed > 0) {
+        storage.setFanSpeed(speed);
+        lastSavedSpeed = speed;
+    }
 }
 
 // OTA handlers
@@ -138,37 +138,27 @@ void onFrontButton(ButtonEvent event) {
             fanController.turnOn();
         }
     } else if (event == ButtonEvent::LONG_PRESS) {
-        // Factory reset - blink red and reset
-        Serial.println("[MAIN] Factory reset triggered!");
-        ledController.showError();
-        delay(2000);
-        storage.reset();
-        ESP.restart();
+        // Start AP mode for WiFi configuration
+        Serial.println("[MAIN] AP mode triggered by button!");
+        ledController.showAPMode();
+        wifiManager.startAP();
     }
 }
 
 void onRearButton(ButtonEvent event) {
     if (event == ButtonEvent::SHORT_PRESS) {
-        // Cycle through speed presets: 25% -> 50% -> 75% -> 100% -> 25%
-        uint8_t currentSpeed = fanController.getSpeed();
-        uint8_t newSpeed;
-
-        if (currentSpeed < 25) newSpeed = 25;
-        else if (currentSpeed < 50) newSpeed = 50;
-        else if (currentSpeed < 75) newSpeed = 75;
-        else if (currentSpeed < 100) newSpeed = 100;
-        else newSpeed = 25;
-
-        fanController.setSpeed(newSpeed);
-        if (!fanController.isOn()) {
-            fanController.turnOn();
-        }
-        Serial.printf("[MAIN] Speed set to %d%%\n", newSpeed);
+        // Restart ESP32
+        Serial.println("[MAIN] Restart triggered by button");
+        ledController.showError();  // Flash red to indicate restart
+        delay(500);
+        ESP.restart();
     } else if (event == ButtonEvent::LONG_PRESS) {
-        // Toggle interval mode
-        bool newState = !fanController.isIntervalMode();
-        fanController.setIntervalMode(newState);
-        Serial.printf("[MAIN] Interval mode: %s\n", newState ? "ON" : "OFF");
+        // Factory reset - clear all settings and restart
+        Serial.println("[MAIN] Factory reset triggered!");
+        ledController.showError();
+        delay(1000);
+        storage.reset();
+        ESP.restart();
     }
 }
 
@@ -189,7 +179,7 @@ void setup() {
     settings = storage.load();
 
     ledController.begin();
-    ledController.showConnecting();
+    ledController.showError();  // Red during startup
 
     fanController.begin();
     fanController.onStateChange(onFanStateChange);
@@ -232,9 +222,6 @@ void setup() {
     otaHandler.onStart(onOTAStart);
     otaHandler.onEnd(onOTAEnd);
 
-    // Setup RFID callback
-    rfidHandler.onCartridgeChange(onCartridgeChange);
-
     Serial.println("[MAIN] Setup complete");
     Serial.println();
 }
@@ -246,7 +233,6 @@ void loop() {
     fanController.loop();
     ledController.loop();
     otaHandler.loop();
-    rfidHandler.loop();
     buttonHandler.loop();
 
     // Check night mode every minute
@@ -256,6 +242,7 @@ void loop() {
         lastNightModeCheck = now;
     }
 
-    // Small delay to prevent watchdog issues
-    yield();
+    // Give async tasks (WiFi, MQTT, WebServer) enough CPU time
+    // This prevents the AsyncTCP watchdog timeout
+    delay(10);
 }

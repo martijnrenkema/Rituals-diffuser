@@ -4,7 +4,7 @@
 ButtonHandler buttonHandler;
 
 void ButtonHandler::begin() {
-    // GPIO14 (SW2) and GPIO13 (SW1) both support internal pullup
+    // Both buttons use internal pullup (GPIO13 and GPIO14 support this on ESP32)
     pinMode(BUTTON_FRONT_PIN, INPUT_PULLUP);
     pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
     Serial.println("[BTN] Button handler initialized");

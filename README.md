@@ -15,26 +15,35 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 - **Timer Presets** - 30, 60, 90, 120 minutes + continuous
 - **Interval Mode** - Pulsing mode to save fragrance
 - **Night Mode** - Auto-dim LED during configured hours
-- **RFID Cartridge Detection** - Reads scent name from Rituals cartridge
-- **Usage Statistics** - Track total runtime and cartridge usage
-- **OTA Updates** - Wireless firmware updates after initial flash
+- **Usage Statistics** - Track total runtime
+- **OTA Updates** - Wireless firmware updates (via web interface or ArduinoOTA)
 - **Web Interface** - Configure WiFi, MQTT, passwords, and control the diffuser
 - **RGB LED Status** - Visual feedback for device state
-- **Physical Buttons** - Front and rear button support
+- **Physical Buttons** - Front (SW2) and rear (SW1) button support
 
 ## Hardware
 
-This firmware is designed for the **Rituals Perfume Genie 2.0** which contains an **ESP-WROOM-02** (ESP8266) module.
+This firmware supports both the original **ESP-WROOM-02** (ESP8266) and **ESP32** as a drop-in replacement.
 
-### GPIO Pinout
+### ESP32 GPIO Pinout (Recommended)
+
+| ESP32 GPIO | Rituals Pin | Function |
+|------------|-------------|----------|
+| GPIO25 | IO4 | Fan PWM speed control |
+| GPIO26 | IO5/TP17 | Fan tachometer (RPM) |
+| GPIO27 | IO15 | WS2812 RGB LED |
+| GPIO13 | IO16 | Front button (SW2 - Connect) |
+| GPIO14 | IO14 | Rear button (SW1 - Cold reset) |
+
+### ESP8266 GPIO Pinout (Original)
 
 | GPIO | Function | Description |
 |------|----------|-------------|
-| GPIO4 | Fan Control | On/Off control |
-| GPIO5 | Fan Speed | PWM speed control |
+| GPIO4 | Fan PWM | Speed control |
+| GPIO5 | Fan Tacho | RPM feedback |
 | GPIO15 | LED | WS2812 RGB LED |
-| GPIO16 | Front Button | "Connect" button |
-| GPIO3 | Rear Button | Back button (RX pin) |
+| GPIO14 | SW2 | Connect button |
+| GPIO13 | SW1 | Cold reset button |
 
 ## ⚠️ Backup Original Firmware First!
 
@@ -128,9 +137,7 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 | Time Left | Sensor | Remaining timer minutes |
 | Fan RPM | Sensor | Current fan speed |
 | WiFi Signal | Sensor | Signal strength (dBm) |
-| Cartridge | Sensor | Current scent name (via RFID) |
 | Total Runtime | Sensor | Total device runtime (hours) |
-| Cartridge Runtime | Sensor | Time since cartridge change |
 
 ### Timer Presets
 
@@ -142,28 +149,28 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 
 ## Button Controls
 
-### Front Button (Connect)
+### Front Button (SW2 - Connect)
 | Action | Function |
 |--------|----------|
 | Short press | Toggle fan on/off |
-| Long press (3s) | Factory reset |
+| Long press (3s) | Start AP mode (WiFi config) |
 
-### Rear Button
+### Rear Button (SW1 - Cold Reset)
 | Action | Function |
 |--------|----------|
-| Short press | Cycle speed: 25% → 50% → 75% → 100% |
-| Long press (3s) | Toggle interval mode |
+| Short press | Restart ESP |
+| Long press (3s) | Factory reset (clear all settings) |
 
 ## LED Status
 
-| Color | Status |
-|-------|--------|
-| Blue (solid) | WiFi connected, fan off |
-| Green (solid) | Fan running |
-| Cyan (blinking) | Connecting to WiFi |
-| Orange (blinking) | AP mode active |
-| Purple (fast) | OTA update in progress |
-| Red (blinking) | Error / disconnected |
+| Color | Pattern | Status |
+|-------|---------|--------|
+| Red | Solid | Startup / Error |
+| Cyan | Fast blink | Connecting to WiFi |
+| Green | Solid | WiFi connected (fan off or on) |
+| Purple | Solid | Interval mode active |
+| Orange | Pulsing | AP mode active |
+| Purple | Fast blink | OTA update in progress |
 
 ## Configuration
 
@@ -190,17 +197,20 @@ rituals_diffuser/availability     → online/offline
 ```
 ├── src/
 │   ├── main.cpp              # Entry point
-│   ├── config.h              # Configuration
-│   ├── fan_controller.*      # Fan control, timer, interval
+│   ├── config.h              # Configuration & pin definitions
+│   ├── fan_controller.*      # Fan control, timer, interval, RPM
 │   ├── led_controller.*      # WS2812 RGB LED
 │   ├── button_handler.*      # Button handling
-│   ├── rfid_handler.*        # RFID cartridge detection
-│   ├── storage.*             # EEPROM storage
+│   ├── storage.*             # NVS/EEPROM storage
 │   ├── wifi_manager.*        # WiFi management
-│   ├── web_server.*          # Web interface
+│   ├── web_server.*          # Web interface + OTA upload
 │   ├── mqtt_handler.*        # MQTT + HA discovery
-│   └── ota_handler.*         # OTA updates
+│   └── ota_handler.*         # ArduinoOTA updates
 ├── data/                     # Web files (SPIFFS)
+│   ├── index.html            # Main control page
+│   ├── update.html           # OTA firmware upload
+│   ├── style.css             # Styling
+│   └── script.js             # UI logic
 ├── platformio.ini            # PlatformIO config
 └── README.md
 ```
@@ -211,7 +221,6 @@ rituals_diffuser/availability     → online/offline
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson) - JSON
 - [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer) - Web server
 - [FastLED](https://github.com/FastLED/FastLED) - LED control
-- [MFRC522](https://github.com/miguelbalboa/rfid) - RFID reader
 
 ## Troubleshooting
 

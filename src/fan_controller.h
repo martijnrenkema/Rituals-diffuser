@@ -78,6 +78,30 @@ private:
     void applyPWM(uint8_t percent);
     void notifyStateChange();
     void updateRuntimeStats();
+
+public:
+    // Debug/diagnostic functions
+    void setRawPWM(uint8_t value);      // Set raw 0-255 PWM value
+    void setInvertPWM(bool invert);     // Invert PWM signal
+    bool isInvertPWM() { return _invertPWM; }
+    uint8_t getCurrentPWMValue() { return _currentPWM; }
+
+    // Calibration
+    void startCalibration();            // Start auto-calibration
+    bool isCalibrating() { return _calibrating; }
+    uint8_t getMinPWM() { return _minPWM; }
+    void setMinPWM(uint8_t value);      // Manually set minimum PWM
+
+private:
+    bool _invertPWM = false;
+    uint8_t _currentPWM = 0;
+
+    // Calibration
+    bool _calibrating = false;
+    uint8_t _calibrationPWM = 0;
+    unsigned long _calibrationStart = 0;
+    unsigned long _lastCalibrationStep = 0;
+    uint8_t _minPWM = 0;                // Minimum PWM to start fan (stored in NVS)
 };
 
 extern FanController fanController;

@@ -27,19 +27,9 @@
     #define FAN_PWM_PIN         25      // GPIO25 → Genie IO4 (fan PWM, blue wire)
     #define FAN_TACHO_PIN       26      // GPIO26 → Genie IO5/TP17 (tachometer, yellow wire)
     #define LED_DATA_PIN        27      // GPIO27 → Genie IO15 (WS2812 LED data)
-    #define BUTTON_FRONT_PIN    32      // GPIO32 → Genie IO14 (Connect button SW2)
-    #define BUTTON_REAR_PIN     33      // GPIO33 → Genie IO13 (Cold reset SW1)
+    #define BUTTON_FRONT_PIN    13      // GPIO13 → Genie IO16 (Connect button SW2)
+    #define BUTTON_REAR_PIN     14      // GPIO14 → Genie IO14 (Cold reset SW1)
     #define NUM_LEDS            1       // Single WS2812 LED
-
-    // RFID pins (VSPI) - niet conflicteren met fan pinnen!
-    #define RFID_SCK_PIN        18      // GPIO18 - SPI Clock
-    #define RFID_MISO_PIN       19      // GPIO19 - SPI MISO
-    #define RFID_MOSI_PIN       23      // GPIO23 - SPI MOSI
-    #define RFID_SS_PIN         15      // GPIO15 - SPI Slave Select
-    #define RFID_RST_PIN        2       // GPIO2  - Reset
-
-    // Legacy alias
-    #define LED_PIN             2       // Built-in LED (fallback)
 #endif
 
 // ===========================================
@@ -123,6 +113,7 @@
 #define NVS_MQTT_PASS           "mqtt_pass"
 #define NVS_DEVICE_NAME         "device_name"
 #define NVS_FAN_SPEED           "fan_speed"
+#define NVS_FAN_MIN_PWM         "fan_min_pwm"
 #define NVS_INTERVAL_ON         "interval_on"
 #define NVS_INTERVAL_OFF        "interval_off"
 #define NVS_INTERVAL_ENABLED    "interval_en"

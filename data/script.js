@@ -2,7 +2,7 @@ const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const circumference=2*Math.PI*54;
 let state={on:false,speed:50};
 
-setInterval(fetchStatus,2000);
+setInterval(fetchStatus,5000);  // Poll every 5 seconds instead of 2
 fetchStatus();
 
 async function fetchStatus(){
@@ -13,42 +13,54 @@ async function fetchStatus(){
     }catch(e){console.error(e)}
 }
 
-function update(d){
-    $('#wifi-dot').classList.toggle('on',d.wifi.connected||d.wifi.ap_mode);
-    $('#mqtt-dot').classList.toggle('on',d.mqtt.connected);
+function updateFan(f){
+    if(!f)return;
+    state.on=f.on;
+    state.speed=f.speed;
 
-    state.on=d.fan.on;
-    state.speed=d.fan.speed;
+    $('#power').classList.toggle('on',f.on);
+    $('#speed').value=f.speed;
+    $('#speed-val').textContent=f.speed;
+    if(f.rpm!==undefined)$('#rpm').textContent=f.rpm;
 
-    $('#power').classList.toggle('on',d.fan.on);
-    $('#speed').value=d.fan.speed;
-    $('#speed-val').textContent=d.fan.speed;
-    $('#rpm').textContent=d.fan.rpm;
-
-    const offset=circumference-(d.fan.speed/100)*circumference;
+    const offset=circumference-(f.speed/100)*circumference;
     $('#speed-circle').style.strokeDashoffset=offset;
 
     $$('.timer-btn').forEach(b=>{
         b.classList.remove('active');
         const t=+b.dataset.t;
-        if(d.fan.timer_active){
-            if(t>0&&d.fan.remaining_minutes<=t&&d.fan.remaining_minutes>t-30)b.classList.add('active');
-        }else if(t===0&&d.fan.on)b.classList.add('active');
+        if(f.timer_active){
+            if(t>0&&f.remaining_minutes<=t&&f.remaining_minutes>t-30)b.classList.add('active');
+        }else if(t===0&&f.on)b.classList.add('active');
     });
 
-    $('#remaining').textContent=d.fan.timer_active?d.fan.remaining_minutes+' min remaining':'';
+    $('#remaining').textContent=f.timer_active?f.remaining_minutes+' min remaining':'';
 
-    $('#interval').checked=d.fan.interval_mode;
-    $('#interval-cfg').classList.toggle('show',d.fan.interval_mode);
-    $('#int-on').value=d.fan.interval_on;
-    $('#int-off').value=d.fan.interval_off;
+    $('#interval').checked=f.interval_mode;
+    $('#interval-cfg').classList.toggle('show',f.interval_mode);
+    if(f.interval_on!==undefined)$('#int-on').value=f.interval_on;
+    if(f.interval_off!==undefined)$('#int-off').value=f.interval_off;
+}
 
-    $('#cur-ssid').textContent=d.wifi.ssid||'--';
-    $('#cur-ip').textContent=d.wifi.ip||'--';
-    $('#mac').textContent=d.device.mac||'--';
-    $('#rssi').textContent=d.wifi.rssi||'--';
+function update(d){
+    // Only update status dots if we have valid data
+    if(d.wifi&&(d.wifi.connected!==undefined||d.wifi.ap_mode!==undefined)){
+        $('#wifi-dot').classList.toggle('on',d.wifi.connected||d.wifi.ap_mode);
+    }
+    if(d.mqtt&&d.mqtt.connected!==undefined){
+        $('#mqtt-dot').classList.toggle('on',d.mqtt.connected);
+    }
 
-    if(d.mqtt.host){
+    updateFan(d.fan);
+
+    if(d.wifi){
+        if(d.wifi.ssid)$('#cur-ssid').textContent=d.wifi.ssid;
+        if(d.wifi.ip)$('#cur-ip').textContent=d.wifi.ip;
+        if(d.wifi.rssi)$('#rssi').textContent=d.wifi.rssi;
+    }
+    if(d.device&&d.device.mac)$('#mac').textContent=d.device.mac;
+
+    if(d.mqtt&&d.mqtt.host){
         $('#m-host').value=d.mqtt.host;
         $('#m-port').value=d.mqtt.port;
     }
@@ -58,7 +70,7 @@ async function cmd(p){
     try{
         const r=await fetch('/api/fan',{method:'POST',body:new URLSearchParams(p)});
         const d=await r.json();
-        if(d.fan)update({fan:d.fan,wifi:{},mqtt:{},device:{}});
+        if(d.fan)updateFan(d.fan);
     }catch(e){console.error(e)}
 }
 
@@ -70,7 +82,7 @@ $('#speed').oninput=e=>{
     const offset=circumference-(e.target.value/100)*circumference;
     $('#speed-circle').style.strokeDashoffset=offset;
     clearTimeout(speedTimer);
-    speedTimer=setTimeout(()=>cmd({speed:e.target.value}),300);
+    speedTimer=setTimeout(()=>cmd({speed:e.target.value}),50);  // Snellere respons
 };
 
 $$('.timer-btn').forEach(b=>b.onclick=()=>cmd({timer:b.dataset.t}));
@@ -143,26 +155,6 @@ $('#pass-form').onsubmit=async e=>{
     }catch(e){alert('Error')}
 };
 
-// RFID handlers
-$('#rfid-scan').onclick=async()=>{
-    $('#rfid-status').textContent='Scanning for RFID reader...';
-    try{
-        const r=await fetch('/api/rfid',{method:'POST',body:new URLSearchParams({action:'scan'})});
-        const d=await r.json();
-        if(d.success)$('#rfid-status').textContent=d.message;
-    }catch(e){$('#rfid-status').textContent='Error starting scan'}
-};
-
-$('#rfid-clear').onclick=async()=>{
-    if(confirm('Clear RFID configuration?')){
-        try{
-            const r=await fetch('/api/rfid',{method:'POST',body:new URLSearchParams({action:'clear'})});
-            const d=await r.json();
-            if(d.success)$('#rfid-status').textContent=d.message;
-        }catch(e){$('#rfid-status').textContent='Error'}
-    }
-};
-
 // Night mode handlers
 $('#night-enable').onchange=async e=>{
     await saveNightMode();
@@ -191,26 +183,10 @@ async function saveNightMode(){
 
 // Update function extended for new data
 function updateExtended(d){
-    // RFID status
-    if(d.rfid){
-        const dot=$('#rfid-dot');
-        dot.classList.toggle('on',d.rfid.configured);
-        dot.classList.toggle('scanning',d.rfid.scanning);
-        $('#cartridge').textContent=d.rfid.cartridge||'--';
-        if(d.rfid.scanning){
-            $('#rfid-status').textContent='Scanning...';
-        }else if(d.rfid.configured){
-            $('#rfid-status').textContent=d.rfid.tag_present?'Tag detected':'Ready';
-        }else{
-            $('#rfid-status').textContent='Not configured';
-        }
-    }
-
     // Statistics
     if(d.stats){
         $('#total-runtime').textContent=d.stats.total_runtime.toFixed(1);
         $('#session-runtime').textContent=d.stats.session_runtime;
-        $('#cart-runtime').textContent=d.stats.cartridge_runtime.toFixed(1);
     }
 
     // Night mode
@@ -255,16 +231,6 @@ function updateDiagnostic(d){
         $('#diag-btn-rear').textContent=d.pins.btn_rear;
         $('#btn-front-pin').textContent=d.pins.btn_front;
         $('#btn-rear-pin').textContent=d.pins.btn_rear;
-
-        // RFID pins (ESP32 only)
-        if(d.pins.rfid_sck!==undefined){
-            $('#rfid-pins-info').style.display='flex';
-            $('#diag-rfid-sck').textContent=d.pins.rfid_sck;
-            $('#diag-rfid-miso').textContent=d.pins.rfid_miso;
-            $('#diag-rfid-mosi').textContent=d.pins.rfid_mosi;
-            $('#diag-rfid-ss').textContent=d.pins.rfid_ss;
-            $('#diag-rfid-rst').textContent=d.pins.rfid_rst;
-        }
     }
 
     // LED status
@@ -275,24 +241,19 @@ function updateDiagnostic(d){
 
     // Fan status
     if(d.fan){
-        const connected=d.fan.connected;
         const running=d.fan.on&&d.fan.rpm>0;
         $('#fan-status').classList.toggle('on',running);
         $('#fan-rpm').textContent=d.fan.rpm;
+        $('#fan-pwm').textContent=d.fan.pwm!==undefined?d.fan.pwm:'--';
         if(d.fan.on){
             $('#fan-status-text').textContent=d.fan.rpm>0?'Running at '+d.fan.speed+'%':'No RPM detected!';
         }else{
             $('#fan-status-text').textContent='Off';
         }
-    }
-
-    // RFID status
-    if(d.rfid){
-        $('#rfid-diag-status').classList.toggle('on',d.rfid.connected);
-        if(d.rfid.connected){
-            $('#rfid-diag-text').textContent=d.rfid.tag_present?'Tag: '+d.rfid.cartridge:'Ready, no tag';
-        }else{
-            $('#rfid-diag-text').textContent='Not detected';
+        // Update min PWM display
+        if(d.fan.min_pwm!==undefined){
+            $('#min-pwm-val').textContent=d.fan.min_pwm;
+            $('#min-pwm-input').value=d.fan.min_pwm;
         }
     }
 }
@@ -341,15 +302,28 @@ $$('.diag-fan').forEach(btn=>{
     };
 });
 
+// Manual set min PWM
+$('#set-min-btn').onclick=async()=>{
+    const val=$('#min-pwm-input').value;
+    try{
+        const r=await fetch('/api/diagnostic/fan',{method:'POST',body:new URLSearchParams({action:'setmin',value:val})});
+        const d=await r.json();
+        if(d.success){
+            $('#min-pwm-val').textContent=d.min_pwm;
+            $('#calibrate-status').textContent='Min PWM ingesteld op '+d.min_pwm;
+        }
+    }catch(e){console.error(e)}
+};
+
 // Initial diagnostic fetch
 fetchDiagnostic();
 
-// Poll buttons every 200ms when diagnostic section is open
+// Poll buttons every 500ms when diagnostic section is open (was 200ms)
 let buttonPollInterval=null;
 document.querySelector('details:has(.diag-section)')?.addEventListener('toggle',function(e){
     if(this.open){
         fetchDiagnostic();
-        buttonPollInterval=setInterval(pollButtons,200);
+        buttonPollInterval=setInterval(pollButtons,500);
     }else{
         if(buttonPollInterval)clearInterval(buttonPollInterval);
     }
