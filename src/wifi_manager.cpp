@@ -55,23 +55,20 @@ void WiFiManager::loop() {
 
         case WifiStatus::AP_MODE:
             // Periodically try to reconnect to saved WiFi while in AP mode
+            // Non-blocking: just check if already connected
             if (_ssid.length() > 0 && now - _lastAPRetry >= AP_RETRY_INTERVAL) {
                 _lastAPRetry = now;
                 Serial.println("[WIFI] AP mode: trying saved WiFi in background...");
-
                 // Try to connect while keeping AP active (WIFI_AP_STA mode)
                 WiFi.begin(_ssid.c_str(), _password.c_str());
-
-                // Check after short delay
-                delay(5000);
-                if (WiFi.status() == WL_CONNECTED) {
-                    Serial.println("[WIFI] Reconnected to WiFi! Keeping AP active for now.");
-                    Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
-                    _reconnectAttempts = 0;
-                    setState(WifiStatus::CONNECTED);
-                    // Optionally stop AP after successful reconnect:
-                    // stopAP();
-                }
+                // Don't block - we'll check connection status next loop iteration
+            }
+            // Check if background reconnect succeeded (non-blocking check)
+            if (WiFi.status() == WL_CONNECTED) {
+                Serial.println("[WIFI] Reconnected to WiFi!");
+                Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+                _reconnectAttempts = 0;
+                setState(WifiStatus::CONNECTED);
             }
             break;
     }

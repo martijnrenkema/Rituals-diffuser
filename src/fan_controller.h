@@ -35,7 +35,6 @@ public:
     // Runtime statistics
     uint32_t getSessionRuntimeMinutes();
     uint32_t getTotalRuntimeMinutes();
-    uint32_t getCartridgeRuntimeMinutes();
 
     // Callback for state changes
     typedef void (*StateChangeCallback)(bool on, uint8_t speed);

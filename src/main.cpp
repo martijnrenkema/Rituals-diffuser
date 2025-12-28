@@ -89,14 +89,14 @@ void onWiFiStateChange(WifiStatus state) {
 void onFanStateChange(bool on, uint8_t speed) {
     if (wifiManager.isConnected() || wifiManager.isAPMode()) {
         if (on) {
-            // Check interval mode first, then timer
-            if (fanController.isIntervalMode()) {
+            // Priority: Timer > Interval > Normal
+            if (fanController.isTimerActive()) {
+                ledController.setColor(LED_COLOR_BLUE);  // Blue for timer
+                ledController.setMode(LedMode::ON);
+            } else if (fanController.isIntervalMode()) {
                 ledController.showIntervalMode();  // Purple for interval mode
             } else {
                 ledController.showFanRunning();    // Green for normal
-            }
-            if (fanController.isTimerActive()) {
-                ledController.setMode(LedMode::PULSE);
             }
         } else {
             if (wifiManager.isConnected()) {
@@ -170,7 +170,7 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.1.0");
+    Serial.println("  Custom Firmware v1.2.0");
     Serial.println("=================================");
     Serial.println();
 
@@ -229,11 +229,14 @@ void setup() {
 void loop() {
     // Run all component loops
     wifiManager.loop();
-    mqttHandler.loop();
     fanController.loop();
     ledController.loop();
     otaHandler.loop();
     buttonHandler.loop();
+
+    // Run MQTT loop with extra yield time
+    mqttHandler.loop();
+    yield();
 
     // Check night mode every minute
     unsigned long now = millis();
@@ -244,5 +247,6 @@ void loop() {
 
     // Give async tasks (WiFi, MQTT, WebServer) enough CPU time
     // This prevents the AsyncTCP watchdog timeout
-    delay(10);
+    // ESP32 needs longer delay than ESP8266
+    delay(20);
 }

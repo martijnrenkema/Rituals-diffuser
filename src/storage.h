@@ -32,18 +32,8 @@ struct DiffuserSettings {
     char otaPassword[32];
     char apPassword[32];
 
-    // RFID Configuration (discovered pins)
-    bool rfidConfigured;
-    uint8_t rfidPinSCK;
-    uint8_t rfidPinMISO;
-    uint8_t rfidPinMOSI;
-    uint8_t rfidPinSS;
-    uint8_t rfidPinRST;
-    char currentCartridge[32];  // Current scent name
-
     // Usage Statistics
     uint32_t totalRuntimeMinutes;     // Total fan runtime ever
-    uint32_t cartridgeRuntimeMinutes; // Runtime since last cartridge change
     uint32_t sessionStartTime;        // Timestamp when session started
 
     // Night Mode
@@ -83,18 +73,9 @@ public:
     const char* getOTAPassword();
     const char* getAPPassword();
 
-    // RFID settings
-    void setRFIDPins(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss, uint8_t rst);
-    void clearRFIDConfig();
-    bool isRFIDConfigured();
-    void setCurrentCartridge(const char* name);
-    const char* getCurrentCartridge();
-
     // Usage statistics
     void addRuntimeMinutes(uint32_t minutes);
-    void resetCartridgeRuntime();
     uint32_t getTotalRuntimeMinutes();
-    uint32_t getCartridgeRuntimeMinutes();
 
     // Night mode
     void setNightMode(bool enabled, uint8_t startHour, uint8_t endHour, uint8_t brightness);

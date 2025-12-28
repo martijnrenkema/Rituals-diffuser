@@ -12,6 +12,31 @@
 
 #include <PubSubClient.h>
 
+// Non-blocking publish states
+enum class MqttPublishState {
+    IDLE,
+    // Discovery states
+    DISC_FAN,
+    DISC_INTERVAL_SWITCH,
+    DISC_INTERVAL_ON,
+    DISC_INTERVAL_OFF,
+    DISC_REMAINING,
+    DISC_RPM,
+    DISC_WIFI,
+    DISC_RUNTIME,
+    DISC_DONE,
+    // State publish states
+    STATE_FAN,
+    STATE_SPEED,
+    STATE_PRESET,
+    STATE_INTERVAL,
+    STATE_INTERVAL_TIMES,
+    STATE_REMAINING,
+    STATE_RPM_WIFI,
+    STATE_RUNTIME,
+    STATE_DONE
+};
+
 class MQTTHandler {
 public:
     void begin();
@@ -22,13 +47,16 @@ public:
     void disconnect();
     bool isConnected();
 
-    // Home Assistant Discovery
+    // Home Assistant Discovery (non-blocking, starts state machine)
     void publishDiscovery();
     void removeDiscovery();
 
-    // State publishing
+    // State publishing (non-blocking, starts state machine)
     void publishState();
     void publishAvailability(bool online);
+
+    // Request state publish (safe to call from any context)
+    void requestStatePublish() { _statePublishRequested = true; }
 
     // Callbacks
     typedef void (*CommandCallback)(const char* topic, const char* payload);
@@ -46,7 +74,13 @@ private:
 
     unsigned long _lastReconnect = 0;
     unsigned long _lastStatePublish = 0;
+    unsigned long _lastPublishStep = 0;
     bool _discoveryPublished = false;
+    bool _statePublishRequested = false;
+
+    // Non-blocking state machine
+    MqttPublishState _publishState = MqttPublishState::IDLE;
+    static const unsigned long PUBLISH_STEP_DELAY = 50; // ms between publishes
 
     CommandCallback _commandCallback = nullptr;
 
@@ -54,6 +88,8 @@ private:
     static MQTTHandler* _instance;
 
     void handleMessage(const char* topic, const char* payload);
+    void processPublishStateMachine();
+
     void publishFanDiscovery();
     void publishIntervalSwitchDiscovery();
     void publishIntervalOnTimeDiscovery();

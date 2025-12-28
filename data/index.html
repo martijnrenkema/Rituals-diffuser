@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -142,12 +142,12 @@
                         <button class="btn-sm diag-fan" data-action="off">Off</button>
                     </div>
                     <div class="field-group" style="margin-top:10px">
-                        <label>Min PWM (huidige: <b id="min-pwm-val">0</b>)</label>
+                        <label><span>Min PWM (current: <b id="min-pwm-val">0</b>)</span></label>
                         <div class="diag-btns">
                             <input type="number" id="min-pwm-input" min="0" max="255" value="0" style="width:60px">
                             <button class="btn-sm" id="set-min-btn">Set</button>
                         </div>
-                        <small class="hint">Minimum PWM waarde voordat fan begint te draaien</small>
+                        <small class="hint">Minimum PWM value before fan starts spinning</small>
                     </div>
                 </div>
                 <div class="diag-section">
@@ -208,7 +208,7 @@
         </main>
         <footer>
             <a href="/update.html">Firmware Update</a>
-            <span class="version">v1.1.0</span>
+            <span class="version">v1.2.0</span>
         </footer>
     </div>
     <script src="script.js"></script>

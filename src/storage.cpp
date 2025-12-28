@@ -59,6 +59,7 @@ DiffuserSettings Storage::load() {
     settings.intervalEnabled = prefs.getBool(NVS_INTERVAL_ENABLED, false);
     settings.intervalOnTime = prefs.getUChar(NVS_INTERVAL_ON, INTERVAL_ON_DEFAULT);
     settings.intervalOffTime = prefs.getUChar(NVS_INTERVAL_OFF, INTERVAL_OFF_DEFAULT);
+    settings.totalRuntimeMinutes = prefs.getULong(NVS_TOTAL_RUNTIME, 0);
 #endif
 
     ensureDefaults(settings);
@@ -221,65 +222,20 @@ void Storage::ensureDefaults(DiffuserSettings& settings) {
     }
 }
 
-// RFID Configuration
-void Storage::setRFIDPins(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss, uint8_t rst) {
-    _settings.rfidConfigured = true;
-    _settings.rfidPinSCK = sck;
-    _settings.rfidPinMISO = miso;
-    _settings.rfidPinMOSI = mosi;
-    _settings.rfidPinSS = ss;
-    _settings.rfidPinRST = rst;
-    commit();
-    Serial.printf("[STORAGE] RFID pins saved: SCK=%d MISO=%d MOSI=%d SS=%d RST=%d\n", sck, miso, mosi, ss, rst);
-}
-
-void Storage::clearRFIDConfig() {
-    _settings.rfidConfigured = false;
-    _settings.rfidPinSCK = 0;
-    _settings.rfidPinMISO = 0;
-    _settings.rfidPinMOSI = 0;
-    _settings.rfidPinSS = 0;
-    _settings.rfidPinRST = 0;
-    memset(_settings.currentCartridge, 0, sizeof(_settings.currentCartridge));
-    commit();
-    Serial.println("[STORAGE] RFID config cleared");
-}
-
-bool Storage::isRFIDConfigured() {
-    return _settings.rfidConfigured;
-}
-
-void Storage::setCurrentCartridge(const char* name) {
-    strlcpy(_settings.currentCartridge, name, sizeof(_settings.currentCartridge));
-    // Reset cartridge runtime when new cartridge detected
-    _settings.cartridgeRuntimeMinutes = 0;
-    commit();
-    Serial.printf("[STORAGE] Cartridge set: %s\n", name);
-}
-
-const char* Storage::getCurrentCartridge() {
-    return _settings.currentCartridge;
-}
-
 // Usage Statistics
 void Storage::addRuntimeMinutes(uint32_t minutes) {
     _settings.totalRuntimeMinutes += minutes;
-    _settings.cartridgeRuntimeMinutes += minutes;
+#ifdef PLATFORM_ESP8266
     commit();
-}
-
-void Storage::resetCartridgeRuntime() {
-    _settings.cartridgeRuntimeMinutes = 0;
-    commit();
-    Serial.println("[STORAGE] Cartridge runtime reset");
+#else
+    // ESP32: Save directly to NVS
+    prefs.putULong(NVS_TOTAL_RUNTIME, _settings.totalRuntimeMinutes);
+#endif
+    Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", _settings.totalRuntimeMinutes);
 }
 
 uint32_t Storage::getTotalRuntimeMinutes() {
     return _settings.totalRuntimeMinutes;
-}
-
-uint32_t Storage::getCartridgeRuntimeMinutes() {
-    return _settings.cartridgeRuntimeMinutes;
 }
 
 // Night Mode

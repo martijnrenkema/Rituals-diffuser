@@ -117,6 +117,7 @@
 #define NVS_INTERVAL_ON         "interval_on"
 #define NVS_INTERVAL_OFF        "interval_off"
 #define NVS_INTERVAL_ENABLED    "interval_en"
+#define NVS_TOTAL_RUNTIME       "total_run"
 
 // ===========================================
 // LED Colors (RGB)
