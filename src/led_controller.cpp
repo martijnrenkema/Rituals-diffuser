@@ -51,16 +51,17 @@ void LedController::loop() {
             break;
 
         case LedMode::PULSE:
-            // Smooth pulsing effect
-            if (now - _lastToggle >= 10) {
+            // Smooth pulsing effect - adjusted for 20ms main loop
+            // Step size 10 instead of 5 to maintain smooth animation speed
+            if (now - _lastToggle >= 20) {
                 if (_pulseDirection) {
-                    _pulseValue += 5;
+                    _pulseValue += 10;
                     if (_pulseValue >= 255) {
                         _pulseValue = 255;
                         _pulseDirection = false;
                     }
                 } else {
-                    _pulseValue -= 5;
+                    _pulseValue -= 10;
                     if (_pulseValue <= 10) {
                         _pulseValue = 10;
                         _pulseDirection = true;
@@ -93,7 +94,17 @@ void LedController::setMode(LedMode mode) {
         _pulseValue = 0;
         _pulseDirection = true;
 
-        FastLED.setBrightness(50);  // Reset brightness
+        // Restore saved brightness (preserves night mode setting)
+        // Only PULSE mode overrides brightness for its animation
+        if (mode != LedMode::PULSE) {
+            // Prevent "brightness trap" - if brightness is 0 and we're turning ON,
+            // use a safe default so LED is visible
+            if (_brightness == 0 && mode != LedMode::OFF) {
+                _brightness = 128;  // 50% as safe default
+                Serial.println("[LED] Brightness was 0, reset to 50%");
+            }
+            FastLED.setBrightness(_brightness);
+        }
 
         Serial.printf("[LED] Mode changed to %d\n", (int)mode);
     }
@@ -169,6 +180,12 @@ void LedController::updateLed() {
 void LedController::setBrightness(uint8_t percent) {
     // Map percent (0-100) to FastLED brightness (0-255)
     _brightness = map(constrain(percent, 0, 100), 0, 100, 0, 255);
+
+    // If brightness is 0, turn LED completely off
+    if (_brightness == 0) {
+        _leds[0] = CRGB::Black;
+    }
+
     FastLED.setBrightness(_brightness);
     FastLED.show();
     Serial.printf("[LED] Brightness set to %d%%\n", percent);

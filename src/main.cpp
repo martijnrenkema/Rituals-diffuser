@@ -24,8 +24,20 @@ bool otaInProgress = false;
 // Configure NTP time sync
 void setupTimeSync() {
     // Configure time for Europe/Amsterdam timezone (CET/CEST)
-    configTime(3600, 3600, "pool.ntp.org", "time.nist.gov");
-    Serial.println("[TIME] NTP sync configured");
+#ifdef PLATFORM_ESP8266
+    // ESP8266: Use setenv for timezone, then configTime
+    // TZ string: CET-1CEST,M3.5.0/2,M10.5.0/3
+    // - CET is UTC+1, CEST is UTC+2
+    // - DST starts last Sunday of March at 02:00
+    // - DST ends last Sunday of October at 03:00
+    setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
+    tzset();
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+#else
+    // ESP32: Use configTzTime for automatic DST handling
+    configTzTime("CET-1CEST,M3.5.0/2,M10.5.0/3", "pool.ntp.org", "time.nist.gov");
+#endif
+    Serial.println("[TIME] NTP sync configured (CET/CEST with auto DST)");
     timeConfigured = true;
 }
 
@@ -197,7 +209,7 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.2.0");
+    Serial.println("  Custom Firmware v1.3.1");
     Serial.println("=================================");
     Serial.println();
 

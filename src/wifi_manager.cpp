@@ -68,6 +68,8 @@ void WiFiManager::loop() {
                 Serial.println("[WIFI] Reconnected to WiFi!");
                 Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
                 _reconnectAttempts = 0;
+                // Stop AP mode to close the security hole
+                stopAP();
                 setState(WifiStatus::CONNECTED);
             }
             break;

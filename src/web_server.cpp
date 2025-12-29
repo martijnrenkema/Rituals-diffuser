@@ -7,7 +7,6 @@
 #include "button_handler.h"
 #include "mqtt_handler.h"
 #include <ArduinoJson.h>
-#include <Update.h>
 
 // External function and flag from main.cpp for LED priority system
 extern void updateLedStatus();
@@ -15,8 +14,16 @@ extern bool otaInProgress;
 
 #ifdef PLATFORM_ESP8266
     #include <FS.h>
+    #include <Updater.h>
+    // ESP8266 uses different method names
+    #define UPDATE_ERROR_STRING() Update.getErrorString()
+    // Linker symbols for filesystem size
+    extern "C" uint32_t _FS_start;
+    extern "C" uint32_t _FS_end;
 #else
     #include <SPIFFS.h>
+    #include <Update.h>
+    #define UPDATE_ERROR_STRING() Update.errorString()
 #endif
 
 // Track upload progress
@@ -116,6 +123,21 @@ void WebServer::setupRoutes() {
         handleDiagnosticButtons(request);
     });
 
+    // Device settings
+    _server->on("/api/device", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (request->hasParam("name", true)) {
+            String name = request->getParam("name", true)->value();
+            if (name.length() > 0 && name.length() < 32) {
+                storage.setDeviceName(name.c_str());
+                request->send(200, "application/json", "{\"success\":true,\"message\":\"Device name saved\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Name must be 1-31 characters\"}");
+            }
+        } else {
+            request->send(400, "application/json", "{\"error\":\"Missing name parameter\"}");
+        }
+    });
+
     // OTA Update - Firmware
     _server->on("/api/update/firmware", HTTP_POST,
         [](AsyncWebServerRequest* request) {
@@ -140,20 +162,44 @@ void WebServer::setupRoutes() {
                 otaInProgress = true;
                 updateLedStatus();
                 updateContentLength = request->contentLength();
+
+                // Stop non-essential services to free memory
+                mqttHandler.disconnect();
+
                 #ifdef PLATFORM_ESP8266
-                Update.begin(updateContentLength, U_FLASH);
+                if (!Update.begin(updateContentLength, U_FLASH)) {
                 #else
-                Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
                 #endif
+                    Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
+                    Update.printError(Serial);
+                    return;
+                }
+                Serial.println("[OTA] Update.begin success");
             }
+
+            if (Update.hasError()) {
+                return;  // Skip writing if already failed
+            }
+
             if (len) {
-                Update.write(data, len);
+                if (Update.write(data, len) != len) {
+                    Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
+                    return;
+                }
+                // Feed watchdog to prevent timeout on large uploads
+                yield();
             }
+
             if (final) {
                 if (Update.end(true)) {
                     Serial.printf("[OTA] Firmware update success: %u bytes\n", index + len);
                 } else {
-                    Serial.printf("[OTA] Firmware update failed: %s\n", Update.errorString());
+                    Serial.printf("[OTA] Firmware update failed: %s\n", UPDATE_ERROR_STRING());
+                    Update.printError(Serial);
+                    // Reset OTA flag on failure so LED returns to normal
+                    otaInProgress = false;
+                    updateLedStatus();
                 }
             }
         }
@@ -180,21 +226,44 @@ void WebServer::setupRoutes() {
                 Serial.printf("[OTA] Filesystem update start: %s\n", filename.c_str());
                 otaInProgress = true;
                 updateLedStatus();
+
+                // Stop non-essential services to free memory
+                mqttHandler.disconnect();
+
                 #ifdef PLATFORM_ESP8266
-                size_t fsSize = ((size_t)FS_end - (size_t)FS_start);
-                Update.begin(fsSize, U_FS);
+                size_t fsSize = ((size_t)&_FS_end - (size_t)&_FS_start);
+                if (!Update.begin(fsSize, U_FS)) {
                 #else
-                Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS);
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS)) {
                 #endif
+                    Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
+                    Update.printError(Serial);
+                    return;
+                }
+                Serial.println("[OTA] Update.begin success");
             }
+
+            if (Update.hasError()) {
+                return;  // Skip writing if already failed
+            }
+
             if (len) {
-                Update.write(data, len);
+                if (Update.write(data, len) != len) {
+                    Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
+                    return;
+                }
+                yield();
             }
+
             if (final) {
                 if (Update.end(true)) {
                     Serial.printf("[OTA] Filesystem update success: %u bytes\n", index + len);
                 } else {
-                    Serial.printf("[OTA] Filesystem update failed: %s\n", Update.errorString());
+                    Serial.printf("[OTA] Filesystem update failed: %s\n", UPDATE_ERROR_STRING());
+                    Update.printError(Serial);
+                    // Reset OTA flag on failure so LED returns to normal
+                    otaInProgress = false;
+                    updateLedStatus();
                 }
             }
         }
@@ -220,7 +289,8 @@ void WebServer::setupRoutes() {
 void WebServer::handleStatus(AsyncWebServerRequest* request) {
     const DiffuserSettings& settings = storage.getSettings();  // Use cache, no NVS read
 
-    StaticJsonDocument<1536> doc;
+    // Use DynamicJsonDocument to avoid stack overflow on ESP8266 (limited 4KB stack)
+    DynamicJsonDocument doc(1024);  // Heap allocation, reduced size - actual payload is ~600 bytes
 
     // WiFi status
     doc["wifi"]["connected"] = wifiManager.isConnected();
@@ -259,7 +329,11 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["night"]["brightness"] = settings.nightModeBrightness;
 
     String response;
-    serializeJson(doc, response);
+    size_t jsonSize = serializeJson(doc, response);
+    if (jsonSize == 0) {
+        request->send(500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+        return;
+    }
 
     request->send(200, "application/json", response);
 }
@@ -277,8 +351,10 @@ void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"WiFi saved, connecting...\"}");
 
-    // Connect to new network (small delay to let response send)
-    delay(100);
+    // Wait for HTTP response to be fully sent before reconnecting WiFi
+    // WiFi.begin() resets the radio which can interrupt the TCP connection
+    // 500ms is enough for the browser to receive the complete response + TCP ACK
+    delay(500);
     wifiManager.connect(ssid.c_str(), password.c_str());
 
     if (_settingsCallback) {
@@ -298,7 +374,11 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
     String password = "";
 
     if (request->hasParam("port", true)) {
-        port = request->getParam("port", true)->value().toInt();
+        int portVal = request->getParam("port", true)->value().toInt();
+        // Validate MQTT port range (1-65535)
+        if (portVal > 0 && portVal <= 65535) {
+            port = portVal;
+        }
     }
     if (request->hasParam("user", true)) {
         user = request->getParam("user", true)->value();
@@ -372,7 +452,10 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     response["fan"]["remaining_minutes"] = fanController.getRemainingMinutes();
 
     String output;
-    serializeJson(response, output);
+    if (serializeJson(response, output) == 0) {
+        request->send(500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+        return;
+    }
     request->send(200, "application/json", output);
 
     // Request MQTT state publish (non-blocking)
@@ -420,15 +503,17 @@ void WebServer::handleSavePasswords(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleGetPasswords(AsyncWebServerRequest* request) {
-    StaticJsonDocument<256> doc;
-    // Don't return actual passwords, just indicate if custom ones are set
+    StaticJsonDocument<128> doc;
+    // Only indicate if custom passwords are set - NEVER expose actual passwords
     doc["ota_custom"] = strlen(storage.getSettings().otaPassword) > 0;
     doc["ap_custom"] = strlen(storage.getSettings().apPassword) > 0;
-    doc["ota_default"] = OTA_PASSWORD;
-    doc["ap_default"] = WIFI_AP_PASSWORD;
+    // Note: Default passwords are NOT sent to prevent security leaks
 
     String response;
-    serializeJson(doc, response);
+    if (serializeJson(doc, response) == 0) {
+        request->send(500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+        return;
+    }
     request->send(200, "application/json", response);
 }
 
@@ -442,7 +527,10 @@ void WebServer::handleGetNightMode(AsyncWebServerRequest* request) {
     doc["brightness"] = settings.nightModeBrightness;
 
     String response;
-    serializeJson(doc, response);
+    if (serializeJson(doc, response) == 0) {
+        request->send(500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+        return;
+    }
     request->send(200, "application/json", response);
 }
 
@@ -456,13 +544,16 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
         enabled = request->getParam("enabled", true)->value() == "true";
     }
     if (request->hasParam("start", true)) {
-        start = request->getParam("start", true)->value().toInt();
+        int val = request->getParam("start", true)->value().toInt();
+        start = constrain(val, 0, 23);  // Valid hour range
     }
     if (request->hasParam("end", true)) {
-        end = request->getParam("end", true)->value().toInt();
+        int val = request->getParam("end", true)->value().toInt();
+        end = constrain(val, 0, 23);  // Valid hour range
     }
     if (request->hasParam("brightness", true)) {
-        brightness = request->getParam("brightness", true)->value().toInt();
+        int val = request->getParam("brightness", true)->value().toInt();
+        brightness = constrain(val, 0, 100);  // Valid percentage
     }
 
     storage.setNightMode(enabled, start, end, brightness);
@@ -475,7 +566,8 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
 // =====================================================
 
 void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
-    StaticJsonDocument<512> doc;
+    // Use DynamicJsonDocument to avoid stack pressure on ESP8266
+    DynamicJsonDocument doc(512);
 
     // Fan status - connected if we detect RPM when running
     uint16_t rpm = fanController.getRPM();
@@ -499,7 +591,11 @@ void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
     doc["buttons"]["rear_pressed"] = buttonHandler.isRearPressed();
 
     // Pin configuration
+#ifdef PLATFORM_ESP8266
+    doc["pins"]["platform"] = "ESP8266";
+#else
     doc["pins"]["platform"] = "ESP32";
+#endif
     doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
     doc["pins"]["fan_tacho"] = FAN_TACHO_PIN;
     doc["pins"]["led"] = LED_DATA_PIN;
@@ -507,7 +603,10 @@ void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
     doc["pins"]["btn_rear"] = BUTTON_REAR_PIN;
 
     String response;
-    serializeJson(doc, response);
+    if (serializeJson(doc, response) == 0) {
+        request->send(500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+        return;
+    }
     request->send(200, "application/json", response);
 }
 
@@ -644,6 +743,9 @@ void WebServer::handleDiagnosticButtons(AsyncWebServerRequest* request) {
     doc["rear"]["pin"] = BUTTON_REAR_PIN;
 
     String response;
-    serializeJson(doc, response);
+    if (serializeJson(doc, response) == 0) {
+        request->send(500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+        return;
+    }
     request->send(200, "application/json", response);
 }

@@ -56,7 +56,8 @@ public:
     void publishAvailability(bool online);
 
     // Request state publish (safe to call from any context)
-    void requestStatePublish() { _statePublishRequested = true; }
+    // Uses a counter to queue multiple requests during active publish
+    void requestStatePublish() { _statePublishPending++; }
 
     // Callbacks
     typedef void (*CommandCallback)(const char* topic, const char* payload);
@@ -76,7 +77,7 @@ private:
     unsigned long _lastStatePublish = 0;
     unsigned long _lastPublishStep = 0;
     bool _discoveryPublished = false;
-    bool _statePublishRequested = false;
+    volatile uint8_t _statePublishPending = 0;  // Queue counter for pending state publishes
 
     // Non-blocking state machine
     MqttPublishState _publishState = MqttPublishState::IDLE;

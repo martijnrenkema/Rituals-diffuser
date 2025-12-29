@@ -58,7 +58,10 @@ function update(d){
         if(d.wifi.ip)$('#cur-ip').textContent=d.wifi.ip;
         if(d.wifi.rssi)$('#rssi').textContent=d.wifi.rssi;
     }
-    if(d.device&&d.device.mac)$('#mac').textContent=d.device.mac;
+    if(d.device){
+        if(d.device.mac)$('#mac').textContent=d.device.mac;
+        if(d.device.name)$('#device-name').placeholder=d.device.name;
+    }
 
     if(d.mqtt&&d.mqtt.host){
         $('#m-host').value=d.mqtt.host;
@@ -121,8 +124,8 @@ async function fetchPasswords(){
     try{
         const r=await fetch('/api/passwords');
         const d=await r.json();
-        $('#ota-status').textContent=d.ota_custom?'(custom)':'(default: '+d.ota_default+')';
-        $('#ap-status').textContent=d.ap_custom?'(custom)':'(default: '+d.ap_default+')';
+        $('#ota-status').textContent=d.ota_custom?'(custom set)':'(using default)';
+        $('#ap-status').textContent=d.ap_custom?'(custom set)':'(using default)';
     }catch(e){console.error(e)}
 }
 fetchPasswords();
@@ -151,6 +154,27 @@ $('#pass-form').onsubmit=async e=>{
             fetchPasswords();
         }else{
             alert(d.error||'Error saving passwords');
+        }
+    }catch(e){alert('Error')}
+};
+
+// Device settings
+$('#device-form').onsubmit=async e=>{
+    e.preventDefault();
+    const name=$('#device-name').value.trim();
+    if(!name){
+        alert('Please enter a device name');
+        return;
+    }
+    try{
+        const r=await fetch('/api/device',{method:'POST',body:new URLSearchParams({name:name})});
+        const d=await r.json();
+        if(d.success){
+            alert('Device name saved. Restart device to update MQTT discovery.');
+            $('#device-name').value='';
+            $('#device-name').placeholder=name;
+        }else{
+            alert(d.error||'Error saving device name');
         }
     }catch(e){alert('Error')}
 };

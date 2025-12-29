@@ -34,7 +34,7 @@ struct DiffuserSettings {
 
     // Usage Statistics
     uint32_t totalRuntimeMinutes;     // Total fan runtime ever
-    uint32_t sessionStartTime;        // Timestamp when session started
+    // Note: sessionStartTime removed in v5 - managed by fan_controller locally
 
     // Night Mode
     bool nightModeEnabled;
@@ -43,7 +43,15 @@ struct DiffuserSettings {
     uint8_t nightModeBrightness;  // LED brightness during night (0-100)
 };
 
-#define SETTINGS_MAGIC 0xD1FF0004  // Magic number for valid settings (incremented for new fields)
+// Magic number for valid settings validation
+// Format: 0xD1FF00XX where XX is the version number
+// Increment version when struct layout changes to invalidate old settings
+// v1 (0x01): Initial version
+// v2 (0x02): Added interval mode fields
+// v3 (0x03): Added OTA/AP passwords
+// v4 (0x04): Added night mode and runtime stats
+// v5 (0x05): Removed unused sessionStartTime field
+#define SETTINGS_MAGIC 0xD1FF0005
 
 class Storage {
 public:

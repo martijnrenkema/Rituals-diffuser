@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.2.0-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.3.1-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Supported-blue)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -319,6 +319,23 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.3.1
+- Fixed runtime double counting bug in turnOff()
+- Fixed MQTT interval times not persisted to storage
+- Fixed ESP32 NVS not saving OTA/AP passwords and night mode settings
+- Fixed DST handling with proper POSIX timezone string (CET/CEST)
+- Fixed OTA failure flag not reset, causing stuck purple LED
+- Fixed WiFi AP not stopped after successful reconnect (security)
+- Fixed MQTT topics now include device ID for multi-device support
+- Fixed password leak via /api/passwords endpoint (security)
+- Reduced flash wear: runtime save interval increased to 30 minutes
+- Improved ESP8266 compatibility (Updater.h, timezone handling)
+- Added platform detection for diagnostics page
+
+### v1.2.1
+- Added LED priority system for combined states
+- LED off in standby mode when fan is not running
 
 ### v1.2.0
 - Fixed AsyncTCP watchdog crashes with non-blocking MQTT publishing

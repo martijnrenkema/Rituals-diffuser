@@ -8,7 +8,7 @@ FanController fanController;
 volatile uint32_t FanController::_tachoCount = 0;
 
 void IRAM_ATTR FanController::tachoISR() {
-    _tachoCount++;
+    if (_tachoCount < 60000) _tachoCount++;  // Prevent overflow from spurious interrupts
 }
 
 void FanController::begin() {
@@ -63,6 +63,20 @@ void FanController::loop() {
 
     // Handle calibration - takes over fan control completely
     if (_calibrating) {
+        // Timeout after 60 seconds to prevent infinite calibration
+        if (now - _calibrationStart >= 60000) {
+            _calibrating = false;
+            _isOn = false;
+#ifdef PLATFORM_ESP8266
+            analogWrite(FAN_PWM_PIN, 0);
+#else
+            ledcWrite(PWM_CHANNEL, 0);
+#endif
+            _currentPWM = 0;
+            Serial.println("[FAN] Calibration timeout - aborted after 60s");
+            return;
+        }
+
         // Wait at least 800ms between steps to allow RPM to stabilize
         if (now - _lastCalibrationStep >= 800) {
             _lastCalibrationStep = now;
@@ -195,12 +209,12 @@ void FanController::turnOn() {
 }
 
 void FanController::turnOff() {
-    // Save final runtime before turning off
-    if (_isOn && _sessionStartTime > 0) {
-        uint32_t sessionMinutes = (millis() - _sessionStartTime) / 60000;
-        if (sessionMinutes > 0) {
-            storage.addRuntimeMinutes(sessionMinutes);
-            _sessionRuntime += sessionMinutes;
+    // Save remaining runtime since last periodic save (avoid double counting)
+    if (_isOn && _lastRuntimeSave > 0) {
+        uint32_t minutesSinceLastSave = (millis() - _lastRuntimeSave) / 60000;
+        if (minutesSinceLastSave > 0) {
+            storage.addRuntimeMinutes(minutesSinceLastSave);
+            _sessionRuntime += minutesSinceLastSave;
         }
     }
 
@@ -241,6 +255,7 @@ uint16_t FanController::getRemainingMinutes() {
     if (!_timerActive) return 0;
     unsigned long now = millis();
     if (now >= _timerEndTime) return 0;
+    // Round down - shows actual complete minutes remaining
     return (_timerEndTime - now) / 60000;
 }
 
@@ -398,8 +413,8 @@ void FanController::updateRuntimeStats() {
 
     unsigned long now = millis();
 
-    // Save runtime every 5 minutes while running
-    if (now - _lastRuntimeSave >= 300000) {  // 5 minutes
+    // Save runtime every 30 minutes while running (reduced frequency to minimize flash wear)
+    if (now - _lastRuntimeSave >= 1800000) {  // 30 minutes
         uint32_t minutesSinceLastSave = (now - _lastRuntimeSave) / 60000;
         if (minutesSinceLastSave > 0) {
             storage.addRuntimeMinutes(minutesSinceLastSave);

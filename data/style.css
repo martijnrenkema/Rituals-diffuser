@@ -73,10 +73,12 @@ input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(99
 .night-cfg{display:none;flex-direction:column;gap:12px;margin-top:16px}
 .night-cfg.show{display:flex}
 .night-cfg input[type=range]{width:100%}
-footer{text-align:center;padding:20px 0 10px;color:var(--dim)}
+footer{text-align:center;padding:20px 0 10px;color:var(--dim);display:flex;justify-content:center;gap:16px;align-items:center;flex-wrap:wrap}
 footer a{color:var(--accent);text-decoration:none}
 footer a:hover{text-decoration:underline}
 .version{font-size:.75rem}
+.tooltip{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(99,102,241,0.3);color:var(--accent);font-size:.7rem;cursor:help;margin-left:4px}
+.tooltip:hover{background:var(--accent);color:#fff}
 .diag-section{margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.1)}
 .diag-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
 .diag-section h4{font-size:.8rem;color:var(--accent);margin-bottom:10px;font-weight:500}
