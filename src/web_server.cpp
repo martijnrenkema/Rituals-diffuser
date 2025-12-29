@@ -786,7 +786,7 @@ void WebServer::handleBackup(AsyncWebServerRequest* request) {
     doc["night_mode"]["brightness"] = settings.nightModeBrightness;
 
     // Metadata
-    doc["backup_version"] = "1.2.0";
+    doc["backup_version"] = "1.3.0";
     doc["backup_timestamp"] = millis() / 1000;
 
     String output;
@@ -884,7 +884,7 @@ void WebServer::handleRestore(AsyncWebServerRequest* request, uint8_t *data, siz
 // Get system logs
 void WebServer::handleLogs(AsyncWebServerRequest* request) {
     DynamicJsonDocument doc(4096);
-    doc["version"] = "1.2.0";
+    doc["version"] = "1.3.0";
     doc["uptime"] = millis() / 1000;  // seconds
     doc["count"] = logger.getLogCount();
 

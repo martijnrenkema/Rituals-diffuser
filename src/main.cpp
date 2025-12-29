@@ -198,7 +198,7 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.2.0");
+    Serial.println("  Custom Firmware v1.3.0");
     Serial.println("=================================");
     Serial.println();
 

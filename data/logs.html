@@ -157,7 +157,7 @@
             </div>
             <div class="stat-card">
                 <h4>Version</h4>
-                <div class="value" id="version">v1.2.0</div>
+                <div class="value" id="version">v1.3.0</div>
             </div>
         </div>
 
@@ -182,7 +182,7 @@
                 const minutes = Math.floor((uptimeSeconds % 3600) / 60);
                 document.getElementById('uptime').textContent = `${hours}h ${minutes}m`;
                 document.getElementById('logCount').textContent = data.count;
-                document.getElementById('version').textContent = data.version || 'v1.2.0';
+                document.getElementById('version').textContent = data.version || 'v1.3.0';
 
                 // Render logs table
                 const content = document.getElementById('logContent');
