@@ -65,6 +65,10 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 | GND | GND | Black | Ground |
 | 3.3V | 3.3V | Red | Power |
 
+> **⚠️ Important: Antenna Placement**
+>
+> When installing an ESP32 dev board inside the metal housing, position the board so the WiFi antenna points toward the nozzle opening. The metal enclosure acts as a Faraday cage, blocking WiFi signals. The nozzle opening is the only path for the signal to escape.
+
 ### ESP8266 Pinout (Original chip)
 
 | GPIO | Function | Description |
