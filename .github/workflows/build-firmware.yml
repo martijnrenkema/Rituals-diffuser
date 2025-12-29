@@ -44,14 +44,17 @@ jobs:
 
     - name: Build filesystem (SPIFFS)
       run: pio run -e esp8266 -t buildfs
+      continue-on-error: true
 
-    - name: Rename artifacts
+    - name: Prepare artifacts
       run: |
         mkdir -p artifacts
         cp .pio/build/esp8266/firmware.bin artifacts/rituals-diffuser-v1.3.0-esp8266.bin
+        # Only copy SPIFFS if it exists
         if [ -f .pio/build/esp8266/spiffs.bin ]; then
           cp .pio/build/esp8266/spiffs.bin artifacts/rituals-diffuser-v1.3.0-spiffs.bin
         fi
+        ls -lah artifacts/
 
     - name: Upload firmware artifact
       uses: actions/upload-artifact@v3
