@@ -57,12 +57,12 @@
 
             <section class="card">
                 <div class="row">
-                    <h3>Interval Mode</h3>
+                    <h3>Interval Mode <span class="tooltip" title="Cycles the fan on/off at set intervals to conserve fragrance">?</span></h3>
                     <label class="switch"><input type="checkbox" id="interval"><span></span></label>
                 </div>
                 <div class="interval-cfg" id="interval-cfg">
-                    <div class="field"><label>On</label><input type="number" id="int-on" min="10" max="120" step="5" value="30"><span>s</span></div>
-                    <div class="field"><label>Off</label><input type="number" id="int-off" min="10" max="120" step="5" value="30"><span>s</span></div>
+                    <div class="field"><label>On <span class="tooltip" title="How long the fan runs during each cycle">?</span></label><input type="number" id="int-on" min="10" max="120" step="5" value="30"><span>s</span></div>
+                    <div class="field"><label>Off <span class="tooltip" title="How long the fan pauses between cycles">?</span></label><input type="number" id="int-off" min="10" max="120" step="5" value="30"><span>s</span></div>
                     <button id="save-int" class="btn-sm">Save</button>
                 </div>
             </section>
@@ -142,12 +142,12 @@
                         <button class="btn-sm diag-fan" data-action="off">Off</button>
                     </div>
                     <div class="field-group" style="margin-top:10px">
-                        <label><span>Min PWM (current: <b id="min-pwm-val">0</b>)</span></label>
+                        <label><span>Min PWM (current: <b id="min-pwm-val">0</b>) <span class="tooltip" title="Lowest PWM value where the fan starts spinning. Use Calibrate to auto-detect, or set manually (0-255)">?</span></span></label>
                         <div class="diag-btns">
                             <input type="number" id="min-pwm-input" min="0" max="255" value="0" style="width:60px">
                             <button class="btn-sm" id="set-min-btn">Set</button>
+                            <button class="btn-sm diag-fan" data-action="calibrate">Calibrate</button>
                         </div>
-                        <small class="hint">Minimum PWM value before fan starts spinning</small>
                     </div>
                 </div>
                 <div class="diag-section">
@@ -171,6 +171,17 @@
                     </div>
                     <small class="hint">Press buttons on device to test</small>
                 </div>
+            </details>
+
+            <details class="card">
+                <summary>Device Settings</summary>
+                <form id="device-form">
+                    <div class="field-group">
+                        <label>Device Name <span class="tooltip" title="Name shown in Home Assistant and web interface">?</span></label>
+                        <input type="text" id="device-name" placeholder="Rituals Diffuser" maxlength="31">
+                    </div>
+                    <button type="submit" class="btn">Save</button>
+                </form>
             </details>
 
             <details class="card">
@@ -208,7 +219,8 @@
         </main>
         <footer>
             <a href="/update.html">Firmware Update</a>
-            <span class="version">v1.2.0</span>
+            <a href="https://github.com/martijnrenkema/Rituals-diffuser" target="_blank" rel="noopener">GitHub</a>
+            <span class="version">v1.3.0</span>
         </footer>
     </div>
     <script src="script.js"></script>

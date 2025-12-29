@@ -60,6 +60,18 @@ DiffuserSettings Storage::load() {
     settings.intervalOnTime = prefs.getUChar(NVS_INTERVAL_ON, INTERVAL_ON_DEFAULT);
     settings.intervalOffTime = prefs.getUChar(NVS_INTERVAL_OFF, INTERVAL_OFF_DEFAULT);
     settings.totalRuntimeMinutes = prefs.getULong(NVS_TOTAL_RUNTIME, 0);
+
+    // OTA/AP passwords
+    String otaPass = prefs.getString(NVS_OTA_PASSWORD, "");
+    String apPass = prefs.getString(NVS_AP_PASSWORD, "");
+    strlcpy(settings.otaPassword, otaPass.c_str(), sizeof(settings.otaPassword));
+    strlcpy(settings.apPassword, apPass.c_str(), sizeof(settings.apPassword));
+
+    // Night mode
+    settings.nightModeEnabled = prefs.getBool(NVS_NIGHT_ENABLED, false);
+    settings.nightModeStart = prefs.getUChar(NVS_NIGHT_START, 22);
+    settings.nightModeEnd = prefs.getUChar(NVS_NIGHT_END, 7);
+    settings.nightModeBrightness = prefs.getUChar(NVS_NIGHT_BRIGHT, 10);
 #endif
 
     ensureDefaults(settings);
@@ -86,6 +98,14 @@ void Storage::save(const DiffuserSettings& settings) {
     prefs.putBool(NVS_INTERVAL_ENABLED, settings.intervalEnabled);
     prefs.putUChar(NVS_INTERVAL_ON, settings.intervalOnTime);
     prefs.putUChar(NVS_INTERVAL_OFF, settings.intervalOffTime);
+    // OTA/AP passwords
+    prefs.putString(NVS_OTA_PASSWORD, settings.otaPassword);
+    prefs.putString(NVS_AP_PASSWORD, settings.apPassword);
+    // Night mode
+    prefs.putBool(NVS_NIGHT_ENABLED, settings.nightModeEnabled);
+    prefs.putUChar(NVS_NIGHT_START, settings.nightModeStart);
+    prefs.putUChar(NVS_NIGHT_END, settings.nightModeEnd);
+    prefs.putUChar(NVS_NIGHT_BRIGHT, settings.nightModeBrightness);
 #endif
 
     Serial.println("[STORAGE] Settings saved");

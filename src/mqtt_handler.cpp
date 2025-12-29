@@ -74,9 +74,9 @@ void MQTTHandler::loop() {
         // Process non-blocking publish state machine
         processPublishStateMachine();
 
-        // Handle state publish requests
-        if (_statePublishRequested && _publishState == MqttPublishState::IDLE) {
-            _statePublishRequested = false;
+        // Handle state publish requests (queued to avoid losing rapid changes)
+        if (_statePublishPending > 0 && _publishState == MqttPublishState::IDLE) {
+            _statePublishPending = 0;  // Clear all pending requests, we'll publish current state
             _publishState = MqttPublishState::STATE_FAN;
             _lastPublishStep = millis();
         }
@@ -249,7 +249,12 @@ bool MQTTHandler::isConnected() {
 }
 
 void MQTTHandler::mqttCallback(char* topic, byte* payload, unsigned int length) {
-    char message[length + 1];
+    // Use bounded buffer to prevent stack overflow from large payloads
+    char message[256];
+    if (length >= sizeof(message)) {
+        Serial.println("[MQTT] Message too large, ignoring");
+        return;
+    }
     memcpy(message, payload, length);
     message[length] = '\0';
 
@@ -299,10 +304,16 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         updateLedStatus();
     } else if (t.endsWith("/interval_on/set")) {
         // Interval on time
-        fanController.setIntervalTimes(p.toInt(), fanController.getIntervalOffTime());
+        int newOnTime = p.toInt();
+        fanController.setIntervalTimes(newOnTime, fanController.getIntervalOffTime());
+        // Persist to storage so settings survive reboot
+        storage.setIntervalMode(fanController.isIntervalMode(), newOnTime, fanController.getIntervalOffTime());
     } else if (t.endsWith("/interval_off/set")) {
         // Interval off time
-        fanController.setIntervalTimes(fanController.getIntervalOnTime(), p.toInt());
+        int newOffTime = p.toInt();
+        fanController.setIntervalTimes(fanController.getIntervalOnTime(), newOffTime);
+        // Persist to storage so settings survive reboot
+        storage.setIntervalMode(fanController.isIntervalMode(), fanController.getIntervalOnTime(), newOffTime);
     }
 
     // Request state publish (non-blocking)
@@ -319,7 +330,8 @@ void MQTTHandler::onCommand(CommandCallback callback) {
 }
 
 String MQTTHandler::getBaseTopic() {
-    return String(MQTT_TOPIC_PREFIX);
+    // Include device ID for unique topics when multiple diffusers are present
+    return String(MQTT_TOPIC_PREFIX) + "_" + _deviceId;
 }
 
 String MQTTHandler::getDeviceJson() {
@@ -328,7 +340,7 @@ String MQTTHandler::getDeviceJson() {
     device["name"] = "Rituals Diffuser";
     device["model"] = "Perfume Genie 2.0";
     device["manufacturer"] = "Rituals (Custom FW)";
-    device["sw_version"] = "1.2.0";
+    device["sw_version"] = "1.3.1";
 
     String output;
     serializeJson(device, output);

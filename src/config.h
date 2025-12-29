@@ -118,6 +118,12 @@
 #define NVS_INTERVAL_OFF        "interval_off"
 #define NVS_INTERVAL_ENABLED    "interval_en"
 #define NVS_TOTAL_RUNTIME       "total_run"
+#define NVS_OTA_PASSWORD        "ota_pass"
+#define NVS_AP_PASSWORD         "ap_pass"
+#define NVS_NIGHT_ENABLED       "night_en"
+#define NVS_NIGHT_START         "night_start"
+#define NVS_NIGHT_END           "night_end"
+#define NVS_NIGHT_BRIGHT        "night_bri"
 
 // ===========================================
 // LED Colors (RGB)
