@@ -1,0 +1,105 @@
+name: Build Firmware
+
+on:
+  push:
+    branches: [ main, claude/* ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Cache PlatformIO
+      uses: actions/cache@v3
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade platformio
+
+    - name: Build firmware (ESP8266)
+      run: pio run -e esp8266
+
+    - name: Build filesystem (SPIFFS)
+      run: pio run -e esp8266 -t buildfs
+
+    - name: Rename artifacts
+      run: |
+        mkdir -p artifacts
+        cp .pio/build/esp8266/firmware.bin artifacts/rituals-diffuser-v1.3.0-esp8266.bin
+        if [ -f .pio/build/esp8266/spiffs.bin ]; then
+          cp .pio/build/esp8266/spiffs.bin artifacts/rituals-diffuser-v1.3.0-spiffs.bin
+        fi
+
+    - name: Upload firmware artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: firmware-esp8266
+        path: artifacts/rituals-diffuser-v1.3.0-esp8266.bin
+        retention-days: 30
+
+    - name: Upload SPIFFS artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: spiffs-esp8266
+        path: artifacts/rituals-diffuser-v1.3.0-spiffs.bin
+        retention-days: 30
+        if-no-files-found: ignore
+
+    - name: Create Release (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/rituals-diffuser-v1.3.0-esp8266.bin
+          artifacts/rituals-diffuser-v1.3.0-spiffs.bin
+        body: |
+          ## Rituals Diffuser Firmware ${{ github.ref_name }}
+
+          ### Installation
+
+          **Option 1: Web OTA (if already running custom firmware)**
+          1. Download `rituals-diffuser-v1.3.0-esp8266.bin`
+          2. Go to http://rituals-diffuser.local/
+          3. Upload the firmware file via the web interface
+
+          **Option 2: Serial Flash (first time)**
+          ```bash
+          esptool.py --port /dev/cu.usbserial-XXXX write_flash 0x00000 rituals-diffuser-v1.3.0-esp8266.bin
+          ```
+
+          **Option 3: PlatformIO OTA**
+          ```bash
+          pio run -e esp8266_ota -t upload
+          ```
+
+          ### What's New
+          See [CHANGELOG](https://github.com/martijnrenkema/Rituals-diffuser#changelog) for details.
+
+          ### Files
+          - `rituals-diffuser-v1.3.0-esp8266.bin` - Main firmware (flash to 0x00000)
+          - `rituals-diffuser-v1.3.0-spiffs.bin` - Web files (optional, if updating web interface)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
