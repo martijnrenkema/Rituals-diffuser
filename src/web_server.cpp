@@ -5,6 +5,7 @@
 #include "fan_controller.h"
 #include "mqtt_handler.h"
 #include "rfid_handler.h"
+#include "logger.h"
 #include <ArduinoJson.h>
 #include <Update.h>
 
@@ -205,6 +206,11 @@ void WebServer::setupRoutes() {
             handleRestore(request, (uint8_t*)_restoreBuffer.c_str(), _restoreBuffer.length());
             _restoreBuffer = "";  // Clear buffer after processing
         }
+    });
+
+    // Logs API endpoint
+    _server->on("/api/logs", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleLogs(request);
     });
 
     // Web OTA Update endpoint
@@ -780,7 +786,7 @@ void WebServer::handleBackup(AsyncWebServerRequest* request) {
     doc["night_mode"]["brightness"] = settings.nightModeBrightness;
 
     // Metadata
-    doc["backup_version"] = "1.1.0";
+    doc["backup_version"] = "1.2.0";
     doc["backup_timestamp"] = millis() / 1000;
 
     String output;
@@ -869,8 +875,48 @@ void WebServer::handleRestore(AsyncWebServerRequest* request, uint8_t *data, siz
     // Save restored settings
     storage.save(settings);
 
-    request->send(200, "application/json", 
+    request->send(200, "application/json",
                  "{\"success\":true,\"message\":\"Configuration restored. Restart device to apply.\"}");
 
     Serial.println("[WEB] Configuration restored from backup");
+}
+
+// Get system logs
+void WebServer::handleLogs(AsyncWebServerRequest* request) {
+    DynamicJsonDocument doc(4096);
+    doc["version"] = "1.2.0";
+    doc["uptime"] = millis() / 1000;  // seconds
+    doc["count"] = logger.getLogCount();
+
+    JsonArray logs = doc.createNestedArray("logs");
+
+    for (int i = 0; i < logger.getLogCount(); i++) {
+        const LogEntry& entry = logger.getLog(i);
+        JsonObject log = logs.createNestedObject();
+
+        log["timestamp"] = entry.timestamp;
+
+        // Format timestamp as human-readable (MM:SS)
+        unsigned long seconds = entry.timestamp / 1000;
+        unsigned long minutes = seconds / 60;
+        seconds = seconds % 60;
+        char timeStr[16];
+        snprintf(timeStr, sizeof(timeStr), "%02lu:%02lu", minutes % 60, seconds);
+        log["time"] = timeStr;
+
+        // Level as string
+        const char* level = "INFO";
+        switch (entry.level) {
+            case LogLevel::INFO:    level = "INFO"; break;
+            case LogLevel::WARNING: level = "WARN"; break;
+            case LogLevel::ERROR:   level = "ERROR"; break;
+            case LogLevel::DEBUG:   level = "DEBUG"; break;
+        }
+        log["level"] = level;
+        log["message"] = entry.message;
+    }
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
 }

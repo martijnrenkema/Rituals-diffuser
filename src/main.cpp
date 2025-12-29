@@ -9,6 +9,7 @@
 #include "led_controller.h"
 #include "ota_handler.h"
 #include "rfid_handler.h"
+#include "logger.h"
 
 #ifdef PLATFORM_ESP8266
 #include "button_handler.h"
@@ -74,9 +75,11 @@ void onCartridgeChange(const char* name) {
 void onWiFiStateChange(WifiStatus state) {
     switch (state) {
         case WifiStatus::CONNECTING:
+            logger.info("WiFi connecting...");
             ledController.showConnecting();
             break;
         case WifiStatus::CONNECTED:
+            logger.info("WiFi connected: %s", wifiManager.getIP());
             if (fanController.isOn()) {
                 ledController.showFanRunning();
             } else {
@@ -90,9 +93,11 @@ void onWiFiStateChange(WifiStatus state) {
             rfidHandler.begin();
             break;
         case WifiStatus::AP_MODE:
+            logger.warning("WiFi AP mode active");
             ledController.showAPMode();
             break;
         case WifiStatus::DISCONNECTED:
+            logger.error("WiFi disconnected - LED showing red");
             ledController.showError();
             break;
     }
@@ -193,9 +198,12 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.1.0");
+    Serial.println("  Custom Firmware v1.2.0");
     Serial.println("=================================");
     Serial.println();
+
+    // Initialize logger first
+    logger.begin();
 
     // Initialize components
     storage.begin();

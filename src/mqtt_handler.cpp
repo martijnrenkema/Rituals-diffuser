@@ -186,7 +186,7 @@ String MQTTHandler::getDeviceJson() {
     device["name"] = "Rituals Diffuser";
     device["model"] = "Perfume Genie 2.0";
     device["manufacturer"] = "Rituals (Custom FW)";
-    device["sw_version"] = "1.1.0";
+    device["sw_version"] = "1.2.0";
 
     String output;
     serializeJson(device, output);

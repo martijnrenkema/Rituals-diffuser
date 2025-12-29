@@ -46,6 +46,7 @@ private:
     void handleSaveNightMode(AsyncWebServerRequest* request);
     void handleBackup(AsyncWebServerRequest* request);
     void handleRestore(AsyncWebServerRequest* request, uint8_t *data, size_t len);
+    void handleLogs(AsyncWebServerRequest* request);
 };
 
 extern WebServer webServer;

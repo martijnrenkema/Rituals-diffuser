@@ -2,7 +2,7 @@
 
 Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-dependent Rituals firmware with fully local control via Home Assistant.
 
-![Version](https://img.shields.io/badge/Version-1.1.0-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.2.0-brightgreen)
 ![ESP-WROOM-02](https://img.shields.io/badge/ESP-WROOM--02-blue)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP8266-orange)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT-41BDF5)

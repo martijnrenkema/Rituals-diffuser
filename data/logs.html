@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>System Logs - Rituals Diffuser</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .log-container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .log-table thead {
+            background: var(--primary);
+            color: white;
+        }
+        .log-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .log-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .log-table tr:last-child td {
+            border-bottom: none;
+        }
+        .log-level {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .log-level.INFO {
+            background: #3498db;
+            color: white;
+        }
+        .log-level.WARN {
+            background: #f39c12;
+            color: white;
+        }
+        .log-level.ERROR {
+            background: #e74c3c;
+            color: white;
+        }
+        .log-level.DEBUG {
+            background: #95a5a6;
+            color: white;
+        }
+        .log-time {
+            font-family: 'Courier New', monospace;
+            color: #7f8c8d;
+            font-size: 13px;
+        }
+        .log-message {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #7f8c8d;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-card h4 {
+            margin: 0 0 8px 0;
+            color: #7f8c8d;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .btn-refresh {
+            padding: 8px 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-refresh:hover {
+            opacity: 0.9;
+        }
+        .back-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="log-container">
+        <div class="log-header">
+            <div>
+                <h1>System Logs</h1>
+                <a href="/" class="back-link">← Back to Dashboard</a>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div class="auto-refresh">
+                    <label>
+                        <input type="checkbox" id="autoRefresh" checked> Auto-refresh
+                    </label>
+                </div>
+                <button class="btn-refresh" onclick="fetchLogs()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h4>Uptime</h4>
+                <div class="value" id="uptime">--</div>
+            </div>
+            <div class="stat-card">
+                <h4>Log Entries</h4>
+                <div class="value" id="logCount">--</div>
+            </div>
+            <div class="stat-card">
+                <h4>Version</h4>
+                <div class="value" id="version">v1.2.0</div>
+            </div>
+        </div>
+
+        <div id="logContent">
+            <div class="empty-state">
+                <p>Loading logs...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+
+                // Update stats
+                const uptimeSeconds = data.uptime;
+                const hours = Math.floor(uptimeSeconds / 3600);
+                const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+                document.getElementById('uptime').textContent = `${hours}h ${minutes}m`;
+                document.getElementById('logCount').textContent = data.count;
+                document.getElementById('version').textContent = data.version || 'v1.2.0';
+
+                // Render logs table
+                const content = document.getElementById('logContent');
+
+                if (data.logs && data.logs.length > 0) {
+                    let html = '<table class="log-table"><thead><tr>';
+                    html += '<th style="width: 80px;">Time</th>';
+                    html += '<th style="width: 80px;">Level</th>';
+                    html += '<th>Message</th>';
+                    html += '</tr></thead><tbody>';
+
+                    // Reverse to show newest first
+                    data.logs.slice().reverse().forEach(log => {
+                        html += '<tr>';
+                        html += `<td class="log-time">${log.time}</td>`;
+                        html += `<td><span class="log-level ${log.level}">${log.level}</span></td>`;
+                        html += `<td class="log-message">${escapeHtml(log.message)}</td>`;
+                        html += '</tr>';
+                    });
+
+                    html += '</tbody></table>';
+                    content.innerHTML = html;
+                } else {
+                    content.innerHTML = '<div class="empty-state"><p>No logs available yet</p></div>';
+                }
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+                document.getElementById('logContent').innerHTML =
+                    '<div class="empty-state"><p>Failed to load logs</p></div>';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function setupAutoRefresh() {
+            const checkbox = document.getElementById('autoRefresh');
+
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    // Refresh every 5 seconds
+                    autoRefreshInterval = setInterval(fetchLogs, 5000);
+                } else {
+                    if (autoRefreshInterval) {
+                        clearInterval(autoRefreshInterval);
+                        autoRefreshInterval = null;
+                    }
+                }
+            });
+
+            // Start with auto-refresh enabled
+            if (checkbox.checked) {
+                autoRefreshInterval = setInterval(fetchLogs, 5000);
+            }
+        }
+
+        // Initial load
+        fetchLogs();
+        setupAutoRefresh();
+    </script>
+</body>
+</html>
