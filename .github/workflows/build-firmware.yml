@@ -49,7 +49,7 @@ jobs:
         ls -lah artifacts/
 
     - name: Upload firmware artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: firmware-esp8266-v1.3.0
         path: artifacts/*.bin
