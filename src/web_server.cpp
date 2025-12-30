@@ -9,14 +9,12 @@
 #include <ArduinoJson.h>
 
 #ifdef PLATFORM_ESP8266
-    #include <ESP8266WiFi.h>
     #include <FS.h>
-    #include <Updater.h>  // ESP8266 OTA Update support
 #else
-    #include <WiFi.h>
     #include <SPIFFS.h>
-    #include <Update.h>   // ESP32 OTA Update support
 #endif
+
+// Update object is provided automatically by Arduino core
 
 WebServer webServer;
 
