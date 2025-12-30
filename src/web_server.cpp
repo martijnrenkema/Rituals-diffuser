@@ -11,13 +11,12 @@
 #ifdef PLATFORM_ESP8266
     #include <ESP8266WiFi.h>
     #include <FS.h>
+    #include <Updater.h>  // ESP8266 OTA Update support
 #else
     #include <WiFi.h>
     #include <SPIFFS.h>
+    #include <Update.h>   // ESP32 OTA Update support
 #endif
-
-// OTA Update support - must be included after WiFi
-#include <ArduinoOTA.h>
 
 WebServer webServer;
 
