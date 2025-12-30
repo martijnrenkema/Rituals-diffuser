@@ -26,32 +26,46 @@ jobs:
         pip install --upgrade platformio
         pio --version
 
-    - name: Build firmware
+    - name: Build firmware (ESP8266)
       run: |
         echo "Building firmware for ESP8266..."
         pio run -e esp8266 -v
-        echo "Build completed successfully!"
+        echo "ESP8266 build completed!"
 
-    - name: Check build output
+    - name: Build firmware (ESP32)
       run: |
-        echo "Checking for firmware.bin..."
+        echo "Building firmware for ESP32..."
+        pio run -e esp32 -v
+        echo "ESP32 build completed!"
+
+    - name: Check build outputs
+      run: |
+        echo "Checking ESP8266 firmware..."
         ls -lah .pio/build/esp8266/
         if [ ! -f .pio/build/esp8266/firmware.bin ]; then
-          echo "ERROR: firmware.bin not found!"
+          echo "ERROR: ESP8266 firmware.bin not found!"
           exit 1
         fi
+        echo "Checking ESP32 firmware..."
+        ls -lah .pio/build/esp32/
+        if [ ! -f .pio/build/esp32/firmware.bin ]; then
+          echo "ERROR: ESP32 firmware.bin not found!"
+          exit 1
+        fi
+        echo "Both builds successful!"
 
     - name: Prepare artifacts
       run: |
         mkdir -p artifacts
         cp .pio/build/esp8266/firmware.bin artifacts/rituals-diffuser-v1.3.0-esp8266.bin
-        echo "Artifact prepared:"
+        cp .pio/build/esp32/firmware.bin artifacts/rituals-diffuser-v1.3.0-esp32.bin
+        echo "Artifacts prepared:"
         ls -lah artifacts/
 
-    - name: Upload firmware artifact
+    - name: Upload firmware artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-esp8266-v1.3.0
+        name: firmware-v1.3.0
         path: artifacts/*.bin
         retention-days: 30
 
@@ -63,16 +77,30 @@ jobs:
         body: |
           ## Rituals Diffuser Firmware ${{ github.ref_name }}
 
+          ### Platform Support
+
+          ✅ **ESP8266** - Original Rituals Perfume Genie 2.0 hardware
+          ✅ **ESP32** - Custom builds and newer hardware
+
           ### Installation
 
           **Web OTA (if already running custom firmware)**
-          1. Download `rituals-diffuser-v1.3.0-esp8266.bin`
+          1. Download the correct .bin for your platform:
+             - ESP8266: `rituals-diffuser-v1.3.0-esp8266.bin`
+             - ESP32: `rituals-diffuser-v1.3.0-esp32.bin`
           2. Go to http://rituals-diffuser.local/
           3. Upload via web interface
 
           **Serial Flash (first time)**
+
+          ESP8266:
           ```bash
           esptool.py --port /dev/cu.usbserial-XXXX write_flash 0x00000 rituals-diffuser-v1.3.0-esp8266.bin
+          ```
+
+          ESP32:
+          ```bash
+          esptool.py --port /dev/cu.usbserial-XXXX write_flash 0x1000 rituals-diffuser-v1.3.0-esp32.bin
           ```
 
           ### What's New
