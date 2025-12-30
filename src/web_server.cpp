@@ -9,12 +9,15 @@
 #include <ArduinoJson.h>
 
 #ifdef PLATFORM_ESP8266
+    #include <ESP8266WiFi.h>
+    #include <ESP8266WebServer.h>
     #include <FS.h>
+    // Update is part of ESP8266 core, available globally
 #else
+    #include <WiFi.h>
     #include <SPIFFS.h>
+    #include <Update.h>
 #endif
-
-// Update object is provided automatically by Arduino core
 
 WebServer webServer;
 
