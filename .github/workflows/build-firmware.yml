@@ -13,96 +13,69 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Cache pip
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-
-    - name: Cache PlatformIO
-      uses: actions/cache@v3
-      with:
-        path: ~/.platformio
-        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+    - name: Checkout code
+      uses: actions/checkout@v3
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.11'
 
-    - name: Install PlatformIO
+    - name: Install PlatformIO Core
       run: |
-        python -m pip install --upgrade pip
         pip install --upgrade platformio
+        pio --version
 
-    - name: Build firmware (ESP8266)
-      run: pio run -e esp8266
+    - name: Build firmware
+      run: |
+        echo "Building firmware for ESP8266..."
+        pio run -e esp8266 -v
+        echo "Build completed successfully!"
 
-    - name: Build filesystem (SPIFFS)
-      run: pio run -e esp8266 -t buildfs
-      continue-on-error: true
+    - name: Check build output
+      run: |
+        echo "Checking for firmware.bin..."
+        ls -lah .pio/build/esp8266/
+        if [ ! -f .pio/build/esp8266/firmware.bin ]; then
+          echo "ERROR: firmware.bin not found!"
+          exit 1
+        fi
 
     - name: Prepare artifacts
       run: |
         mkdir -p artifacts
         cp .pio/build/esp8266/firmware.bin artifacts/rituals-diffuser-v1.3.0-esp8266.bin
-        # Only copy SPIFFS if it exists
-        if [ -f .pio/build/esp8266/spiffs.bin ]; then
-          cp .pio/build/esp8266/spiffs.bin artifacts/rituals-diffuser-v1.3.0-spiffs.bin
-        fi
+        echo "Artifact prepared:"
         ls -lah artifacts/
 
     - name: Upload firmware artifact
       uses: actions/upload-artifact@v3
       with:
-        name: firmware-esp8266
-        path: artifacts/rituals-diffuser-v1.3.0-esp8266.bin
+        name: firmware-esp8266-v1.3.0
+        path: artifacts/*.bin
         retention-days: 30
-
-    - name: Upload SPIFFS artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: spiffs-esp8266
-        path: artifacts/rituals-diffuser-v1.3.0-spiffs.bin
-        retention-days: 30
-        if-no-files-found: ignore
 
     - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          artifacts/rituals-diffuser-v1.3.0-esp8266.bin
-          artifacts/rituals-diffuser-v1.3.0-spiffs.bin
+        files: artifacts/*.bin
         body: |
           ## Rituals Diffuser Firmware ${{ github.ref_name }}
 
           ### Installation
 
-          **Option 1: Web OTA (if already running custom firmware)**
+          **Web OTA (if already running custom firmware)**
           1. Download `rituals-diffuser-v1.3.0-esp8266.bin`
           2. Go to http://rituals-diffuser.local/
-          3. Upload the firmware file via the web interface
+          3. Upload via web interface
 
-          **Option 2: Serial Flash (first time)**
+          **Serial Flash (first time)**
           ```bash
           esptool.py --port /dev/cu.usbserial-XXXX write_flash 0x00000 rituals-diffuser-v1.3.0-esp8266.bin
           ```
 
-          **Option 3: PlatformIO OTA**
-          ```bash
-          pio run -e esp8266_ota -t upload
-          ```
-
           ### What's New
-          See [CHANGELOG](https://github.com/martijnrenkema/Rituals-diffuser#changelog) for details.
-
-          ### Files
-          - `rituals-diffuser-v1.3.0-esp8266.bin` - Main firmware (flash to 0x00000)
-          - `rituals-diffuser-v1.3.0-spiffs.bin` - Web files (optional, if updating web interface)
+          See [CHANGELOG](https://github.com/martijnrenkema/Rituals-diffuser#changelog)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
