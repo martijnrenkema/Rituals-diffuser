@@ -7,13 +7,17 @@
 #include "rfid_handler.h"
 #include "logger.h"
 #include <ArduinoJson.h>
-#include <Update.h>
 
 #ifdef PLATFORM_ESP8266
+    #include <ESP8266WiFi.h>
     #include <FS.h>
 #else
+    #include <WiFi.h>
     #include <SPIFFS.h>
 #endif
+
+// OTA Update support - must be included after WiFi
+#include <ArduinoOTA.h>
 
 WebServer webServer;
 
