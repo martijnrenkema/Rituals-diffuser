@@ -352,3 +352,74 @@ document.querySelector('details:has(.diag-section)')?.addEventListener('toggle',
         if(buttonPollInterval)clearInterval(buttonPollInterval);
     }
 });
+
+// =====================================================
+// System Logs
+// =====================================================
+
+async function fetchLogs(){
+    try{
+        const r=await fetch('/api/logs');
+        const logs=await r.json();
+        renderLogs(logs);
+    }catch(e){
+        console.error(e);
+        $('#logs-container').innerHTML='<div class="log-error">Error loading logs</div>';
+    }
+}
+
+function renderLogs(logs){
+    const container=$('#logs-container');
+    if(!logs||logs.length===0){
+        container.innerHTML='<div class="log-empty">No logs available</div>';
+        return;
+    }
+
+    // Reverse to show newest first
+    const html=logs.slice().reverse().map(log=>{
+        const time=formatLogTime(log);
+        const levelClass=log.l.toLowerCase();
+        return `<div class="log-entry log-${levelClass}">
+            <span class="log-time">${time}</span>
+            <span class="log-level">${log.l}</span>
+            <span class="log-msg">${escapeHtml(log.m)}</span>
+        </div>`;
+    }).join('');
+
+    container.innerHTML=html;
+}
+
+function formatLogTime(log){
+    // If we have epoch time, format it nicely
+    if(log.e>0){
+        const d=new Date(log.e*1000);
+        return d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    }
+    // Otherwise show uptime in seconds
+    const secs=Math.floor(log.t/1000);
+    const mins=Math.floor(secs/60);
+    const hrs=Math.floor(mins/60);
+    if(hrs>0)return`+${hrs}h${mins%60}m`;
+    if(mins>0)return`+${mins}m${secs%60}s`;
+    return`+${secs}s`;
+}
+
+function escapeHtml(str){
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+$('#refresh-logs').onclick=()=>fetchLogs();
+
+$('#clear-logs').onclick=async()=>{
+    if(confirm('Clear all logs?')){
+        try{
+            await fetch('/api/logs',{method:'DELETE'});
+            fetchLogs();
+        }catch(e){console.error(e)}
+    }
+};
+
+// Load logs when section is opened
+$('#logs-section')?.addEventListener('toggle',function(){
+    if(this.open)fetchLogs();
+});

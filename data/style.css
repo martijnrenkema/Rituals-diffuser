@@ -85,3 +85,15 @@ footer a:hover{text-decoration:underline}
 .diag-status{font-size:.85rem;color:var(--dim);margin-bottom:8px;display:flex;align-items:center;gap:6px}
 .diag-btns{display:flex;flex-wrap:wrap;gap:8px}
 .diag-btns .btn-sm{padding:6px 12px;font-size:.8rem}
+.logs-header{display:flex;gap:8px;margin-bottom:12px}
+.logs-header .btn-sm.danger{background:var(--red);font-weight:normal}
+.logs-container{max-height:300px;overflow-y:auto;font-family:'SF Mono',Monaco,'Courier New',monospace;font-size:.75rem;background:rgba(0,0,0,0.3);border-radius:8px;padding:8px}
+.log-entry{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.log-entry:last-child{border-bottom:none}
+.log-time{color:var(--dim);min-width:60px}
+.log-level{min-width:45px;font-weight:600}
+.log-info .log-level{color:var(--accent)}
+.log-warn .log-level{color:var(--orange)}
+.log-error .log-level{color:var(--red)}
+.log-msg{color:var(--text);word-break:break-word}
+.log-empty,.log-loading,.log-error{color:var(--dim);text-align:center;padding:20px}

@@ -208,6 +208,17 @@
                 </form>
             </details>
 
+            <details class="card" id="logs-section">
+                <summary>System Logs</summary>
+                <div class="logs-header">
+                    <button id="refresh-logs" class="btn-sm">Refresh</button>
+                    <button id="clear-logs" class="btn-sm danger">Clear</button>
+                </div>
+                <div id="logs-container" class="logs-container">
+                    <div class="log-loading">Loading logs...</div>
+                </div>
+            </details>
+
             <details class="card">
                 <summary>System</summary>
                 <div class="info">
@@ -220,7 +231,7 @@
         <footer>
             <a href="/update.html">Firmware Update</a>
             <a href="https://github.com/martijnrenkema/Rituals-diffuser" target="_blank" rel="noopener">GitHub</a>
-            <span class="version">v1.3.0</span>
+            <span class="version">v1.4.0</span>
         </footer>
     </div>
     <script src="script.js"></script>

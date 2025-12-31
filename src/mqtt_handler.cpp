@@ -3,6 +3,7 @@
 #include "fan_controller.h"
 #include "wifi_manager.h"
 #include "storage.h"
+#include "logger.h"
 #include <ArduinoJson.h>
 
 // WiFi library is included via mqtt_handler.h
@@ -42,6 +43,7 @@ void MQTTHandler::loop() {
                 if (_mqttClient.connect(clientId.c_str(), _user.c_str(), _password.c_str(),
                                         (getBaseTopic() + "/availability").c_str(), 0, true, "offline")) {
                     Serial.println("[MQTT] Connected");
+                    logger.infof("MQTT connected to %s:%d", _host.c_str(), _port);
 
                     publishAvailability(true);
 
@@ -65,6 +67,7 @@ void MQTTHandler::loop() {
                     _mqttClient.subscribe((getBaseTopic() + "/interval_off/set").c_str());
                 } else {
                     Serial.printf("[MQTT] Connection failed, rc=%d\n", _mqttClient.state());
+                    logger.errorf("MQTT connection failed (rc=%d)", _mqttClient.state());
                 }
             }
         }
@@ -340,7 +343,7 @@ String MQTTHandler::getDeviceJson() {
     device["name"] = "Rituals Diffuser";
     device["model"] = "Perfume Genie 2.0";
     device["manufacturer"] = "Rituals (Custom FW)";
-    device["sw_version"] = "1.3.1";
+    device["sw_version"] = "1.4.0";
 
     String output;
     serializeJson(device, output);

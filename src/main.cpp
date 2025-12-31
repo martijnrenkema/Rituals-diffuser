@@ -8,6 +8,7 @@
 #include "fan_controller.h"
 #include "led_controller.h"
 #include "ota_handler.h"
+#include "logger.h"
 
 #include "button_handler.h"
 
@@ -160,11 +161,13 @@ void onOTAStart() {
     otaInProgress = true;
     updateLedStatus();
     fanController.turnOff();
+    logger.info("OTA update started");
 }
 
 void onOTAEnd() {
     otaInProgress = false;
     updateLedStatus();
+    logger.info("OTA update completed");
 }
 
 // Button handlers for Rituals Genie
@@ -179,6 +182,7 @@ void onFrontButton(ButtonEvent event) {
     } else if (event == ButtonEvent::LONG_PRESS) {
         // Start AP mode for WiFi configuration
         Serial.println("[MAIN] AP mode triggered by button!");
+        logger.info("AP mode triggered by button");
         wifiManager.startAP();
         updateLedStatus();
     }
@@ -188,12 +192,14 @@ void onRearButton(ButtonEvent event) {
     if (event == ButtonEvent::SHORT_PRESS) {
         // Restart ESP32
         Serial.println("[MAIN] Restart triggered by button");
+        logger.info("Restart triggered by button");
         ledController.showError();  // Flash red to indicate restart
         delay(500);
         ESP.restart();
     } else if (event == ButtonEvent::LONG_PRESS) {
         // Factory reset - clear all settings and restart
         Serial.println("[MAIN] Factory reset triggered!");
+        logger.warn("Factory reset triggered");
         ledController.showError();
         delay(1000);
         storage.reset();
@@ -209,9 +215,13 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.3.1");
+    Serial.println("  Custom Firmware v1.4.0");
     Serial.println("=================================");
     Serial.println();
+
+    // Initialize logger first
+    logger.begin();
+    logger.info("System startup - v1.4.0");
 
     // Initialize components
     storage.begin();
