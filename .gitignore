@@ -16,6 +16,9 @@
 *.bin
 *.map
 
+# Exception: release binaries should be tracked
+!release/*.bin
+
 # OS
 .DS_Store
 Thumbs.db

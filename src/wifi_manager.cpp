@@ -1,6 +1,7 @@
 #include "wifi_manager.h"
 #include "config.h"
 #include "storage.h"
+#include "logger.h"
 
 // WiFi library is included via wifi_manager.h
 
@@ -23,12 +24,15 @@ void WiFiManager::loop() {
                 setState(WifiStatus::CONNECTED);
                 Serial.printf("[WIFI] Connected to %s\n", _ssid.c_str());
                 Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+                logger.infof("WiFi connected: %s (%s)", _ssid.c_str(), WiFi.localIP().toString().c_str());
             } else if (now - _connectStartTime >= WIFI_CONNECT_TIMEOUT) {
                 _reconnectAttempts++;
                 Serial.printf("[WIFI] Connection timeout (attempt %d/%d)\n", _reconnectAttempts, MAX_RECONNECT_ATTEMPTS);
+                logger.warnf("WiFi timeout (attempt %d/%d)", _reconnectAttempts, MAX_RECONNECT_ATTEMPTS);
 
                 if (_reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
                     Serial.println("[WIFI] Max attempts reached, starting AP mode as fallback");
+                    logger.error("WiFi max attempts reached, starting AP mode");
                     startAP();
                 } else {
                     setState(WifiStatus::DISCONNECTED);
@@ -40,6 +44,7 @@ void WiFiManager::loop() {
         case WifiStatus::CONNECTED:
             if (WiFi.status() != WL_CONNECTED) {
                 Serial.println("[WIFI] Connection lost, will attempt reconnect");
+                logger.error("WiFi connection lost");
                 setState(WifiStatus::DISCONNECTED);
                 _lastReconnectAttempt = now;
             }
@@ -67,6 +72,7 @@ void WiFiManager::loop() {
             if (WiFi.status() == WL_CONNECTED) {
                 Serial.println("[WIFI] Reconnected to WiFi!");
                 Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+                logger.infof("WiFi reconnected from AP: %s", WiFi.localIP().toString().c_str());
                 _reconnectAttempts = 0;
                 // Stop AP mode to close the security hole
                 stopAP();
@@ -110,6 +116,7 @@ void WiFiManager::startAP() {
     setState(WifiStatus::AP_MODE);
     Serial.printf("[WIFI] AP started: %s\n", _apName.c_str());
     Serial.printf("[WIFI] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+    logger.infof("AP mode started: %s", _apName.c_str());
 }
 
 void WiFiManager::stopAP() {

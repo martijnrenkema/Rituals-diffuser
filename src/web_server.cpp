@@ -6,6 +6,7 @@
 #include "led_controller.h"
 #include "button_handler.h"
 #include "mqtt_handler.h"
+#include "logger.h"
 #include <ArduinoJson.h>
 
 // External function and flag from main.cpp for LED priority system
@@ -104,6 +105,16 @@ void WebServer::setupRoutes() {
 
     _server->on("/api/night", HTTP_POST, [this](AsyncWebServerRequest* request) {
         handleSaveNightMode(request);
+    });
+
+    // System logs
+    _server->on("/api/logs", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "application/json", logger.toJson());
+    });
+
+    _server->on("/api/logs", HTTP_DELETE, [](AsyncWebServerRequest* request) {
+        logger.clear();
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Logs cleared\"}");
     });
 
     // Hardware diagnostics
