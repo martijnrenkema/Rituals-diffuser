@@ -215,13 +215,13 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.4.0");
+    Serial.println("  Custom Firmware v1.5.0");
     Serial.println("=================================");
     Serial.println();
 
     // Initialize logger first
     logger.begin();
-    logger.info("System startup - v1.4.0");
+    logger.info("System startup - v1.5.0");
 
     // Initialize components
     storage.begin();
@@ -287,11 +287,14 @@ void loop() {
     mqttHandler.loop();
     yield();
 
-    // Check night mode every minute
+    // Periodic tasks every minute
     unsigned long now = millis();
     if (now - lastNightModeCheck >= 60000) {
         checkNightMode();
         lastNightModeCheck = now;
+
+        // Save logs periodically (only writes if dirty)
+        logger.save();
     }
 
     // Give async tasks (WiFi, MQTT, WebServer) enough CPU time

@@ -390,13 +390,27 @@ function renderLogs(logs){
 }
 
 function formatLogTime(log){
-    // If we have epoch time, format it nicely
+    // If we have epoch time, format it with date and time
     if(log.e>0){
         const d=new Date(log.e*1000);
-        return d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        const now=new Date();
+        const isToday=d.toDateString()===now.toDateString();
+        const isYesterday=new Date(now-86400000).toDateString()===d.toDateString();
+
+        const timeStr=d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+        if(isToday){
+            return timeStr;
+        }else if(isYesterday){
+            return`Yesterday ${timeStr}`;
+        }else{
+            // Show date for older entries
+            const dateStr=d.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit'});
+            return`${dateStr} ${timeStr}`;
+        }
     }
-    // Otherwise show uptime in seconds
-    const secs=Math.floor(log.t/1000);
+    // Fallback: show uptime in seconds (no NTP sync yet)
+    const secs=Math.floor((log.u||0)/1000);
     const mins=Math.floor(secs/60);
     const hrs=Math.floor(mins/60);
     if(hrs>0)return`+${hrs}h${mins%60}m`;

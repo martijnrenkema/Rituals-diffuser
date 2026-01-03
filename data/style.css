@@ -90,7 +90,7 @@ footer a:hover{text-decoration:underline}
 .logs-container{max-height:300px;overflow-y:auto;font-family:'SF Mono',Monaco,'Courier New',monospace;font-size:.75rem;background:rgba(0,0,0,0.3);border-radius:8px;padding:8px}
 .log-entry{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
 .log-entry:last-child{border-bottom:none}
-.log-time{color:var(--dim);min-width:60px}
+.log-time{color:var(--dim);min-width:110px;white-space:nowrap}
 .log-level{min-width:45px;font-weight:600}
 .log-info .log-level{color:var(--accent)}
 .log-warn .log-level{color:var(--orange)}

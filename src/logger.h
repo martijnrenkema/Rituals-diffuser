@@ -12,15 +12,18 @@ enum class LogLevel {
 
 // Single log entry
 struct LogEntry {
-    unsigned long timestamp;    // millis() when logged
     time_t epochTime;          // Unix timestamp (0 if NTP not synced)
+    unsigned long uptimeMs;    // millis() at log time (for relative time if no NTP)
     LogLevel level;
     char message[80];          // Truncated to save memory
 };
 
-// Maximum number of log entries to keep in memory
-// Each entry is ~90 bytes, so 50 entries = ~4.5KB RAM
-#define MAX_LOG_ENTRIES 50
+// Maximum number of log entries to keep
+// Entries are stored in SPIFFS for persistence across reboots
+#define MAX_LOG_ENTRIES 100
+
+// Log file path
+#define LOG_FILE_PATH "/logs.bin"
 
 class Logger {
 public:
@@ -37,8 +40,8 @@ public:
     void errorf(const char* format, ...);
 
     // Get logs
-    uint8_t getCount();
-    const LogEntry* getEntry(uint8_t index);  // 0 = oldest
+    uint16_t getCount();
+    const LogEntry* getEntry(uint16_t index);  // 0 = oldest
 
     // Clear all logs
     void clear();
@@ -46,13 +49,20 @@ public:
     // Get JSON representation of all logs
     String toJson();
 
+    // Save logs to SPIFFS (called periodically)
+    void save();
+
 private:
     LogEntry _entries[MAX_LOG_ENTRIES];
-    uint8_t _head = 0;      // Next write position
-    uint8_t _count = 0;     // Number of entries
+    uint16_t _head = 0;      // Next write position
+    uint16_t _count = 0;     // Number of entries
+    bool _dirty = false;     // True if logs changed since last save
+    unsigned long _lastSave = 0;
 
     void addEntry(LogLevel level, const char* message);
     const char* levelToString(LogLevel level);
+    void loadFromFile();
+    void saveToFile();
 };
 
 // Global instance
