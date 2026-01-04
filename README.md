@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.3.1-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.5.0-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Supported-blue)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -323,6 +323,21 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.5.0
+- Logs now persist to flash storage across reboots
+- Auto-retention: logs older than 7 days are automatically removed
+- Real timestamps displayed (date + time when NTP is synced)
+- Increased log capacity from 50 to 100 entries
+- Errors and warnings are immediately saved to flash
+- Today's logs show time only, older logs show full date + time
+
+### v1.4.0
+- Added system logging for debugging (WiFi, MQTT, OTA, button events)
+- New "System Logs" section in web interface with refresh/clear buttons
+- Circular buffer logging system (50 entries in RAM)
+- Log levels: INFO, WARN, ERROR with color coding
+- API endpoints: GET /api/logs, DELETE /api/logs
 
 ### v1.3.1
 - Fixed runtime double counting bug in turnOff()
