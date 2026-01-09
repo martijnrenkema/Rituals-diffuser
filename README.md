@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.5.1-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.5.2-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Supported-blue)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -324,11 +324,14 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.5.2
+- Improved LED for Timer + Interval combined mode: slow breathing instead of blinking
+
 ### v1.5.1
 - Fixed MQTT blocking: added 3-second socket timeout to prevent device freeze when broker is offline
 - Fixed async web callbacks: moved WiFi/MQTT/reset actions to main loop to prevent network stack blocking
 - Fixed security: default passwords are now unique per device (MAC-based instead of hardcoded)
-- Fixed LED status: added combined state for Timer + Interval mode (blue slow blink)
+- Fixed LED status: added combined state for Timer + Interval mode
 - Fixed MQTT sw_version reporting (was stuck on 1.4.0)
 
 ### v1.5.0
