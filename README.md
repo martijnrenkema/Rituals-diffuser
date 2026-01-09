@@ -201,10 +201,11 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 
 | Color | Pattern | Status |
 |-------|---------|--------|
-| Red | Blinking | Startup / Error |
+| Red | Blinking | Disconnected / Error |
 | Cyan | Fast blink | Connecting to WiFi |
-| Green | Solid | Connected, fan running |
+| Green | Solid | Fan running |
 | Blue | Solid | Timer active |
+| Blue | Slow breathing | Timer + Interval combined |
 | Purple | Solid | Interval mode active |
 | Orange | Pulsing | AP mode (WiFi config) |
 | Purple | Fast blink | OTA update in progress |
