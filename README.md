@@ -6,14 +6,14 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.6.6-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.7.0-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Untested-yellow)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT-41BDF5)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-> **Looking for ESP8266 testers!** The ESP8266 version builds successfully but has not been tested on actual hardware. If you have an original Rituals Genie with ESP-WROOM-02, please help test and [report any issues](https://github.com/martijnrenkema/Rituals-diffuser/issues).
+> **Looking for ESP8266 testers!** The ESP8266 version builds successfully but has not been tested on actual hardware. If you have a Rituals Perfume Genie 2.0 with the original ESP-WROOM-02, please help test and [report any issues](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
 ## Features
 
@@ -51,6 +51,10 @@ pio run -e esp8266
 ```
 
 ## Hardware
+
+> **⚠️ Compatibility: Rituals Perfume Genie 2.0 only**
+>
+> This firmware is designed for the **Rituals Perfume Genie 2.0** which contains an ESP-WROOM-02 (ESP8266) chip. It is **not compatible** with the Genie 1.0 or Genie 3.0 models which use different hardware.
 
 This firmware supports both **ESP32** (recommended) and the original **ESP-WROOM-02** (ESP8266).
 
