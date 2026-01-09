@@ -121,7 +121,7 @@ pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 > | Chip | File | Address |
 > |------|------|---------|
 > | ESP8266 | `firmware_esp8266.bin` | `0x0` |
-> | ESP8266 | `spiffs_esp8266.bin` | `0x200000` |
+> | ESP8266 | `spiffs_esp8266.bin` | `0x1E0000` |
 > | ESP32 | `firmware_esp32.bin` | `0x10000` |
 > | ESP32 | `spiffs_esp32.bin` | `0x3D0000` |
 >
@@ -132,7 +132,7 @@ pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 ```bash
 # For ESP8266 - flash BOTH files:
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 --baud 460800 \
-  write_flash 0x0 firmware_esp8266.bin 0x200000 spiffs_esp8266.bin
+  write_flash 0x0 firmware_esp8266.bin 0x1E0000 spiffs_esp8266.bin
 
 # For ESP32 - flash BOTH files:
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 --baud 460800 \
@@ -143,7 +143,7 @@ You can also flash them separately:
 ```bash
 # ESP8266
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x0 firmware_esp8266.bin
-esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x200000 spiffs_esp8266.bin
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x1E0000 spiffs_esp8266.bin
 
 # ESP32
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 write_flash 0x10000 firmware_esp32.bin
