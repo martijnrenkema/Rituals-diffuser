@@ -52,9 +52,9 @@ pio run -e esp8266
 
 ## Hardware
 
-> **⚠️ Compatibility: Rituals Perfume Genie 2.0 only**
+> **ℹ️ Developed for Rituals Perfume Genie 2.0**
 >
-> This firmware is designed for the **Rituals Perfume Genie 2.0** which contains an ESP-WROOM-02 (ESP8266) chip. It is **not compatible** with the Genie 1.0 or Genie 3.0 models which use different hardware.
+> This firmware is developed for the **Rituals Perfume Genie 2.0** which contains an ESP-WROOM-02 (ESP8266) chip. Have a different hardware version? Feel free to try and [share your feedback](https://github.com/martijnrenkema/Rituals-diffuser/issues)!
 
 This firmware supports both **ESP32** (recommended) and the original **ESP-WROOM-02** (ESP8266).
 
