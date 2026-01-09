@@ -73,11 +73,11 @@ void WiFiManager::loop() {
             _dnsServer.processNextRequest();
 
             // Periodically try to reconnect to saved WiFi while in AP mode
-            // Non-blocking: just check if already connected
             if (_ssid.length() > 0 && now - _lastAPRetry >= AP_RETRY_INTERVAL) {
                 _lastAPRetry = now;
                 Serial.println("[WIFI] AP mode: trying saved WiFi in background...");
-                // Try to connect while keeping AP active (WIFI_AP_STA mode)
+                // Switch to AP_STA mode to allow WiFi connection while keeping AP active
+                WiFi.mode(WIFI_AP_STA);
                 WiFi.begin(_ssid.c_str(), _password.c_str());
                 // Don't block - we'll check connection status next loop iteration
             }
@@ -131,8 +131,12 @@ bool WiFiManager::isConnected() {
 }
 
 void WiFiManager::startAP() {
-    WiFi.mode(WIFI_AP_STA);  // Both AP and STA mode for flexibility
-    WiFi.softAP(_apName.c_str(), storage.getAPPassword());  // Use stored or default password
+    // Use pure AP mode for better compatibility on ESP8266
+    // AP_STA can cause connection issues on some chips
+    WiFi.mode(WIFI_AP);
+
+    const char* apPassword = storage.getAPPassword();
+    WiFi.softAP(_apName.c_str(), apPassword);
 
     // Start DNS server for captive portal - redirect all domains to AP IP
     _dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
@@ -140,6 +144,7 @@ void WiFiManager::startAP() {
 
     setState(WifiStatus::AP_MODE);
     Serial.printf("[WIFI] AP started: %s\n", _apName.c_str());
+    Serial.printf("[WIFI] AP Password: %s\n", apPassword);
     Serial.printf("[WIFI] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
     logger.infof("AP mode started: %s", _apName.c_str());
 }
