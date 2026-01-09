@@ -61,6 +61,7 @@ function update(d){
     if(d.device){
         if(d.device.mac)$('#mac').textContent=d.device.mac;
         if(d.device.name)$('#device-name').placeholder=d.device.name;
+        if(d.device.version)$('.version').textContent='v'+d.device.version;
     }
 
     if(d.mqtt&&d.mqtt.host){

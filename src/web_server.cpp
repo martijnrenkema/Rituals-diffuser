@@ -369,6 +369,7 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     // Device info
     doc["device"]["name"] = settings.deviceName;
     doc["device"]["mac"] = wifiManager.getMacAddress();
+    doc["device"]["version"] = "1.5.3";
 
     // Statistics
     doc["stats"]["total_runtime"] = storage.getTotalRuntimeMinutes() / 60.0;  // hours

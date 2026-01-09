@@ -319,7 +319,7 @@
             .then(r => r.json())
             .then(d => {
                 document.getElementById('version-info').textContent =
-                    'Firmware: v1.3.0 | MAC: ' + (d.device?.mac || 'Unknown');
+                    'Firmware: v' + (d.device?.version || '?') + ' | MAC: ' + (d.device?.mac || 'Unknown');
             })
             .catch(() => {
                 document.getElementById('version-info').textContent = 'Version info not available';
