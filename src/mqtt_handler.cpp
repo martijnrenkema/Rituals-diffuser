@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "storage.h"
 #include "logger.h"
+#include "update_checker.h"
 #include <ArduinoJson.h>
 
 // WiFi library is included via mqtt_handler.h
@@ -83,9 +84,11 @@ void MQTTHandler::loop() {
         // Process non-blocking publish state machine
         processPublishStateMachine();
 
-        // Handle state publish requests (queued to avoid losing rapid changes)
-        if (_statePublishPending > 0 && _publishState == MqttPublishState::IDLE) {
-            _statePublishPending = 0;  // Clear all pending requests, we'll publish current state
+        // Handle state publish requests (interrupt-safe flag check)
+        if (_statePublishPending && _publishState == MqttPublishState::IDLE) {
+            noInterrupts();
+            _statePublishPending = false;
+            interrupts();
             _publishState = MqttPublishState::STATE_FAN;
             _lastPublishStep = millis();
         }
@@ -152,6 +155,21 @@ void MQTTHandler::processPublishStateMachine() {
 
         case MqttPublishState::DISC_RUNTIME:
             publishTotalRuntimeSensorDiscovery();
+            _publishState = MqttPublishState::DISC_UPDATE_AVAILABLE;
+            break;
+
+        case MqttPublishState::DISC_UPDATE_AVAILABLE:
+            publishUpdateAvailableBinarySensorDiscovery();
+            _publishState = MqttPublishState::DISC_LATEST_VERSION;
+            break;
+
+        case MqttPublishState::DISC_LATEST_VERSION:
+            publishLatestVersionSensorDiscovery();
+            _publishState = MqttPublishState::DISC_CURRENT_VERSION;
+            break;
+
+        case MqttPublishState::DISC_CURRENT_VERSION:
+            publishCurrentVersionSensorDiscovery();
             _publishState = MqttPublishState::DISC_DONE;
             break;
 
@@ -217,6 +235,13 @@ void MQTTHandler::processPublishStateMachine() {
                 snprintf(buf, sizeof(buf), "%.1f", totalHours);
                 _mqttClient.publish((base + "/total_runtime").c_str(), buf, true);
             }
+            _publishState = MqttPublishState::STATE_UPDATE;
+            break;
+
+        case MqttPublishState::STATE_UPDATE:
+            _mqttClient.publish((base + "/update_available").c_str(), updateChecker.isUpdateAvailable() ? "ON" : "OFF", true);
+            _mqttClient.publish((base + "/latest_version").c_str(), updateChecker.getLatestVersion(), true);
+            _mqttClient.publish((base + "/current_version").c_str(), updateChecker.getCurrentVersion(), true);
             _publishState = MqttPublishState::STATE_DONE;
             break;
 
@@ -349,7 +374,7 @@ String MQTTHandler::getDeviceJson() {
     device["name"] = "Rituals Diffuser";
     device["model"] = "Perfume Genie 2.0";
     device["manufacturer"] = "Rituals (Custom FW)";
-    device["sw_version"] = "1.5.4";
+    device["sw_version"] = FIRMWARE_VERSION;
 
     String output;
     serializeJson(device, output);
@@ -500,6 +525,54 @@ void MQTTHandler::publishTotalRuntimeSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_trun/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+
+void MQTTHandler::publishUpdateAvailableBinarySensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Update Available\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_upd\",";
+    p += "\"stat_t\":\"" + b + "/update_available\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"dev_cla\":\"update\",";
+    p += "\"ent_cat\":\"diagnostic\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/binary_sensor/rd_" + _deviceId + "_upd/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+
+void MQTTHandler::publishLatestVersionSensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Latest Version\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_latver\",";
+    p += "\"stat_t\":\"" + b + "/latest_version\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"ic\":\"mdi:package-up\",";
+    p += "\"ent_cat\":\"diagnostic\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_latver/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+
+void MQTTHandler::publishCurrentVersionSensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Firmware Version\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_curver\",";
+    p += "\"stat_t\":\"" + b + "/current_version\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"ic\":\"mdi:chip\",";
+    p += "\"ent_cat\":\"diagnostic\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_curver/config";
     _mqttClient.publish(topic.c_str(), p.c_str(), true);
 }
 

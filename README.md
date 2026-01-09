@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.5.4-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.6.1-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Supported-blue)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -323,6 +323,17 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.6.1
+- Fixed OTA download timeout: added 30s timeout to prevent hanging when server stalls
+- Fixed race condition in MQTT state publish flag using interrupt-safe operations
+- Fixed millis() overflow bug in auto-update first check (failed after 49 days uptime)
+
+### v1.6.0
+- Added auto-update feature: checks GitHub releases every 24 hours
+- ESP32: one-click OTA update directly from web interface
+- ESP8266: shows download link to latest release
+- New System Updates section in web interface
 
 ### v1.5.4
 - Fixed BREATHE_SLOW uint8_t overflow bug causing blink after first cycle

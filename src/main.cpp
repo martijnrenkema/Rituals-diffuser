@@ -9,6 +9,7 @@
 #include "led_controller.h"
 #include "ota_handler.h"
 #include "logger.h"
+#include "update_checker.h"
 
 #include "button_handler.h"
 
@@ -220,13 +221,14 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.5.4");
+    Serial.print("  Custom Firmware v");
+    Serial.println(FIRMWARE_VERSION);
     Serial.println("=================================");
     Serial.println();
 
     // Initialize logger first
     logger.begin();
-    logger.info("System startup - v1.5.4");
+    logger.infof("System startup - v%s", FIRMWARE_VERSION);
 
     // Initialize components
     storage.begin();
@@ -272,6 +274,9 @@ void setup() {
     // Initialize web server
     webServer.begin();
 
+    // Initialize update checker
+    updateChecker.begin();
+
     // Setup OTA callbacks
     otaHandler.onStart(onOTAStart);
     otaHandler.onEnd(onOTAEnd);
@@ -288,6 +293,7 @@ void loop() {
     otaHandler.loop();
     buttonHandler.loop();
     webServer.loop();  // Process pending web actions
+    updateChecker.loop();  // Check for firmware updates
 
     // Run MQTT loop with extra yield time
     mqttHandler.loop();

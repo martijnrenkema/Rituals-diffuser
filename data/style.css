@@ -97,3 +97,19 @@ footer a:hover{text-decoration:underline}
 .log-error .log-level{color:var(--red)}
 .log-msg{color:var(--text);word-break:break-word}
 .log-empty,.log-loading,.log-error{color:var(--dim);text-align:center;padding:20px}
+.update-banner{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-radius:12px;margin-bottom:16px;flex-wrap:wrap}
+.update-banner.hidden{display:none}
+.update-content{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.update-icon{font-weight:600}
+.update-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn-sm-ghost{background:transparent;border:1px solid rgba(255,255,255,0.4);color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem}
+.btn-sm-ghost:hover{background:rgba(255,255,255,0.1)}
+.update-status{display:flex;flex-direction:column;gap:6px}
+.update-status .row{display:flex;justify-content:space-between}
+.update-buttons{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn-success{background:linear-gradient(135deg,var(--green),#16a34a)!important}
+.update-progress{margin-top:12px}
+.progress-bar{height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));transition:width .3s}
+#update-progress-text{display:block;text-align:center;color:var(--dim);font-size:.85rem;margin-top:4px}
+.hidden{display:none!important}
