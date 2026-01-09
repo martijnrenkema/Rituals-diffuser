@@ -115,8 +115,15 @@ void LedController::setMode(LedMode mode) {
         _mode = mode;
         _lastToggle = 0;
         _ledState = false;
-        _pulseValue = 0;
-        _pulseDirection = true;
+
+        // BREATHE_SLOW starts at max brightness and fades down first
+        if (mode == LedMode::BREATHE_SLOW) {
+            _pulseValue = 255;
+            _pulseDirection = false;  // Start going down
+        } else {
+            _pulseValue = 0;
+            _pulseDirection = true;
+        }
 
         // Restore saved brightness (preserves night mode setting)
         // PULSE and BREATHE_SLOW modes override brightness for their animation

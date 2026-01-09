@@ -220,13 +220,13 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.5.2");
+    Serial.println("  Custom Firmware v1.5.3");
     Serial.println("=================================");
     Serial.println();
 
     // Initialize logger first
     logger.begin();
-    logger.info("System startup - v1.5.2");
+    logger.info("System startup - v1.5.3");
 
     // Initialize components
     storage.begin();
