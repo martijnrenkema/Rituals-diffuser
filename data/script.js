@@ -61,7 +61,15 @@ function update(d){
     if(d.device){
         if(d.device.mac)$('#mac').textContent=d.device.mac;
         if(d.device.name)$('#device-name').placeholder=d.device.name;
-        if(d.device.version)$('.version').textContent='v'+d.device.version;
+        if(d.device.version){
+            $$('.version').forEach(el=>el.textContent='v'+d.device.version);
+            $('#footer-version').textContent='v'+d.device.version;
+        }
+    }
+
+    // Update info from status
+    if(d.update){
+        updateUpdateUI(d.update);
     }
 
     if(d.mqtt&&d.mqtt.host){
@@ -437,4 +445,119 @@ $('#clear-logs').onclick=async()=>{
 // Load logs when section is opened
 $('#logs-section')?.addEventListener('toggle',function(){
     if(this.open)fetchLogs();
+});
+
+// =====================================================
+// Update Checker
+// =====================================================
+
+let updateDismissed=false;
+let updatePollInterval=null;
+
+function updateUpdateUI(d){
+    if(!d)return;
+
+    // Update status section
+    $('#current-ver').textContent=d.current||'--';
+    $('#latest-ver').textContent=d.latest||'--';
+
+    // State display
+    const states=['Ready','Checking...','Downloading...','Error'];
+    const stateText=states[d.state]||'Unknown';
+    $('#update-state').textContent=d.available?'Update available':stateText;
+
+    // Progress bar (ESP32 only during download)
+    if(d.progress>0&&d.progress<100){
+        $('#update-progress-section').classList.remove('hidden');
+        $('#update-progress-bar').style.width=d.progress+'%';
+        $('#update-progress-text').textContent=d.progress+'%';
+    }else{
+        $('#update-progress-section').classList.add('hidden');
+    }
+
+    // Show/hide install vs manual buttons based on platform
+    if(d.can_auto_update){
+        $('#install-section').classList.toggle('hidden',!d.available);
+        $('#manual-section').classList.add('hidden');
+        $('#esp32-actions').classList.remove('hidden');
+        $('#esp8266-actions').classList.add('hidden');
+    }else{
+        $('#install-section').classList.add('hidden');
+        $('#manual-section').classList.toggle('hidden',!d.available);
+        $('#esp32-actions').classList.add('hidden');
+        $('#esp8266-actions').classList.remove('hidden');
+    }
+
+    // Set GitHub links
+    const releaseUrl='https://github.com/martijnrenkema/Rituals-diffuser/releases';
+    $('#download-link').href=releaseUrl;
+    $('#banner-github').href=releaseUrl;
+
+    // Show/hide banner
+    if(d.available&&!updateDismissed){
+        $('#update-banner').classList.remove('hidden');
+        $('#update-version').textContent='v'+d.latest;
+    }else{
+        $('#update-banner').classList.add('hidden');
+    }
+}
+
+async function fetchUpdateStatus(){
+    try{
+        const r=await fetch('/api/update/status');
+        const d=await r.json();
+        updateUpdateUI(d);
+        return d;
+    }catch(e){
+        console.error('Update status error:',e);
+        return null;
+    }
+}
+
+// Check for updates button
+$('#check-update')?.addEventListener('click',async()=>{
+    $('#update-state').textContent='Checking...';
+    try{
+        await fetch('/api/update/check',{method:'POST'});
+        // Poll for result after a few seconds
+        setTimeout(fetchUpdateStatus,3000);
+        setTimeout(fetchUpdateStatus,6000);
+    }catch(e){
+        $('#update-state').textContent='Error';
+    }
+});
+
+// Install update button (ESP32 only)
+$('#do-install')?.addEventListener('click',async()=>{
+    if(!confirm('Install update? Device will restart after download.'))return;
+    try{
+        await fetch('/api/update/install',{method:'POST'});
+        $('#update-state').textContent='Downloading...';
+        // Start polling progress
+        updatePollInterval=setInterval(async()=>{
+            const d=await fetchUpdateStatus();
+            if(d&&(d.state===0||d.state===3)){
+                clearInterval(updatePollInterval);
+                updatePollInterval=null;
+            }
+        },1000);
+    }catch(e){
+        alert('Failed to start update');
+    }
+});
+
+// Banner install button links to section button
+$('#banner-install')?.addEventListener('click',()=>{
+    $('#do-install')?.click();
+});
+
+// Dismiss banner
+$('#banner-dismiss')?.addEventListener('click',()=>{
+    updateDismissed=true;
+    $('#update-banner').classList.add('hidden');
+});
+
+// Check update status when section is opened
+$('#update-section')?.addEventListener('toggle',function(){
+    if(this.open)fetchUpdateStatus();
 });

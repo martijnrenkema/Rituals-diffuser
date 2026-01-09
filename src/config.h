@@ -150,4 +150,16 @@
 #define SERIAL_BAUD             115200
 #define TACHO_PULSES_PER_REV    2       // Most fans have 2 pulses per revolution
 
+// ===========================================
+// Firmware Version (centralized)
+// ===========================================
+#define FIRMWARE_VERSION        "1.6.1"
+
+// ===========================================
+// Update Checker Settings
+// ===========================================
+#define UPDATE_CHECK_INTERVAL   86400000UL  // 24 hours in milliseconds
+#define UPDATE_GITHUB_REPO      "martijnrenkema/Rituals-diffuser"
+#define UPDATE_CHECK_TIMEOUT    15000       // 15 seconds HTTP timeout
+
 #endif // CONFIG_H

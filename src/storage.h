@@ -41,6 +41,10 @@ struct DiffuserSettings {
     uint8_t nightModeStart;  // Hour (0-23)
     uint8_t nightModeEnd;    // Hour (0-23)
     uint8_t nightModeBrightness;  // LED brightness during night (0-100)
+
+    // Update Checker (v6)
+    char lastKnownVersion[16];    // Last version seen from GitHub
+    bool updateAvailable;          // Cached update availability
 };
 
 // Magic number for valid settings validation
@@ -51,7 +55,8 @@ struct DiffuserSettings {
 // v3 (0x03): Added OTA/AP passwords
 // v4 (0x04): Added night mode and runtime stats
 // v5 (0x05): Removed unused sessionStartTime field
-#define SETTINGS_MAGIC 0xD1FF0005
+// v6 (0x06): Added update checker fields
+#define SETTINGS_MAGIC 0xD1FF0006
 
 class Storage {
 public:

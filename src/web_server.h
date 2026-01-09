@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
+#include "config.h"
 
 class WebServer {
 public:
@@ -29,6 +30,10 @@ private:
     String _pendingMqttPassword;
     bool _pendingReset = false;
     bool _pendingRestart = false;
+    bool _pendingUpdateCheck = false;
+    #ifndef PLATFORM_ESP8266
+    bool _pendingOTAUpdate = false;
+    #endif
     unsigned long _pendingActionTime = 0;
 
     void setupRoutes();
@@ -48,6 +53,13 @@ private:
     void handleDiagnosticLed(AsyncWebServerRequest* request);
     void handleDiagnosticFan(AsyncWebServerRequest* request);
     void handleDiagnosticButtons(AsyncWebServerRequest* request);
+
+    // Update checker
+    void handleUpdateCheck(AsyncWebServerRequest* request);
+    void handleUpdateStatus(AsyncWebServerRequest* request);
+    #ifndef PLATFORM_ESP8266
+    void handleStartUpdate(AsyncWebServerRequest* request);
+    #endif
 };
 
 extern WebServer webServer;
