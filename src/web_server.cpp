@@ -382,11 +382,12 @@ void WebServer::setupRoutes() {
         request->send(200, "text/plain", "success");
     });
 
-    // Captive portal redirect - all other unknown requests go to config page
+    // Captive portal redirect - only in AP mode, redirect to config page
     _server->onNotFound([](AsyncWebServerRequest* request) {
-        // Only redirect GET requests to avoid issues with preflight/OPTIONS
-        if (request->method() == HTTP_GET) {
-            request->redirect("http://192.168.4.1/");
+        // Only redirect GET requests in AP mode for captive portal
+        if (request->method() == HTTP_GET && wifiManager.isAPMode()) {
+            String redirectUrl = "http://" + WiFi.softAPIP().toString() + "/";
+            request->redirect(redirectUrl.c_str());
         } else {
             request->send(404);
         }
