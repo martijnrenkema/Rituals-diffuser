@@ -153,7 +153,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.6.1"
+#define FIRMWARE_VERSION        "1.6.2"
 
 // ===========================================
 // Update Checker Settings

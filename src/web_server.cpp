@@ -856,8 +856,8 @@ void WebServer::handleUpdateStatus(AsyncWebServerRequest* request) {
     const UpdateInfo& info = updateChecker.getInfo();
 
     doc["available"] = info.available;
-    doc["current_version"] = info.currentVersion;
-    doc["latest_version"] = info.latestVersion;
+    doc["current"] = info.currentVersion;
+    doc["latest"] = info.latestVersion;
     doc["release_url"] = info.releaseUrl;
     doc["state"] = (int)updateChecker.getState();
     doc["progress"] = info.downloadProgress;
