@@ -69,6 +69,9 @@ void WiFiManager::loop() {
             break;
 
         case WifiStatus::AP_MODE:
+            // Process DNS requests for captive portal
+            _dnsServer.processNextRequest();
+
             // Periodically try to reconnect to saved WiFi while in AP mode
             // Non-blocking: just check if already connected
             if (_ssid.length() > 0 && now - _lastAPRetry >= AP_RETRY_INTERVAL) {
@@ -131,6 +134,10 @@ void WiFiManager::startAP() {
     WiFi.mode(WIFI_AP_STA);  // Both AP and STA mode for flexibility
     WiFi.softAP(_apName.c_str(), storage.getAPPassword());  // Use stored or default password
 
+    // Start DNS server for captive portal - redirect all domains to AP IP
+    _dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+    Serial.println("[WIFI] DNS server started for captive portal");
+
     setState(WifiStatus::AP_MODE);
     Serial.printf("[WIFI] AP started: %s\n", _apName.c_str());
     Serial.printf("[WIFI] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
@@ -138,6 +145,7 @@ void WiFiManager::startAP() {
 }
 
 void WiFiManager::stopAP() {
+    _dnsServer.stop();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
     Serial.println("[WIFI] AP stopped");

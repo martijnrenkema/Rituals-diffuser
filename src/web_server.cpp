@@ -351,20 +351,45 @@ void WebServer::setupRoutes() {
         }
     );
 
-    // Captive portal redirect
-    _server->onNotFound([](AsyncWebServerRequest* request) {
-        request->redirect("/");
+    // Captive portal detection endpoints
+    // Android uses /generate_204 - must return 204 No Content to trigger portal
+    _server->on("/generate_204", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(204);
+    });
+    // Some Android variants
+    _server->on("/gen_204", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(204);
+    });
+    // iOS/macOS captive portal detection
+    _server->on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/html", "<html><body>Success</body></html>");
+    });
+    _server->on("/library/test/success.html", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/html", "<html><body>Success</body></html>");
+    });
+    // Windows captive portal detection
+    _server->on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/plain", "Microsoft Connect Test");
+    });
+    _server->on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/plain", "Microsoft NCSI");
+    });
+    // Firefox captive portal detection
+    _server->on("/canonical.html", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/html", "<html><body>Success</body></html>");
+    });
+    _server->on("/success.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/plain", "success");
     });
 
-    // Generate captive portal detection responses
-    _server->on("/generate_204", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/");
-    });
-    _server->on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/");
-    });
-    _server->on("/canonical.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->redirect("/");
+    // Captive portal redirect - all other unknown requests go to config page
+    _server->onNotFound([](AsyncWebServerRequest* request) {
+        // Only redirect GET requests to avoid issues with preflight/OPTIONS
+        if (request->method() == HTTP_GET) {
+            request->redirect("http://192.168.4.1/");
+        } else {
+            request->send(404);
+        }
     });
 }
 
