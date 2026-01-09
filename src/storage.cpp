@@ -209,13 +209,8 @@ const char* Storage::getAPPassword() {
     if (strlen(_settings.apPassword) > 0) {
         return _settings.apPassword;
     }
-    // Generate unique default password from MAC address
-    // Format: "diffuser-" + last 4 hex chars of MAC = 13 char password
-    static char defaultAp[16];
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    snprintf(defaultAp, sizeof(defaultAp), "diffuser-%02x%02x", mac[4], mac[5]);
-    return defaultAp;
+    // Simple default password for easy setup
+    return WIFI_AP_PASSWORD;
 }
 
 bool Storage::hasWiFiCredentials() {
