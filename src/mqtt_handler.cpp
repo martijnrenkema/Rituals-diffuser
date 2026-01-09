@@ -16,9 +16,15 @@ MQTTHandler* MQTTHandler::_instance = nullptr;
 
 void MQTTHandler::begin() {
     _instance = this;
+
+    // Set socket timeout to prevent blocking for 15+ seconds when broker is offline
+    // This limits the connect() blocking time to ~3 seconds
+    _wifiClient.setTimeout(3000);
+
     _mqttClient.setClient(_wifiClient);
     _mqttClient.setCallback(mqttCallback);
     _mqttClient.setKeepAlive(MQTT_KEEPALIVE);
+    _mqttClient.setSocketTimeout(3);  // 3 second socket timeout for PubSubClient operations
     _mqttClient.setBufferSize(1536);  // Larger buffer for discovery payloads
 
     // Generate unique device ID from MAC
@@ -343,7 +349,7 @@ String MQTTHandler::getDeviceJson() {
     device["name"] = "Rituals Diffuser";
     device["model"] = "Perfume Genie 2.0";
     device["manufacturer"] = "Rituals (Custom FW)";
-    device["sw_version"] = "1.4.0";
+    device["sw_version"] = "1.5.1";
 
     String output;
     serializeJson(device, output);

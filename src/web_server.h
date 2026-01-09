@@ -7,6 +7,7 @@
 class WebServer {
 public:
     void begin();
+    void loop();  // Process pending actions from callbacks
     void stop();
 
     // Callback for settings changes
@@ -16,6 +17,19 @@ public:
 private:
     AsyncWebServer* _server = nullptr;
     SettingsCallback _settingsCallback = nullptr;
+
+    // Deferred action flags (to avoid blocking in async callbacks)
+    bool _pendingWifiConnect = false;
+    String _pendingWifiSsid;
+    String _pendingWifiPassword;
+    bool _pendingMqttConnect = false;
+    String _pendingMqttHost;
+    uint16_t _pendingMqttPort = 1883;
+    String _pendingMqttUser;
+    String _pendingMqttPassword;
+    bool _pendingReset = false;
+    bool _pendingRestart = false;
+    unsigned long _pendingActionTime = 0;
 
     void setupRoutes();
     void handleRoot(AsyncWebServerRequest* request);
