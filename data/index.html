@@ -19,6 +19,24 @@
             </div>
         </header>
 
+        <!-- Update notification banner -->
+        <div id="update-banner" class="update-banner hidden">
+            <div class="update-content">
+                <span class="update-icon">Update available!</span>
+                <span id="update-version"></span>
+            </div>
+            <div class="update-actions">
+                <span id="esp32-actions" class="hidden">
+                    <button id="banner-install" class="btn-sm">Install</button>
+                </span>
+                <span id="esp8266-actions" class="hidden">
+                    <a id="banner-github" href="#" target="_blank" class="btn-sm">Download</a>
+                    <a href="/update.html" class="btn-sm">Upload</a>
+                </span>
+                <button id="banner-dismiss" class="btn-sm-ghost">Dismiss</button>
+            </div>
+        </div>
+
         <main>
             <section class="hero">
                 <button id="power" class="power-btn">
@@ -219,6 +237,39 @@
                 </div>
             </details>
 
+            <details class="card" id="update-section">
+                <summary>Software Updates</summary>
+                <div class="update-status">
+                    <div class="row">
+                        <span>Current version:</span>
+                        <b id="current-ver">--</b>
+                    </div>
+                    <div class="row">
+                        <span>Latest version:</span>
+                        <b id="latest-ver">--</b>
+                    </div>
+                    <div class="row">
+                        <span>Status:</span>
+                        <span id="update-state">Unknown</span>
+                    </div>
+                </div>
+                <div class="update-progress hidden" id="update-progress-section">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="update-progress-bar"></div>
+                    </div>
+                    <span id="update-progress-text">0%</span>
+                </div>
+                <div class="update-buttons">
+                    <button id="check-update" class="btn">Check for Updates</button>
+                    <span id="install-section" class="hidden">
+                        <button id="do-install" class="btn btn-success">Install Update</button>
+                    </span>
+                    <span id="manual-section" class="hidden">
+                        <a id="download-link" href="#" target="_blank" class="btn">Download from GitHub</a>
+                    </span>
+                </div>
+            </details>
+
             <details class="card">
                 <summary>System</summary>
                 <div class="info">
@@ -231,7 +282,7 @@
         <footer>
             <a href="/update.html">Firmware Update</a>
             <a href="https://github.com/martijnrenkema/Rituals-diffuser" target="_blank" rel="noopener">GitHub</a>
-            <span class="version">v1.5.4</span>
+            <span class="version" id="footer-version">v--</span>
         </footer>
     </div>
     <script src="script.js"></script>

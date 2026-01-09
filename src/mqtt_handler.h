@@ -24,6 +24,9 @@ enum class MqttPublishState {
     DISC_RPM,
     DISC_WIFI,
     DISC_RUNTIME,
+    DISC_UPDATE_AVAILABLE,
+    DISC_LATEST_VERSION,
+    DISC_CURRENT_VERSION,
     DISC_DONE,
     // State publish states
     STATE_FAN,
@@ -34,6 +37,7 @@ enum class MqttPublishState {
     STATE_REMAINING,
     STATE_RPM_WIFI,
     STATE_RUNTIME,
+    STATE_UPDATE,
     STATE_DONE
 };
 
@@ -55,9 +59,12 @@ public:
     void publishState();
     void publishAvailability(bool online);
 
-    // Request state publish (safe to call from any context)
-    // Uses a counter to queue multiple requests during active publish
-    void requestStatePublish() { _statePublishPending++; }
+    // Request state publish (safe to call from any context, interrupt-safe)
+    void requestStatePublish() {
+        noInterrupts();
+        _statePublishPending = true;
+        interrupts();
+    }
 
     // Callbacks
     typedef void (*CommandCallback)(const char* topic, const char* payload);
@@ -77,7 +84,7 @@ private:
     unsigned long _lastStatePublish = 0;
     unsigned long _lastPublishStep = 0;
     bool _discoveryPublished = false;
-    volatile uint8_t _statePublishPending = 0;  // Queue counter for pending state publishes
+    volatile bool _statePublishPending = false;  // Flag for pending state publish request
 
     // Non-blocking state machine
     MqttPublishState _publishState = MqttPublishState::IDLE;
@@ -99,6 +106,9 @@ private:
     void publishRPMSensorDiscovery();
     void publishWiFiSensorDiscovery();
     void publishTotalRuntimeSensorDiscovery();
+    void publishUpdateAvailableBinarySensorDiscovery();
+    void publishLatestVersionSensorDiscovery();
+    void publishCurrentVersionSensorDiscovery();
 
     String getBaseTopic();
     String getDeviceJson();

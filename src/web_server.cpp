@@ -6,6 +6,7 @@
 #include "led_controller.h"
 #include "button_handler.h"
 #include "mqtt_handler.h"
+#include "update_checker.h"
 #include "logger.h"
 #include <ArduinoJson.h>
 
@@ -99,6 +100,20 @@ void WebServer::loop() {
         _pendingActionTime = 0;
         ESP.restart();
     }
+
+    if (_pendingUpdateCheck) {
+        _pendingUpdateCheck = false;
+        _pendingActionTime = 0;
+        updateChecker.checkForUpdates();
+    }
+
+    #ifndef PLATFORM_ESP8266
+    if (_pendingOTAUpdate) {
+        _pendingOTAUpdate = false;
+        _pendingActionTime = 0;
+        updateChecker.startOTAUpdate();
+    }
+    #endif
 }
 
 void WebServer::onSettingsChanged(SettingsCallback callback) {
@@ -187,6 +202,21 @@ void WebServer::setupRoutes() {
             request->send(400, "application/json", "{\"error\":\"Missing name parameter\"}");
         }
     });
+
+    // Update checker endpoints
+    _server->on("/api/update/check", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        handleUpdateCheck(request);
+    });
+
+    _server->on("/api/update/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleUpdateStatus(request);
+    });
+
+    #ifndef PLATFORM_ESP8266
+    _server->on("/api/update/install", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        handleStartUpdate(request);
+    });
+    #endif
 
     // OTA Update - Firmware
     _server->on("/api/update/firmware", HTTP_POST,
@@ -342,7 +372,7 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     const DiffuserSettings& settings = storage.getSettings();  // Use cache, no NVS read
 
     // Use DynamicJsonDocument to avoid stack overflow on ESP8266 (limited 4KB stack)
-    DynamicJsonDocument doc(1024);  // Heap allocation, reduced size - actual payload is ~600 bytes
+    DynamicJsonDocument doc(1280);  // Heap allocation, includes update info
 
     // WiFi status
     doc["wifi"]["connected"] = wifiManager.isConnected();
@@ -369,7 +399,7 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     // Device info
     doc["device"]["name"] = settings.deviceName;
     doc["device"]["mac"] = wifiManager.getMacAddress();
-    doc["device"]["version"] = "1.5.4";
+    doc["device"]["version"] = FIRMWARE_VERSION;
 
     // Statistics
     doc["stats"]["total_runtime"] = storage.getTotalRuntimeMinutes() / 60.0;  // hours
@@ -380,6 +410,18 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["night"]["start"] = settings.nightModeStart;
     doc["night"]["end"] = settings.nightModeEnd;
     doc["night"]["brightness"] = settings.nightModeBrightness;
+
+    // Update info
+    doc["update"]["available"] = updateChecker.isUpdateAvailable();
+    doc["update"]["current"] = updateChecker.getCurrentVersion();
+    doc["update"]["latest"] = updateChecker.getLatestVersion();
+    doc["update"]["state"] = (int)updateChecker.getState();
+    doc["update"]["progress"] = updateChecker.getDownloadProgress();
+    #ifndef PLATFORM_ESP8266
+    doc["update"]["can_auto_update"] = true;
+    #else
+    doc["update"]["can_auto_update"] = false;
+    #endif
 
     String response;
     size_t jsonSize = serializeJson(doc, response);
@@ -797,3 +839,61 @@ void WebServer::handleDiagnosticButtons(AsyncWebServerRequest* request) {
     }
     request->send(200, "application/json", response);
 }
+
+// ==========================================
+// Update Checker Handlers
+// ==========================================
+
+void WebServer::handleUpdateCheck(AsyncWebServerRequest* request) {
+    // Schedule update check in loop() to avoid blocking async callback
+    _pendingUpdateCheck = true;
+    _pendingActionTime = millis();
+    request->send(200, "application/json", "{\"success\":true,\"message\":\"Checking for updates...\"}");
+}
+
+void WebServer::handleUpdateStatus(AsyncWebServerRequest* request) {
+    StaticJsonDocument<384> doc;
+    const UpdateInfo& info = updateChecker.getInfo();
+
+    doc["available"] = info.available;
+    doc["current_version"] = info.currentVersion;
+    doc["latest_version"] = info.latestVersion;
+    doc["release_url"] = info.releaseUrl;
+    doc["state"] = (int)updateChecker.getState();
+    doc["progress"] = info.downloadProgress;
+    doc["error"] = info.errorMessage;
+    doc["last_check"] = info.lastCheckTime;
+
+    #ifndef PLATFORM_ESP8266
+    doc["can_auto_update"] = true;
+    doc["download_url"] = info.downloadUrl;
+    #else
+    doc["can_auto_update"] = false;
+    #endif
+
+    String response;
+    if (serializeJson(doc, response) == 0) {
+        request->send(500, "application/json", "{\"error\":\"JSON serialization failed\"}");
+        return;
+    }
+    request->send(200, "application/json", response);
+}
+
+#ifndef PLATFORM_ESP8266
+void WebServer::handleStartUpdate(AsyncWebServerRequest* request) {
+    if (!updateChecker.isUpdateAvailable()) {
+        request->send(400, "application/json", "{\"error\":\"No update available\"}");
+        return;
+    }
+
+    if (updateChecker.getState() != UpdateCheckState::IDLE) {
+        request->send(400, "application/json", "{\"error\":\"Update already in progress\"}");
+        return;
+    }
+
+    // Schedule OTA update in loop() to avoid blocking async callback
+    _pendingOTAUpdate = true;
+    _pendingActionTime = millis();
+    request->send(200, "application/json", "{\"success\":true,\"message\":\"Starting update download...\"}");
+}
+#endif

@@ -254,6 +254,8 @@ void Storage::ensureDefaults(DiffuserSettings& settings) {
         settings.nightModeEnd = 7;     // 7 AM
         settings.nightModeBrightness = 10;  // 10% brightness
     }
+    // Update checker defaults (v6)
+    // lastKnownVersion and updateAvailable are zero-initialized by memset
 }
 
 // Usage Statistics
