@@ -2,6 +2,7 @@
 #define WIFI_MANAGER_H
 
 #include <Arduino.h>
+#include <DNSServer.h>
 #include "config.h"
 
 #ifdef PLATFORM_ESP8266
@@ -57,6 +58,10 @@ private:
     static const uint8_t MAX_RECONNECT_ATTEMPTS = 3;
     static const unsigned long AP_RETRY_INTERVAL = 300000; // 5 min: retry WiFi while in AP mode
     unsigned long _lastAPRetry = 0;
+
+    // DNS server for captive portal
+    DNSServer _dnsServer;
+    static const byte DNS_PORT = 53;
 
     void setState(WifiStatus state);
     void generateAPName();
