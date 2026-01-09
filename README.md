@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.6.3-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.6.4-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Untested-yellow)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -325,6 +325,10 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.6.4
+- Improved update banner: now fetches update status periodically (every 30s) to show banner after auto-check
+- Banner appears automatically when update is available (no page refresh needed)
 
 ### v1.6.3
 - Fixed update checker JSON parsing: GitHub API response is ~10KB, added filter to parse only needed fields

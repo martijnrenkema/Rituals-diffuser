@@ -561,3 +561,8 @@ $('#banner-dismiss')?.addEventListener('click',()=>{
 $('#update-section')?.addEventListener('toggle',function(){
     if(this.open)fetchUpdateStatus();
 });
+
+// Fetch update status on page load and periodically
+// This ensures banner shows after auto-check completes (2 min after boot)
+setTimeout(fetchUpdateStatus,3000);  // Initial check after 3 seconds
+setInterval(fetchUpdateStatus,30000); // Then every 30 seconds
