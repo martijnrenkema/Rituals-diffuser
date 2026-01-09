@@ -17,7 +17,8 @@ struct UpdateInfo {
     bool available;
     char latestVersion[16];     // e.g., "1.6.0"
     char currentVersion[16];    // e.g., "1.5.4"
-    char downloadUrl[196];      // GitHub release asset URL
+    char downloadUrl[196];      // GitHub release asset URL (firmware)
+    char spiffsUrl[196];        // GitHub release asset URL (SPIFFS)
     char releaseUrl[128];       // GitHub releases page URL
     unsigned long lastCheckTime;// millis() of last successful check
     uint8_t downloadProgress;   // 0-100 for ESP32 download
@@ -71,6 +72,7 @@ private:
     #ifndef PLATFORM_ESP8266
     bool _otaRequested = false;
     void performOTAUpdate();
+    bool downloadAndInstall(const char* url, int updateType, const char* label);
     #endif
 };
 
