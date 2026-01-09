@@ -116,8 +116,18 @@ pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 
 #### Method B: Using esptool (Pre-built binaries)
 
-> **⚠️ Important: You must flash BOTH the firmware AND the SPIFFS filesystem!**
-> The SPIFFS contains the web interface files. Without it, you'll see an error page at 192.168.4.1.
+> **⚠️ You must flash TWO files: firmware + SPIFFS (web interface)**
+>
+> | Chip | File | Address |
+> |------|------|---------|
+> | ESP8266 | `firmware_esp8266.bin` | `0x0` |
+> | ESP8266 | `spiffs_esp8266.bin` | `0x200000` |
+> | ESP32 | `firmware_esp32.bin` | `0x10000` |
+> | ESP32 | `spiffs_esp32.bin` | `0x3D0000` |
+>
+> **Web flashers don't work!** Tools like ESPHome Flasher only flash to one address. Use `esptool.py` instead.
+>
+> Install esptool: `pip install esptool` ([Windows/Mac/Linux guide](https://docs.espressif.com/projects/esptool/en/latest/esp32/installation.html))
 
 ```bash
 # For ESP8266 - flash BOTH files:
