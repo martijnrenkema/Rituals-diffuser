@@ -281,6 +281,10 @@ void setup() {
     otaHandler.onStart(onOTAStart);
     otaHandler.onEnd(onOTAEnd);
 
+    // Ensure LED shows correct status after all initialization
+    // This handles the case where WiFi was already connected via SDK auto-reconnect
+    updateLedStatus();
+
     Serial.println("[MAIN] Setup complete");
     Serial.println();
 }

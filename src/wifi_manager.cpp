@@ -11,6 +11,16 @@ void WiFiManager::begin() {
     generateAPName();
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
+
+    // Check if WiFi is already connected (can happen after OTA update/restart
+    // when SDK auto-reconnects faster than our state machine)
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("[WIFI] Already connected (SDK auto-reconnect)");
+        Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+        _state = WifiStatus::CONNECTED;
+        // Note: callback not called here as it's not registered yet in setup()
+    }
+
     Serial.println("[WIFI] Manager initialized");
 }
 
@@ -89,6 +99,14 @@ void WiFiManager::connect(const char* ssid, const char* password) {
     // Stop AP if running
     if (_state == WifiStatus::AP_MODE) {
         stopAP();
+    }
+
+    // Check if already connected to this network (common after OTA/restart)
+    if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == ssid) {
+        Serial.printf("[WIFI] Already connected to %s\n", ssid);
+        Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+        setState(WifiStatus::CONNECTED);
+        return;
     }
 
     WiFi.mode(WIFI_STA);
