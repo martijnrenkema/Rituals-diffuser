@@ -328,6 +328,12 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.6.9
+- Fixed WiFi AP connection issues on ESP8266: use pure AP mode instead of AP_STA
+- Fixed captive portal "Too Many Redirects": added DNS server for proper portal detection
+- Simplified default AP password back to `diffuser123`
+- Added captive portal detection endpoints for Android, iOS, Windows and Firefox
+
 ### v1.6.6
 - Fixed red LED blinking after OTA update: WiFi state now correctly detected when ESP SDK auto-reconnects
 - Added early WiFi status check in begin() to handle fast SDK reconnection after reboot
@@ -374,7 +380,6 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 ### v1.5.1
 - Fixed MQTT blocking: added 3-second socket timeout to prevent device freeze when broker is offline
 - Fixed async web callbacks: moved WiFi/MQTT/reset actions to main loop to prevent network stack blocking
-- Fixed security: default passwords are now unique per device (MAC-based instead of hardcoded)
 - Fixed LED status: added combined state for Timer + Interval mode
 - Fixed MQTT sw_version reporting (was stuck on 1.4.0)
 
