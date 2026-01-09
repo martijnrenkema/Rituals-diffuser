@@ -171,9 +171,17 @@ bool UpdateChecker::fetchGitHubRelease() {
 }
 
 bool UpdateChecker::parseReleaseJson(const char* json, size_t length) {
-    // Parse JSON response
-    DynamicJsonDocument doc(3072);  // GitHub API response can be large
-    DeserializationError err = deserializeJson(doc, json, length);
+    // Use a filter to only parse the fields we need (reduces memory usage significantly)
+    // GitHub API response is ~10KB but we only need a few fields
+    StaticJsonDocument<200> filter;
+    filter["tag_name"] = true;
+    filter["html_url"] = true;
+    filter["assets"][0]["name"] = true;
+    filter["assets"][0]["browser_download_url"] = true;
+
+    // Parse JSON response with filter - this drastically reduces memory needed
+    DynamicJsonDocument doc(2048);
+    DeserializationError err = deserializeJson(doc, json, length, DeserializationOption::Filter(filter));
 
     if (err) {
         snprintf(_info.errorMessage, sizeof(_info.errorMessage), "JSON error: %s", err.c_str());
