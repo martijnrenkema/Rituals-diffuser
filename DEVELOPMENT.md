@@ -158,67 +158,69 @@ alias pio="~/.platformio-venv/bin/pio"
 
 **Stap 3: Versie bumpen**
 
-Update de versie op alle locaties:
-1. `src/main.cpp` - Serial output (regel ~223)
-2. `src/main.cpp` - Logger startup (regel ~229)
-3. `src/mqtt_handler.cpp` - sw_version in device JSON
-4. `data/index.html` - footer version span
-5. `README.md` - version badge
-6. `README.md` - changelog sectie (voeg nieuwe versie toe bovenaan)
+De versie staat centraal in `src/config.h`:
+```c
+#define FIRMWARE_VERSION "1.6.7"
+```
+
+Alle andere bestanden (main.cpp, mqtt_handler.cpp, web_server.cpp) gebruiken deze constante automatisch.
 
 Gebruik semantic versioning:
-- **MAJOR.MINOR.PATCH** (bijv. 1.5.1)
+- **MAJOR.MINOR.PATCH** (bijv. 1.6.7)
 - PATCH: bugfixes
 - MINOR: nieuwe features (backwards compatible)
 - MAJOR: breaking changes
 
-**Stap 4: Update README.md changelog**
-
-Voeg een nieuwe changelog entry toe boven de vorige versie:
-```markdown
-### vX.Y.Z
-- Beschrijving van wijziging 1
-- Beschrijving van wijziging 2
-```
-
-**Stap 5: Build release binaries**
+**Stap 4: Build release binaries**
 ```bash
-# Clean build voor beide platforms
-~/.platformio-venv/bin/pio run --target clean
-~/.platformio-venv/bin/pio run
+# Build firmware voor beide platforms
+~/.platformio-venv/bin/pio run -e esp8266 -e esp32dev
+
+# Build SPIFFS voor beide platforms
+~/.platformio-venv/bin/pio run -t buildfs -e esp8266 -e esp32dev
 
 # Binaries staan in:
-# .pio/build/esp32dev/firmware.bin
 # .pio/build/esp8266/firmware.bin
+# .pio/build/esp8266/spiffs.bin
+# .pio/build/esp32dev/firmware.bin
+# .pio/build/esp32dev/spiffs.bin
 ```
 
-**Stap 6: Commit en push naar GitHub**
+**Stap 5: Commit en push naar GitHub**
 ```bash
-# Bekijk wijzigingen
-git status
-git diff
-
-# Stage en commit
 git add -A
-git commit -m "v1.5.1: Korte beschrijving van changes"
-
-# Push naar remote
+git commit -m "v1.6.7: Korte beschrijving van changes"
 git push origin main
 ```
 
-### Release Maken (optioneel)
-Voor een officiële release:
-1. Tag de commit: `git tag v1.5.1`
-2. Push tag: `git push origin v1.5.1`
-3. Op GitHub: maak release aan met binaries uit `release/` map
+**Stap 6: GitHub Release maken (VERPLICHT)**
+
+> **BELANGRIJK:** De update checker in de firmware kijkt naar GitHub Releases via de API.
+> Zonder release zien gebruikers de update NIET in de webinterface!
+
+```bash
+# Kopieer binaries met juiste namen
+mkdir -p /tmp/release
+cp .pio/build/esp8266/firmware.bin /tmp/release/firmware_esp8266.bin
+cp .pio/build/esp8266/spiffs.bin /tmp/release/spiffs_esp8266.bin
+cp .pio/build/esp32dev/firmware.bin /tmp/release/firmware_esp32.bin
+cp .pio/build/esp32dev/spiffs.bin /tmp/release/spiffs_esp32.bin
+
+# Maak release aan met gh CLI
+gh release create v1.6.7 \
+  --title "v1.6.7 - Korte titel" \
+  --notes "Beschrijving van de wijzigingen" \
+  /tmp/release/firmware_esp8266.bin \
+  /tmp/release/spiffs_esp8266.bin \
+  /tmp/release/firmware_esp32.bin \
+  /tmp/release/spiffs_esp32.bin
+```
 
 ### Belangrijke Bestanden voor Versioning
-| Bestand | Wat updaten |
-|---------|-------------|
-| `src/main.cpp` | Serial banner + logger startup |
-| `src/mqtt_handler.cpp` | `sw_version` in device JSON |
-| `data/index.html` | Footer version |
-| `README.md` | Badge + changelog |
+| Bestand | Beschrijving |
+|---------|--------------|
+| `src/config.h` | **Enige plek waar versie moet worden aangepast** (FIRMWARE_VERSION) |
+| GitHub Release | **Verplicht** voor update checker - zonder release geen update notificatie |
 
 ### Build Environments
 | Environment | Platform | Beschrijving |
