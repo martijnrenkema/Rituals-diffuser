@@ -55,16 +55,20 @@ void LedController::loop() {
             // Step size 10 instead of 5 to maintain smooth animation speed
             if (now - _lastToggle >= 20) {
                 if (_pulseDirection) {
-                    _pulseValue += 10;
-                    if (_pulseValue >= 255) {
+                    // Going up - check BEFORE adding to prevent uint8_t overflow
+                    if (_pulseValue >= 245) {
                         _pulseValue = 255;
                         _pulseDirection = false;
+                    } else {
+                        _pulseValue += 10;
                     }
                 } else {
-                    _pulseValue -= 10;
-                    if (_pulseValue <= 10) {
+                    // Going down - check BEFORE subtracting to prevent underflow
+                    if (_pulseValue <= 20) {
                         _pulseValue = 10;
                         _pulseDirection = true;
+                    } else {
+                        _pulseValue -= 10;
                     }
                 }
                 FastLED.setBrightness(_pulseValue);
@@ -79,16 +83,20 @@ void LedController::loop() {
             // 30ms interval, step 4 = ~4 seconds per full breath cycle
             if (now - _lastToggle >= 30) {
                 if (_pulseDirection) {
-                    _pulseValue += 4;
-                    if (_pulseValue >= 255) {
+                    // Going up - check BEFORE adding to prevent uint8_t overflow
+                    if (_pulseValue >= 251) {
                         _pulseValue = 255;
                         _pulseDirection = false;
+                    } else {
+                        _pulseValue += 4;
                     }
                 } else {
-                    _pulseValue -= 4;
-                    if (_pulseValue <= 20) {
+                    // Going down - check BEFORE subtracting to prevent underflow
+                    if (_pulseValue <= 24) {
                         _pulseValue = 20;
                         _pulseDirection = true;
+                    } else {
+                        _pulseValue -= 4;
                     }
                 }
                 FastLED.setBrightness(_pulseValue);
