@@ -7,11 +7,13 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 </p>
 
 ![Version](https://img.shields.io/badge/Version-1.6.1-brightgreen)
-![ESP32](https://img.shields.io/badge/ESP32-Supported-blue)
-![ESP8266](https://img.shields.io/badge/ESP8266-Supported-blue)
+![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
+![ESP8266](https://img.shields.io/badge/ESP8266-Untested-yellow)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT-41BDF5)
 ![License](https://img.shields.io/badge/License-MIT-green)
+
+> **Looking for ESP8266 testers!** The ESP8266 version builds successfully but has not been tested on actual hardware. If you have an original Rituals Genie with ESP-WROOM-02, please help test and [report any issues](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
 ## Features
 

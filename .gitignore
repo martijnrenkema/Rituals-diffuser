@@ -18,6 +18,7 @@
 
 # Exception: release binaries should be tracked
 !release/*.bin
+!release/**/*.bin
 
 # OS
 .DS_Store
