@@ -74,6 +74,30 @@ void LedController::loop() {
             }
             break;
 
+        case LedMode::BREATHE_SLOW:
+            // Very slow breathing effect (~4 sec cycle) for Timer+Interval combined
+            // 30ms interval, step 4 = ~4 seconds per full breath cycle
+            if (now - _lastToggle >= 30) {
+                if (_pulseDirection) {
+                    _pulseValue += 4;
+                    if (_pulseValue >= 255) {
+                        _pulseValue = 255;
+                        _pulseDirection = false;
+                    }
+                } else {
+                    _pulseValue -= 4;
+                    if (_pulseValue <= 20) {
+                        _pulseValue = 20;
+                        _pulseDirection = true;
+                    }
+                }
+                FastLED.setBrightness(_pulseValue);
+                _leds[0] = _currentColor;
+                FastLED.show();
+                _lastToggle = now;
+            }
+            break;
+
         case LedMode::OTA:
             // Fast alternating for OTA
             if (now - _lastToggle >= 50) {
@@ -95,8 +119,8 @@ void LedController::setMode(LedMode mode) {
         _pulseDirection = true;
 
         // Restore saved brightness (preserves night mode setting)
-        // Only PULSE mode overrides brightness for its animation
-        if (mode != LedMode::PULSE) {
+        // PULSE and BREATHE_SLOW modes override brightness for their animation
+        if (mode != LedMode::PULSE && mode != LedMode::BREATHE_SLOW) {
             // Prevent "brightness trap" - if brightness is 0 and we're turning ON,
             // use a safe default so LED is visible
             if (_brightness == 0 && mode != LedMode::OFF) {

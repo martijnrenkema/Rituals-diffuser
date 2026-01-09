@@ -81,7 +81,7 @@ void checkNightMode() {
 // 2. AP mode (orange pulsing)
 // 3. WiFi connecting (cyan blinking)
 // 4. WiFi disconnected (red)
-// 5. Timer + Interval mode + fan on (blue slow blink - combined state)
+// 5. Timer + Interval mode + fan on (blue slow breathing - combined state)
 // 6. Timer active + fan on (blue solid)
 // 7. Interval mode + fan on (purple solid)
 // 8. Fan on (green solid)
@@ -114,9 +114,9 @@ void updateLedStatus() {
     // 5-8. Fan states (only when WiFi is connected)
     if (fanController.isOn()) {
         if (fanController.isTimerActive() && fanController.isIntervalMode()) {
-            // 5. Timer + Interval mode - blue blinking (combined state)
+            // 5. Timer + Interval mode - blue slow breathing (combined state)
             ledController.setColor(LED_COLOR_BLUE);
-            ledController.setMode(LedMode::BLINK_SLOW);
+            ledController.setMode(LedMode::BREATHE_SLOW);
         } else if (fanController.isTimerActive()) {
             // 6. Timer active only - blue solid
             ledController.setColor(LED_COLOR_BLUE);
@@ -220,13 +220,13 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.5.1");
+    Serial.println("  Custom Firmware v1.5.2");
     Serial.println("=================================");
     Serial.println();
 
     // Initialize logger first
     logger.begin();
-    logger.info("System startup - v1.5.1");
+    logger.info("System startup - v1.5.2");
 
     // Initialize components
     storage.begin();

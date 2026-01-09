@@ -15,6 +15,7 @@ enum class LedMode {
     BLINK_FAST,     // WiFi connecting
     BLINK_SLOW,     // AP mode
     PULSE,          // Timer active
+    BREATHE_SLOW,   // Timer + Interval combined (very slow breath)
     OTA             // OTA update in progress
 };
 
