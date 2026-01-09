@@ -116,14 +116,28 @@ pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 
 #### Method B: Using esptool (Pre-built binaries)
 
-```bash
-# For ESP32
-esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 --baud 460800 \
-  write_flash -z 0x10000 firmware.bin
+> **⚠️ Important: You must flash BOTH the firmware AND the SPIFFS filesystem!**
+> The SPIFFS contains the web interface files. Without it, you'll see an error page at 192.168.4.1.
 
-# For ESP8266
+```bash
+# For ESP8266 - flash BOTH files:
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 --baud 460800 \
-  write_flash 0x0 firmware.bin
+  write_flash 0x0 firmware_esp8266.bin 0x200000 spiffs_esp8266.bin
+
+# For ESP32 - flash BOTH files:
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 --baud 460800 \
+  write_flash 0x10000 firmware_esp32.bin 0x3D0000 spiffs_esp32.bin
+```
+
+You can also flash them separately:
+```bash
+# ESP8266
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x0 firmware_esp8266.bin
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x200000 spiffs_esp8266.bin
+
+# ESP32
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 write_flash 0x10000 firmware_esp32.bin
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 write_flash 0x3D0000 spiffs_esp32.bin
 ```
 
 ### Step 3: Initial Setup
