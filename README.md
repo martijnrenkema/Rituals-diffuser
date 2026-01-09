@@ -24,6 +24,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 - **Night Mode** - Auto-dim LED during configured hours
 - **Usage Statistics** - Track total runtime
 - **OTA Updates** - Wireless firmware updates via web interface
+- **Auto-Update** - Checks GitHub for new releases, one-click install (ESP32)
 - **Web Interface** - Configure WiFi, MQTT, passwords, and control the diffuser
 - **RGB LED Status** - Visual feedback for device state
 - **Physical Buttons** - Front and rear button support
