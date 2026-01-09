@@ -49,6 +49,11 @@ void WebServer::begin() {
     }
 
     _server = new AsyncWebServer(WEBSERVER_PORT);
+    if (_server == nullptr) {
+        Serial.println("[WEB] ERROR: Failed to allocate AsyncWebServer!");
+        return;
+    }
+
     setupRoutes();
     _server->begin();
 
@@ -352,7 +357,7 @@ void WebServer::setupRoutes() {
     );
 
     // Captive portal detection endpoints
-    // Android uses /generate_204 - must return 204 No Content to trigger portal
+    // Android requests /generate_204 - returning 204 signals "no internet" which triggers portal popup
     _server->on("/generate_204", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(204);
     });
@@ -386,8 +391,19 @@ void WebServer::setupRoutes() {
     _server->onNotFound([](AsyncWebServerRequest* request) {
         // Only redirect GET requests in AP mode for captive portal
         if (request->method() == HTTP_GET && wifiManager.isAPMode()) {
-            String redirectUrl = "http://" + WiFi.softAPIP().toString() + "/";
-            request->redirect(redirectUrl.c_str());
+            // Don't redirect if already requesting root (prevents infinite loop if index.html missing)
+            String url = request->url();
+            if (url == "/" || url == "/index.html") {
+                // SPIFFS probably missing - send error page
+                request->send(200, "text/html",
+                    "<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
+                    "<h1>Rituals Diffuser</h1>"
+                    "<p>Web interface files missing!</p>"
+                    "<p>Please flash <b>spiffs_esp8266.bin</b> to the device.</p>"
+                    "</body></html>");
+            } else {
+                request->redirect("http://192.168.4.1/");
+            }
         } else {
             request->send(404);
         }

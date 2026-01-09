@@ -257,6 +257,52 @@ Automatically dims the LED during specified hours:
   <img src="docs/images/hardware-diagnostics.png" alt="Hardware Diagnostics" width="250"/>
 </p>
 
+### Can't access 192.168.4.1 (AP mode)
+
+**First, verify you're in AP mode:**
+- LED should be **orange pulsing**
+- WiFi network `Rituals-Diffuser-XXXX` should be visible
+- Password: `diffuser123`
+
+**If AP mode won't start:**
+1. AP mode only activates when:
+   - No WiFi credentials saved, OR
+   - WiFi connection fails 3x (takes ~90 seconds), OR
+   - Long press front button (3 seconds)
+2. Check serial log for `[WIFI] AP started` and `[WIFI] AP IP: 192.168.4.1`
+3. If `[WIFI] ERROR: Failed to start AP!` appears, try factory reset (long press rear button)
+
+**If connected but page won't load:**
+1. Use `http://192.168.4.1/` (not https!)
+2. Check your phone's WiFi details - Gateway should show `192.168.4.1`
+3. Disable mobile data temporarily
+4. Try a different browser or device
+
+**If you see "Web interface files missing":**
+- You need to flash SPIFFS (the web interface files)
+- Download `spiffs_esp8266.bin` from the [latest release](https://github.com/martijnrenkema/Rituals-diffuser/releases)
+- Flash via web interface (Firmware Update) or esptool:
+  ```bash
+  # ESP8266: SPIFFS offset is 0x1E0000
+  esptool.py write_flash 0x1E0000 spiffs_esp8266.bin
+  ```
+
+**Serial debug commands:**
+```bash
+# Monitor serial output (115200 baud)
+pio device monitor -b 115200
+
+# Or with screen
+screen /dev/ttyUSB0 115200
+```
+
+Look for these log messages:
+- `[WIFI] AP started: Rituals-Diffuser-XXXX` - AP is running
+- `[WIFI] AP Password: diffuser123` - Password being used
+- `[WIFI] AP IP: 192.168.4.1` - IP address assigned
+- `[WEB] Server started on port 80` - Web server ready
+- `[WIFI] DNS server started for captive portal` - Captive portal active
+
 ## Project Structure
 
 ```
@@ -327,6 +373,18 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.7.0
+Major stability release for ESP8266 AP mode and captive portal:
+- **Fixed infinite redirect loop** when SPIFFS/index.html is missing (now shows helpful error page)
+- **Fixed WiFi AP timing issues** on ESP8266: added proper delays and explicit IP configuration
+- **Fixed DNS server race condition**: DNS now starts after webserver is ready
+- **Fixed background reconnect mode stuck**: properly returns to AP mode after failed reconnect
+- **Fixed double storage initialization**: settings now loaded once at boot
+- **Fixed AP password validation**: passwords <8 chars now fallback to default
+- **Added null check** for AsyncWebServer allocation
+- **Added extensive troubleshooting** section in README for AP mode issues
+- Defaults are now persisted to EEPROM on first boot
 
 ### v1.6.9
 - Fixed WiFi AP connection issues on ESP8266: use pure AP mode instead of AP_STA

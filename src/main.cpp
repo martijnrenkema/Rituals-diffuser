@@ -231,8 +231,8 @@ void setup() {
     logger.infof("System startup - v%s", FIRMWARE_VERSION);
 
     // Initialize components
-    storage.begin();
-    settings = storage.load();
+    storage.begin();  // Loads settings internally
+    settings = storage.getSettings();  // Get cached settings (no double load)
 
     ledController.begin();
     ledController.showError();  // Red during startup

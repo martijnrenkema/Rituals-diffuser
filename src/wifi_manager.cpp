@@ -69,6 +69,13 @@ void WiFiManager::loop() {
             break;
 
         case WifiStatus::AP_MODE:
+            // Start DNS server on first loop iteration (after webserver is ready)
+            if (!_dnsStarted) {
+                _dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+                _dnsStarted = true;
+                Serial.println("[WIFI] DNS server started for captive portal");
+            }
+
             // Process DNS requests for captive portal
             _dnsServer.processNextRequest();
 
@@ -79,17 +86,21 @@ void WiFiManager::loop() {
                 // Switch to AP_STA mode to allow WiFi connection while keeping AP active
                 WiFi.mode(WIFI_AP_STA);
                 WiFi.begin(_ssid.c_str(), _password.c_str());
-                // Don't block - we'll check connection status next loop iteration
+                _connectStartTime = now;  // Track when we started trying
             }
-            // Check if background reconnect succeeded (non-blocking check)
+
+            // Check if background reconnect succeeded or timed out
             if (WiFi.status() == WL_CONNECTED) {
                 Serial.println("[WIFI] Reconnected to WiFi!");
                 Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
                 logger.infof("WiFi reconnected from AP: %s", WiFi.localIP().toString().c_str());
                 _reconnectAttempts = 0;
-                // Stop AP mode to close the security hole
                 stopAP();
                 setState(WifiStatus::CONNECTED);
+            } else if (WiFi.getMode() == WIFI_AP_STA && now - _connectStartTime >= 30000) {
+                // Background reconnect timed out after 30s, switch back to pure AP mode
+                Serial.println("[WIFI] Background reconnect timeout, staying in AP mode");
+                WiFi.mode(WIFI_AP);
             }
             break;
     }
@@ -131,26 +142,55 @@ bool WiFiManager::isConnected() {
 }
 
 void WiFiManager::startAP() {
+    // Disconnect any existing connections first
+    WiFi.disconnect(true);
+    delay(100);
+
     // Use pure AP mode for better compatibility on ESP8266
-    // AP_STA can cause connection issues on some chips
     WiFi.mode(WIFI_AP);
+    delay(100);  // ESP8266 needs time after mode change
+
+    // Configure AP with explicit IP settings for reliability
+    IPAddress apIP(192, 168, 4, 1);
+    IPAddress gateway(192, 168, 4, 1);
+    IPAddress subnet(255, 255, 255, 0);
+    WiFi.softAPConfig(apIP, gateway, subnet);
 
     const char* apPassword = storage.getAPPassword();
-    WiFi.softAP(_apName.c_str(), apPassword);
 
-    // Start DNS server for captive portal - redirect all domains to AP IP
-    _dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-    Serial.println("[WIFI] DNS server started for captive portal");
+    // Start the AP - on ESP8266, channel and hidden params help stability
+    bool apStarted = WiFi.softAP(_apName.c_str(), apPassword, 1, false, 4);
+
+    if (!apStarted) {
+        Serial.println("[WIFI] ERROR: Failed to start AP!");
+        logger.error("Failed to start AP");
+        return;
+    }
+
+    // Wait for AP to be fully ready
+    delay(500);
+
+    // Verify AP IP is valid before starting DNS
+    IPAddress currentIP = WiFi.softAPIP();
+    if (currentIP == IPAddress(0, 0, 0, 0)) {
+        Serial.println("[WIFI] ERROR: AP IP is 0.0.0.0!");
+        logger.error("AP IP invalid");
+        return;
+    }
 
     setState(WifiStatus::AP_MODE);
     Serial.printf("[WIFI] AP started: %s\n", _apName.c_str());
     Serial.printf("[WIFI] AP Password: %s\n", apPassword);
-    Serial.printf("[WIFI] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf("[WIFI] AP IP: %s\n", currentIP.toString().c_str());
     logger.infof("AP mode started: %s", _apName.c_str());
+
+    // DNS server will be started after webserver is ready (in main.cpp)
+    // This prevents race condition where DNS redirects before webserver is listening
 }
 
 void WiFiManager::stopAP() {
     _dnsServer.stop();
+    _dnsStarted = false;
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
     Serial.println("[WIFI] AP stopped");

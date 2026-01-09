@@ -62,6 +62,7 @@ private:
     // DNS server for captive portal
     DNSServer _dnsServer;
     static const byte DNS_PORT = 53;
+    bool _dnsStarted = false;
 
     void setState(WifiStatus state);
     void generateAPName();
