@@ -28,6 +28,7 @@ void UpdateChecker::begin() {
     strlcpy(_info.currentVersion, FIRMWARE_VERSION, sizeof(_info.currentVersion));
     memset(_info.latestVersion, 0, sizeof(_info.latestVersion));
     memset(_info.downloadUrl, 0, sizeof(_info.downloadUrl));
+    memset(_info.spiffsUrl, 0, sizeof(_info.spiffsUrl));
     memset(_info.releaseUrl, 0, sizeof(_info.releaseUrl));
     memset(_info.errorMessage, 0, sizeof(_info.errorMessage));
     _info.available = false;
@@ -211,18 +212,21 @@ bool UpdateChecker::parseReleaseJson(const char* json, size_t length) {
     // Compare versions
     _info.available = compareVersions(_info.latestVersion, _info.currentVersion) > 0;
 
-    // Find firmware download URL (for ESP32 auto-update)
+    // Find firmware and SPIFFS download URLs (for ESP32 auto-update)
     #ifndef PLATFORM_ESP8266
     JsonArray assets = doc["assets"];
     for (JsonObject asset : assets) {
         const char* name = asset["name"];
         if (name) {
-            // Look for esp32 firmware binary
-            if (strstr(name, "esp32") != nullptr && strstr(name, ".bin") != nullptr) {
-                const char* downloadUrl = asset["browser_download_url"];
-                if (downloadUrl) {
+            const char* downloadUrl = asset["browser_download_url"];
+            if (downloadUrl) {
+                // Look for esp32 firmware binary
+                if (strstr(name, "firmware") != nullptr && strstr(name, "esp32") != nullptr) {
                     strlcpy(_info.downloadUrl, downloadUrl, sizeof(_info.downloadUrl));
-                    break;
+                }
+                // Look for esp32 SPIFFS binary
+                else if (strstr(name, "spiffs") != nullptr && strstr(name, "esp32") != nullptr) {
+                    strlcpy(_info.spiffsUrl, downloadUrl, sizeof(_info.spiffsUrl));
                 }
             }
         }
@@ -265,70 +269,50 @@ void UpdateChecker::startOTAUpdate() {
     _otaRequested = true;
 }
 
-void UpdateChecker::performOTAUpdate() {
-    logger.infof("Starting OTA update from: %s", _info.downloadUrl);
-
-    _state = UpdateCheckState::DOWNLOADING;
-    _info.downloadProgress = 0;
-    memset(_info.errorMessage, 0, sizeof(_info.errorMessage));
-    if (_stateCallback) _stateCallback();
+bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const char* label) {
+    logger.infof("Downloading %s from: %s", label, url);
 
     WiFiClientSecure client;
     client.setInsecure();
-    client.setTimeout(60);  // 60 second timeout for download
+    client.setTimeout(60);
 
     HTTPClient http;
     http.setTimeout(60000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
-    if (!http.begin(client, _info.downloadUrl)) {
-        strlcpy(_info.errorMessage, "HTTP begin failed", sizeof(_info.errorMessage));
-        _state = UpdateCheckState::ERROR;
-        if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
-        return;
+    if (!http.begin(client, url)) {
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s: HTTP begin failed", label);
+        return false;
     }
 
     int httpCode = http.GET();
-
     if (httpCode != HTTP_CODE_OK) {
-        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Download failed: %d", httpCode);
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s failed: %d", label, httpCode);
         http.end();
-        _state = UpdateCheckState::ERROR;
-        if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
-        return;
+        return false;
     }
 
     int contentLength = http.getSize();
     if (contentLength <= 0) {
-        strlcpy(_info.errorMessage, "Invalid content length", sizeof(_info.errorMessage));
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s: invalid size", label);
         http.end();
-        _state = UpdateCheckState::ERROR;
-        if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
-        return;
+        return false;
     }
 
-    logger.infof("Firmware size: %d bytes", contentLength);
+    logger.infof("%s size: %d bytes", label, contentLength);
 
-    // Start update
-    if (!Update.begin(contentLength)) {
-        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Update begin failed: %s", Update.errorString());
+    if (!Update.begin(contentLength, updateType)) {
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s begin failed: %s", label, Update.errorString());
         http.end();
-        _state = UpdateCheckState::ERROR;
-        if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
-        return;
+        return false;
     }
 
-    // Stream firmware
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buffer[1024];
     size_t written = 0;
     size_t lastProgress = 0;
     unsigned long lastDataTime = millis();
-    const unsigned long OTA_STREAM_TIMEOUT = 30000;  // 30 second timeout for stalled downloads
+    const unsigned long OTA_STREAM_TIMEOUT = 30000;
 
     while (http.connected() && written < (size_t)contentLength) {
         size_t available = stream->available();
@@ -337,64 +321,77 @@ void UpdateChecker::performOTAUpdate() {
             size_t bytesRead = stream->readBytes(buffer, toRead);
 
             if (Update.write(buffer, bytesRead) != bytesRead) {
-                snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Write failed: %s", Update.errorString());
+                snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s write failed", label);
                 Update.abort();
                 http.end();
-                _state = UpdateCheckState::ERROR;
-                if (_stateCallback) _stateCallback();
-                _state = UpdateCheckState::IDLE;
-                return;
+                return false;
             }
 
             written += bytesRead;
-            lastDataTime = millis();  // Reset timeout on successful read
-
-            // Update progress
+            lastDataTime = millis();
             _info.downloadProgress = (written * 100) / contentLength;
 
-            // Log progress every 10%
             if (_info.downloadProgress >= lastProgress + 10) {
                 lastProgress = _info.downloadProgress;
-                logger.infof("Download progress: %d%%", _info.downloadProgress);
+                logger.infof("%s progress: %d%%", label, _info.downloadProgress);
                 if (_stateCallback) _stateCallback();
             }
         } else {
-            // No data available - check for timeout
             if (millis() - lastDataTime > OTA_STREAM_TIMEOUT) {
-                strlcpy(_info.errorMessage, "Download timeout: no data", sizeof(_info.errorMessage));
+                snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s timeout", label);
                 Update.abort();
                 http.end();
-                _state = UpdateCheckState::ERROR;
-                if (_stateCallback) _stateCallback();
-                _state = UpdateCheckState::IDLE;
-                return;
+                return false;
             }
-            delay(10);  // Small delay when waiting for data
+            delay(10);
         }
-        yield();  // Feed watchdog
+        yield();
     }
 
     http.end();
 
     if (written != (size_t)contentLength) {
-        strlcpy(_info.errorMessage, "Incomplete download", sizeof(_info.errorMessage));
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s incomplete", label);
         Update.abort();
-        _state = UpdateCheckState::ERROR;
-        if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
-        return;
+        return false;
     }
 
-    // Finish update
     if (!Update.end(true)) {
-        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Update end failed: %s", Update.errorString());
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s end failed: %s", label, Update.errorString());
+        return false;
+    }
+
+    logger.infof("%s complete!", label);
+    return true;
+}
+
+void UpdateChecker::performOTAUpdate() {
+    _state = UpdateCheckState::DOWNLOADING;
+    _info.downloadProgress = 0;
+    memset(_info.errorMessage, 0, sizeof(_info.errorMessage));
+    if (_stateCallback) _stateCallback();
+
+    // Step 1: Download and install firmware
+    if (!downloadAndInstall(_info.downloadUrl, U_FLASH, "Firmware")) {
         _state = UpdateCheckState::ERROR;
         if (_stateCallback) _stateCallback();
         _state = UpdateCheckState::IDLE;
         return;
     }
 
-    logger.info("OTA update successful! Restarting...");
+    // Step 2: Download and install SPIFFS (if URL available)
+    if (strlen(_info.spiffsUrl) > 0) {
+        _info.downloadProgress = 0;
+        if (_stateCallback) _stateCallback();
+
+        if (!downloadAndInstall(_info.spiffsUrl, U_SPIFFS, "SPIFFS")) {
+            // SPIFFS failed, but firmware was already installed
+            // Log warning but still restart to apply firmware
+            logger.warn("SPIFFS update failed, but firmware was installed");
+        }
+    }
+
+    logger.info("OTA update complete! Restarting...");
     _info.downloadProgress = 100;
     if (_stateCallback) _stateCallback();
 
