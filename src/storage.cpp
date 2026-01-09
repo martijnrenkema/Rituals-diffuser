@@ -3,8 +3,10 @@
 
 #ifdef PLATFORM_ESP8266
     #include <EEPROM.h>
+    #include <ESP8266WiFi.h>
 #else
     #include <Preferences.h>
+    #include <WiFi.h>
     static Preferences prefs;
 #endif
 
@@ -194,14 +196,26 @@ const char* Storage::getOTAPassword() {
     if (strlen(_settings.otaPassword) > 0) {
         return _settings.otaPassword;
     }
-    return OTA_PASSWORD;  // Default from config.h
+    // Generate unique default password from MAC address
+    // Format: "ota-" + last 6 hex chars of MAC = 10 char password
+    static char defaultOta[16];
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    snprintf(defaultOta, sizeof(defaultOta), "ota-%02x%02x%02x", mac[3], mac[4], mac[5]);
+    return defaultOta;
 }
 
 const char* Storage::getAPPassword() {
     if (strlen(_settings.apPassword) > 0) {
         return _settings.apPassword;
     }
-    return WIFI_AP_PASSWORD;  // Default from config.h
+    // Generate unique default password from MAC address
+    // Format: "diffuser-" + last 4 hex chars of MAC = 13 char password
+    static char defaultAp[16];
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    snprintf(defaultAp, sizeof(defaultAp), "diffuser-%02x%02x", mac[4], mac[5]);
+    return defaultAp;
 }
 
 bool Storage::hasWiFiCredentials() {
