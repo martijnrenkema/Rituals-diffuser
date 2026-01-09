@@ -35,9 +35,14 @@ DiffuserSettings Storage::load() {
 
     // Check magic number
     if (settings.magic != SETTINGS_MAGIC) {
-        Serial.println("[STORAGE] No valid settings found, using defaults");
+        Serial.println("[STORAGE] No valid settings found, initializing defaults");
         memset(&settings, 0, sizeof(settings));
         settings.magic = SETTINGS_MAGIC;
+        ensureDefaults(settings);
+        // Persist defaults to EEPROM so we don't reinitialize every boot
+        EEPROM.put(0, settings);
+        EEPROM.commit();
+        Serial.println("[STORAGE] Defaults saved to EEPROM");
     }
 #else
     // ESP32: Use Preferences
@@ -206,7 +211,8 @@ const char* Storage::getOTAPassword() {
 }
 
 const char* Storage::getAPPassword() {
-    if (strlen(_settings.apPassword) > 0) {
+    // WiFi.softAP requires minimum 8 character password
+    if (strlen(_settings.apPassword) >= 8) {
         return _settings.apPassword;
     }
     // Simple default password for easy setup

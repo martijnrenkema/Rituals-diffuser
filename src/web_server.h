@@ -37,7 +37,6 @@ private:
     unsigned long _pendingActionTime = 0;
 
     void setupRoutes();
-    void handleRoot(AsyncWebServerRequest* request);
     void handleStatus(AsyncWebServerRequest* request);
     void handleSaveWifi(AsyncWebServerRequest* request);
     void handleSaveMqtt(AsyncWebServerRequest* request);
