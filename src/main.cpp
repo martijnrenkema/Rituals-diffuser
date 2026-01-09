@@ -81,10 +81,11 @@ void checkNightMode() {
 // 2. AP mode (orange pulsing)
 // 3. WiFi connecting (cyan blinking)
 // 4. WiFi disconnected (red)
-// 5. Timer active + fan on (blue solid)
-// 6. Interval mode + fan on (purple solid)
-// 7. Fan on (green solid)
-// 8. Standby / fan off (LED off)
+// 5. Timer + Interval mode + fan on (blue slow blink - combined state)
+// 6. Timer active + fan on (blue solid)
+// 7. Interval mode + fan on (purple solid)
+// 8. Fan on (green solid)
+// 9. Standby / fan off (LED off)
 void updateLedStatus() {
     // 1. OTA has highest priority
     if (otaInProgress) {
@@ -110,23 +111,27 @@ void updateLedStatus() {
         return;
     }
 
-    // 5-7. Fan states (only when WiFi is connected)
+    // 5-8. Fan states (only when WiFi is connected)
     if (fanController.isOn()) {
-        if (fanController.isTimerActive()) {
-            // 5. Timer active - blue solid
+        if (fanController.isTimerActive() && fanController.isIntervalMode()) {
+            // 5. Timer + Interval mode - blue blinking (combined state)
+            ledController.setColor(LED_COLOR_BLUE);
+            ledController.setMode(LedMode::BLINK_SLOW);
+        } else if (fanController.isTimerActive()) {
+            // 6. Timer active only - blue solid
             ledController.setColor(LED_COLOR_BLUE);
             ledController.setMode(LedMode::ON);
         } else if (fanController.isIntervalMode()) {
-            // 6. Interval mode - purple solid
+            // 7. Interval mode only - purple solid
             ledController.showIntervalMode();
         } else {
-            // 7. Normal fan on - green solid
+            // 8. Normal fan on - green solid
             ledController.showFanRunning();
         }
         return;
     }
 
-    // 8. Standby - LED off
+    // 9. Standby - LED off
     ledController.off();
 }
 
@@ -215,13 +220,13 @@ void setup() {
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Rituals Perfume Genie 2.0");
-    Serial.println("  Custom Firmware v1.5.0");
+    Serial.println("  Custom Firmware v1.5.1");
     Serial.println("=================================");
     Serial.println();
 
     // Initialize logger first
     logger.begin();
-    logger.info("System startup - v1.5.0");
+    logger.info("System startup - v1.5.1");
 
     // Initialize components
     storage.begin();
@@ -282,6 +287,7 @@ void loop() {
     ledController.loop();
     otaHandler.loop();
     buttonHandler.loop();
+    webServer.loop();  // Process pending web actions
 
     // Run MQTT loop with extra yield time
     mqttHandler.loop();

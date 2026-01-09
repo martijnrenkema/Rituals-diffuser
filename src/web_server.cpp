@@ -62,6 +62,45 @@ void WebServer::stop() {
     }
 }
 
+void WebServer::loop() {
+    // Process deferred actions from async callbacks
+    // This prevents blocking the network stack in callbacks
+
+    if (_pendingActionTime == 0) return;
+
+    // Wait for HTTP response to be sent (500ms is enough for TCP ACK)
+    if (millis() - _pendingActionTime < 500) return;
+
+    if (_pendingWifiConnect) {
+        _pendingWifiConnect = false;
+        _pendingActionTime = 0;
+        wifiManager.connect(_pendingWifiSsid.c_str(), _pendingWifiPassword.c_str());
+        if (_settingsCallback) _settingsCallback();
+    }
+
+    if (_pendingMqttConnect) {
+        _pendingMqttConnect = false;
+        _pendingActionTime = 0;
+        mqttHandler.disconnect();
+        mqttHandler.connect(_pendingMqttHost.c_str(), _pendingMqttPort,
+                           _pendingMqttUser.c_str(), _pendingMqttPassword.c_str());
+        if (_settingsCallback) _settingsCallback();
+    }
+
+    if (_pendingReset) {
+        _pendingReset = false;
+        _pendingActionTime = 0;
+        storage.reset();
+        ESP.restart();
+    }
+
+    if (_pendingRestart) {
+        _pendingRestart = false;
+        _pendingActionTime = 0;
+        ESP.restart();
+    }
+}
+
 void WebServer::onSettingsChanged(SettingsCallback callback) {
     _settingsCallback = callback;
 }
@@ -151,7 +190,7 @@ void WebServer::setupRoutes() {
 
     // OTA Update - Firmware
     _server->on("/api/update/firmware", HTTP_POST,
-        [](AsyncWebServerRequest* request) {
+        [this](AsyncWebServerRequest* request) {
             // Upload complete handler
             bool success = !Update.hasError();
             AsyncWebServerResponse* response = request->beginResponse(
@@ -162,8 +201,9 @@ void WebServer::setupRoutes() {
             response->addHeader("Connection", "close");
             request->send(response);
             if (success) {
-                delay(1000);
-                ESP.restart();
+                // Schedule restart in loop() to avoid blocking async callback
+                _pendingRestart = true;
+                _pendingActionTime = millis();
             }
         },
         [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
@@ -218,7 +258,7 @@ void WebServer::setupRoutes() {
 
     // OTA Update - Filesystem
     _server->on("/api/update/filesystem", HTTP_POST,
-        [](AsyncWebServerRequest* request) {
+        [this](AsyncWebServerRequest* request) {
             bool success = !Update.hasError();
             AsyncWebServerResponse* response = request->beginResponse(
                 success ? 200 : 500,
@@ -228,8 +268,9 @@ void WebServer::setupRoutes() {
             response->addHeader("Connection", "close");
             request->send(response);
             if (success) {
-                delay(1000);
-                ESP.restart();
+                // Schedule restart in loop() to avoid blocking async callback
+                _pendingRestart = true;
+                _pendingActionTime = millis();
             }
         },
         [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
@@ -362,15 +403,11 @@ void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"WiFi saved, connecting...\"}");
 
-    // Wait for HTTP response to be fully sent before reconnecting WiFi
-    // WiFi.begin() resets the radio which can interrupt the TCP connection
-    // 500ms is enough for the browser to receive the complete response + TCP ACK
-    delay(500);
-    wifiManager.connect(ssid.c_str(), password.c_str());
-
-    if (_settingsCallback) {
-        _settingsCallback();
-    }
+    // Schedule WiFi connect in loop() to avoid blocking async callback
+    _pendingWifiSsid = ssid;
+    _pendingWifiPassword = password;
+    _pendingWifiConnect = true;
+    _pendingActionTime = millis();
 }
 
 void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
@@ -402,14 +439,13 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"MQTT saved, connecting...\"}");
 
-    // Reconnect MQTT (small delay to let response send)
-    delay(100);
-    mqttHandler.disconnect();
-    mqttHandler.connect(host.c_str(), port, user.c_str(), password.c_str());
-
-    if (_settingsCallback) {
-        _settingsCallback();
-    }
+    // Schedule MQTT reconnect in loop() to avoid blocking async callback
+    _pendingMqttHost = host;
+    _pendingMqttPort = port;
+    _pendingMqttUser = user;
+    _pendingMqttPassword = password;
+    _pendingMqttConnect = true;
+    _pendingActionTime = millis();
 }
 
 void WebServer::handleFanControl(AsyncWebServerRequest* request) {
@@ -476,9 +512,9 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
 void WebServer::handleReset(AsyncWebServerRequest* request) {
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Resetting...\"}");
 
-    delay(100);
-    storage.reset();
-    ESP.restart();
+    // Schedule reset in loop() to avoid blocking async callback
+    _pendingReset = true;
+    _pendingActionTime = millis();
 }
 
 void WebServer::handleSavePasswords(AsyncWebServerRequest* request) {
