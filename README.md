@@ -116,12 +116,12 @@ pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 
 #### Method B: Using esptool (Pre-built binaries)
 
-> **⚠️ You must flash TWO files: firmware + SPIFFS (web interface)**
+> **⚠️ You must flash TWO files: firmware + filesystem (web interface)**
 >
 > | Chip | File | Address |
 > |------|------|---------|
 > | ESP8266 | `firmware_esp8266.bin` | `0x0` |
-> | ESP8266 | `spiffs_esp8266.bin` | `0x1E0000` |
+> | ESP8266 | `littlefs_esp8266.bin` | `0x1E0000` |
 > | ESP32 | `firmware_esp32.bin` | `0x10000` |
 > | ESP32 | `spiffs_esp32.bin` | `0x3D0000` |
 >
@@ -132,7 +132,7 @@ pio run -e esp8266 -t uploadfs --upload-port /dev/cu.usbserial-XXXX
 ```bash
 # For ESP8266 - flash BOTH files:
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 --baud 460800 \
-  write_flash 0x0 firmware_esp8266.bin 0x1E0000 spiffs_esp8266.bin
+  write_flash 0x0 firmware_esp8266.bin 0x1E0000 littlefs_esp8266.bin
 
 # For ESP32 - flash BOTH files:
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 --baud 460800 \
@@ -143,7 +143,7 @@ You can also flash them separately:
 ```bash
 # ESP8266
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x0 firmware_esp8266.bin
-esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x1E0000 spiffs_esp8266.bin
+esptool.py --port /dev/cu.usbserial-XXXX --chip esp8266 write_flash 0x1E0000 littlefs_esp8266.bin
 
 # ESP32
 esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 write_flash 0x10000 firmware_esp32.bin
@@ -307,12 +307,12 @@ Automatically dims the LED during specified hours:
 4. Try a different browser or device
 
 **If you see "Web interface files missing":**
-- You need to flash SPIFFS (the web interface files)
-- Download `spiffs_esp8266.bin` from the [latest release](https://github.com/martijnrenkema/Rituals-diffuser/releases)
+- You need to flash the filesystem (the web interface files)
+- Download `littlefs_esp8266.bin` (ESP8266) or `spiffs_esp32.bin` (ESP32) from the [latest release](https://github.com/martijnrenkema/Rituals-diffuser/releases)
 - Flash via web interface (Firmware Update) or esptool:
   ```bash
-  # ESP8266: SPIFFS offset is 0x1E0000
-  esptool.py write_flash 0x1E0000 spiffs_esp8266.bin
+  # ESP8266: filesystem offset is 0x1E0000
+  esptool.py write_flash 0x1E0000 littlefs_esp8266.bin
   ```
 
 **Serial debug commands:**
@@ -345,7 +345,7 @@ Look for these log messages:
 │   ├── web_server.*          # Web interface + OTA
 │   ├── mqtt_handler.*        # MQTT + HA discovery
 │   └── ota_handler.*         # ArduinoOTA
-├── data/                     # Web files (SPIFFS)
+├── data/                     # Web files (LittleFS on ESP8266, SPIFFS on ESP32)
 │   ├── index.html
 │   ├── update.html
 │   ├── style.css
@@ -401,6 +401,10 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.7.2
+- **Fixed ESP8266 filesystem**: platformio.ini now builds LittleFS image (was building SPIFFS but code expected LittleFS)
+- **Note**: ESP8266 now uses `littlefs_esp8266.bin` instead of `spiffs_esp8266.bin` (flash address unchanged: `0x1E0000`)
 
 ### v1.7.1
 Fix for ESP8266 Out of Memory (OOM) crash at startup:
