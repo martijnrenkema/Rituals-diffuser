@@ -151,7 +151,7 @@ void Logger::error(const char* message) {
 }
 
 void Logger::infof(const char* format, ...) {
-    char buffer[80];
+    char buffer[LOG_MESSAGE_SIZE];
     va_list args;
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
@@ -160,7 +160,7 @@ void Logger::infof(const char* format, ...) {
 }
 
 void Logger::warnf(const char* format, ...) {
-    char buffer[80];
+    char buffer[LOG_MESSAGE_SIZE];
     va_list args;
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
@@ -169,7 +169,7 @@ void Logger::warnf(const char* format, ...) {
 }
 
 void Logger::errorf(const char* format, ...) {
-    char buffer[80];
+    char buffer[LOG_MESSAGE_SIZE];
     va_list args;
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);

@@ -15,8 +15,10 @@ extern void updateLedStatus();
 extern bool otaInProgress;
 
 #ifdef PLATFORM_ESP8266
-    #include <FS.h>
+    #include <LittleFS.h>
     #include <Updater.h>
+    // Use LittleFS on ESP8266 (same as logger.cpp to avoid mounting two filesystems)
+    #define FILESYSTEM LittleFS
     // ESP8266 uses different method names
     #define UPDATE_ERROR_STRING() Update.getErrorString()
     // Linker symbols for filesystem size
@@ -25,6 +27,7 @@ extern bool otaInProgress;
 #else
     #include <SPIFFS.h>
     #include <Update.h>
+    #define FILESYSTEM SPIFFS
     #define UPDATE_ERROR_STRING() Update.errorString()
 #endif
 
@@ -39,13 +42,13 @@ void WebServer::begin() {
         return;
     }
 
-    // Initialize SPIFFS
+    // Initialize filesystem (LittleFS on ESP8266, SPIFFS on ESP32)
 #ifdef PLATFORM_ESP8266
-    if (!SPIFFS.begin()) {
+    if (!FILESYSTEM.begin()) {
 #else
-    if (!SPIFFS.begin(true)) {
+    if (!FILESYSTEM.begin(true)) {
 #endif
-        Serial.println("[WEB] SPIFFS mount failed");
+        Serial.println("[WEB] Filesystem mount failed");
     }
 
     _server = new AsyncWebServer(WEBSERVER_PORT);
@@ -126,8 +129,8 @@ void WebServer::onSettingsChanged(SettingsCallback callback) {
 }
 
 void WebServer::setupRoutes() {
-    // Serve static files from SPIFFS
-    _server->serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
+    // Serve static files from filesystem
+    _server->serveStatic("/", FILESYSTEM, "/").setDefaultFile("index.html");
 
     // API endpoints
     _server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -394,7 +397,7 @@ void WebServer::setupRoutes() {
             // Don't redirect if already requesting root (prevents infinite loop if index.html missing)
             String url = request->url();
             if (url == "/" || url == "/index.html") {
-                // SPIFFS probably missing - send error page
+                // Filesystem probably missing - send error page
                 request->send(200, "text/html",
                     "<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
                     "<h1>Rituals Diffuser</h1>"

@@ -3,6 +3,11 @@
 
 #include <Arduino.h>
 
+// Platform detection
+#ifdef ESP8266
+    #define PLATFORM_ESP8266
+#endif
+
 // Log levels
 enum class LogLevel {
     INFO,
@@ -10,17 +15,22 @@ enum class LogLevel {
     ERROR
 };
 
+// ESP8266 has limited RAM (~80KB), reduce buffer sizes to prevent OOM
+#ifdef PLATFORM_ESP8266
+    #define MAX_LOG_ENTRIES 30
+    #define LOG_MESSAGE_SIZE 48
+#else
+    #define MAX_LOG_ENTRIES 100
+    #define LOG_MESSAGE_SIZE 80
+#endif
+
 // Single log entry
 struct LogEntry {
     time_t epochTime;          // Unix timestamp (0 if NTP not synced)
     unsigned long uptimeMs;    // millis() at log time (for relative time if no NTP)
     LogLevel level;
-    char message[80];          // Truncated to save memory
+    char message[LOG_MESSAGE_SIZE];  // Truncated to save memory
 };
-
-// Maximum number of log entries to keep
-// Entries are stored in SPIFFS for persistence across reboots
-#define MAX_LOG_ENTRIES 100
 
 // Log file path
 #define LOG_FILE_PATH "/logs.bin"

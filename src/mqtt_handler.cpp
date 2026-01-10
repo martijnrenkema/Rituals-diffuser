@@ -26,7 +26,12 @@ void MQTTHandler::begin() {
     _mqttClient.setCallback(mqttCallback);
     _mqttClient.setKeepAlive(MQTT_KEEPALIVE);
     _mqttClient.setSocketTimeout(3);  // 3 second socket timeout for PubSubClient operations
+    // ESP8266 has limited RAM, use smaller buffer (discovery payloads are already compact)
+    #ifdef PLATFORM_ESP8266
+    _mqttClient.setBufferSize(512);
+    #else
     _mqttClient.setBufferSize(1536);  // Larger buffer for discovery payloads
+    #endif
 
     // Generate unique device ID from MAC
     uint8_t mac[6];

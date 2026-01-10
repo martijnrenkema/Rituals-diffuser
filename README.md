@@ -402,6 +402,16 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.7.1
+Fix for ESP8266 Out of Memory (OOM) crash at startup:
+- **Reduced log buffer** for ESP8266: 30 entries (was 100), saves ~6.4KB RAM
+- **Reduced log message size** for ESP8266: 48 chars (was 80), saves ~1KB RAM
+- **Reduced MQTT buffer** for ESP8266: 512 bytes (was 1536), saves ~1KB RAM
+- **Fixed filesystem conflict**: web_server now uses LittleFS (same as logger)
+- ESP32 unchanged: keeps original buffer sizes
+
+Thanks to [@emiel-qx](https://github.com/emiel-qx) for testing and reporting!
+
 ### v1.7.0
 Major stability release for ESP8266 AP mode and captive portal:
 - **Fixed infinite redirect loop** when SPIFFS/index.html is missing (now shows helpful error page)
