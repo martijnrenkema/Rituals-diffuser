@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.7.0-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.7.3-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Untested-yellow)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -401,6 +401,15 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.7.3
+Attempted fix for ESP8266 "Check for updates" and missing MQTT Diffuser entity:
+- **Update check failing** with "Connection failed: -1": reduced BearSSL buffer from 16KB to 512 bytes
+- **Diffuser entity not appearing** in Home Assistant: increased MQTT buffer to 640 bytes, compacted fan discovery payload
+- **Added heap logging** before update check for debugging memory issues
+- **Shorter timer preset names** in MQTT: "30m", "60m", "90m", "120m", "Cont" (saves buffer space)
+
+Thanks to [@jozg](https://github.com/jozg) for reporting! Please let us know if this release fixes your issues.
 
 ### v1.7.2
 - **Fixed ESP8266 filesystem**: platformio.ini now builds LittleFS image (was building SPIFFS but code expected LittleFS)

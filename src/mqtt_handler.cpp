@@ -26,9 +26,9 @@ void MQTTHandler::begin() {
     _mqttClient.setCallback(mqttCallback);
     _mqttClient.setKeepAlive(MQTT_KEEPALIVE);
     _mqttClient.setSocketTimeout(3);  // 3 second socket timeout for PubSubClient operations
-    // ESP8266 has limited RAM, use smaller buffer (discovery payloads are already compact)
+    // ESP8266 has limited RAM, but fan discovery needs ~550 bytes
     #ifdef PLATFORM_ESP8266
-    _mqttClient.setBufferSize(512);
+    _mqttClient.setBufferSize(640);
     #else
     _mqttClient.setBufferSize(1536);  // Larger buffer for discovery payloads
     #endif
@@ -198,13 +198,13 @@ void MQTTHandler::processPublishStateMachine() {
 
         case MqttPublishState::STATE_PRESET:
             {
-                String preset = "Continuous";
+                String preset = "Cont";
                 if (fanController.isTimerActive()) {
                     uint16_t remaining = fanController.getRemainingMinutes();
-                    if (remaining <= 30) preset = "30 min";
-                    else if (remaining <= 60) preset = "60 min";
-                    else if (remaining <= 90) preset = "90 min";
-                    else preset = "120 min";
+                    if (remaining <= 30) preset = "30m";
+                    else if (remaining <= 60) preset = "60m";
+                    else if (remaining <= 90) preset = "90m";
+                    else preset = "120m";
                 }
                 _mqttClient.publish((base + "/fan/preset").c_str(), preset.c_str(), true);
             }
@@ -323,16 +323,16 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
             fanController.turnOn();
         }
     } else if (t.endsWith("/fan/preset/set")) {
-        // Timer preset
-        if (p == "30 min") {
+        // Timer preset (short names to save MQTT buffer space)
+        if (p == "30m") {
             fanController.setTimer(30);
-        } else if (p == "60 min") {
+        } else if (p == "60m") {
             fanController.setTimer(60);
-        } else if (p == "90 min") {
+        } else if (p == "90m") {
             fanController.setTimer(90);
-        } else if (p == "120 min") {
+        } else if (p == "120m") {
             fanController.setTimer(120);
-        } else if (p == "Continuous") {
+        } else if (p == "Cont") {
             fanController.cancelTimer();
             if (!fanController.isOn()) fanController.turnOn();
         }
@@ -396,10 +396,11 @@ void MQTTHandler::publishDiscovery() {
 }
 
 void MQTTHandler::publishFanDiscovery() {
-    String b = getBaseTopic();  // "rituals_diffuser"
-    String id = "rd_" + _deviceId;  // Shorter ID
+    String b = getBaseTopic();
+    String id = "rd_" + _deviceId;
 
-    // Compact JSON payload
+    // Compact JSON payload - keep under 640 bytes for ESP8266
+    // Using shorter preset names to save ~30 bytes
     String p = "{\"name\":\"Diffuser\",";
     p += "\"uniq_id\":\"" + id + "\",";
     p += "\"stat_t\":\"" + b + "/fan/state\",";
@@ -408,11 +409,11 @@ void MQTTHandler::publishFanDiscovery() {
     p += "\"pct_cmd_t\":\"" + b + "/fan/speed/set\",";
     p += "\"pr_mode_stat_t\":\"" + b + "/fan/preset\",";
     p += "\"pr_mode_cmd_t\":\"" + b + "/fan/preset/set\",";
-    p += "\"pr_modes\":[\"30 min\",\"60 min\",\"90 min\",\"120 min\",\"Continuous\"],";
+    p += "\"pr_modes\":[\"30m\",\"60m\",\"90m\",\"120m\",\"Cont\"],";
     p += "\"avty_t\":\"" + b + "/availability\",";
     p += "\"spd_rng_min\":1,\"spd_rng_max\":100,";
     p += "\"dev\":{\"ids\":[\"rituals_" + _deviceId + "\"],";
-    p += "\"name\":\"Rituals Diffuser\",\"mf\":\"Rituals (Custom FW)\",\"mdl\":\"Perfume Genie 2.0\"}}";
+    p += "\"name\":\"Rituals Diffuser\",\"mf\":\"Rituals\",\"mdl\":\"Genie 2.0\"}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/fan/rd_" + _deviceId + "/config";
 

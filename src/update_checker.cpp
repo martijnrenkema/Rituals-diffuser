@@ -123,8 +123,12 @@ bool UpdateChecker::fetchGitHubRelease() {
     WiFiClientSecure client;
 
     #ifdef PLATFORM_ESP8266
+    // ESP8266 has limited RAM (~80KB) - reduce BearSSL buffers from default 16KB
+    // This prevents OOM when making HTTPS requests
+    client.setBufferSizes(512, 512);
     client.setInsecure();  // Skip certificate verification
     client.setTimeout(UPDATE_CHECK_TIMEOUT);
+    logger.infof("Free heap: %d bytes", ESP.getFreeHeap());
     #else
     client.setInsecure();  // Skip certificate verification
     client.setTimeout(UPDATE_CHECK_TIMEOUT / 1000);  // ESP32 uses seconds
