@@ -183,11 +183,17 @@ Once installed, you can update wirelessly using one of these methods:
 After the first serial flash, use OTA for subsequent updates:
 
 ```bash
-# ESP8266
+# ESP8266 - Firmware
 pio run -e esp8266_ota -t upload
 
-# ESP32
+# ESP8266 - Filesystem (LittleFS)
+pio run -e esp8266_ota -t uploadfs
+
+# ESP32 - Firmware
 pio run -e esp32_ota -t upload
+
+# ESP32 - Filesystem (SPIFFS)
+pio run -e esp32_ota -t uploadfs
 ```
 
 **Requirements:**
@@ -196,12 +202,18 @@ pio run -e esp32_ota -t upload
 - Default OTA password: `diffuser-ota` (configurable in web UI → Security)
 - OTA port: 3232 (ESP32) / 8266 (ESP8266)
 
+> **Note:** OTA updates don't require flash addresses - the ESP framework handles this automatically.
+
 ### Method 3: Manual OTA with espota.py
 
+For firmware updates without PlatformIO:
+
 ```bash
-# Download espota.py from Arduino ESP32 repository
+# Download espota.py from Arduino ESP32/ESP8266 repository
 python espota.py -i <device-ip> -p 3232 -a diffuser-ota -f firmware.bin
 ```
+
+> **Tip:** For filesystem updates, use the web interface instead - it's easier than espota.py for SPIFFS/LittleFS.
 
 ### ESP32 Dual Partition Safety
 
