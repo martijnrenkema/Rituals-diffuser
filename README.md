@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.7.3-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.7.4-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Untested-yellow)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -168,17 +168,56 @@ esptool.py --port /dev/cu.usbserial-XXXX --chip esp32 write_flash 0x3D0000 spiff
 
 ## Updating Firmware (OTA)
 
-Once installed, you can update wirelessly via the web interface:
+Once installed, you can update wirelessly using one of these methods:
+
+### Method 1: Web Interface (Easiest)
 
 1. Open web interface: `http://rituals-diffuser.local` or device IP
 2. Click "Firmware Update" at bottom
-3. Upload new `.bin` file
-4. Wait for restart
+3. Upload the firmware `.bin` file
+4. Upload the filesystem `.bin` file (optional, for web interface updates)
+5. Wait for restart
 
-Or via command line:
+### Method 2: PlatformIO OTA (Developers)
+
+After the first serial flash, use OTA for subsequent updates:
+
 ```bash
-pio run -e esp32dev_ota -t upload
+# ESP8266
+pio run -e esp8266_ota -t upload
+
+# ESP32
+pio run -e esp32_ota -t upload
 ```
+
+**Requirements:**
+- Device must be on same network as your computer
+- Default hostname: `rituals-diffuser.local`
+- Default OTA password: `diffuser-ota` (configurable in web UI → Security)
+- OTA port: 3232 (ESP32) / 8266 (ESP8266)
+
+### Method 3: Manual OTA with espota.py
+
+```bash
+# Download espota.py from Arduino ESP32 repository
+python espota.py -i <device-ip> -p 3232 -a diffuser-ota -f firmware.bin
+```
+
+### ESP32 Dual Partition Safety
+
+The ESP32 uses a dual OTA partition scheme for safe updates:
+
+| Partition | Address | Size | Purpose |
+|-----------|---------|------|---------|
+| app0 (ota_0) | 0x10000 | 1.9MB | OTA slot 0 |
+| app1 (ota_1) | 0x1F0000 | 1.9MB | OTA slot 1 |
+
+**How it protects your device:**
+1. New firmware is written to the **inactive** partition
+2. If write completes successfully, bootloader switches to new partition
+3. If update fails mid-write, old partition remains active → **device keeps working**
+
+> **Note:** ESP8266 has a single app partition (no rollback) due to its limited 2MB flash.
 
 ## Home Assistant Integration
 
@@ -401,6 +440,27 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.7.4
+ESP8266 stability improvements (requires community testing):
+
+- **ESP8266:** Attempt to fix MQTT fan entity not appearing in Home Assistant
+  - Increased MQTT buffer from 640 to 768 bytes (payload + header was exceeding buffer)
+  - Added publish error logging to detect silent failures
+- **ESP8266:** Attempt to fix update check "Connection failed: -1"
+  - Added memory check: skips update check if free heap < 20KB (BearSSL needs ~10-20KB for TLS)
+  - Shows helpful error message instead of cryptic connection error
+- **ESP8266:** Attempt to fix OTA upload crashes
+  - Added explicit watchdog feeds during firmware writes
+  - Reduced JSON document sizes to free up memory
+- **ESP8266:** Reduced RAM usage for better stability
+  - Logger buffer: 30 → 20 entries (saves 480 bytes)
+  - JSON document sizes reduced where possible
+- **Docs:** Added detailed OTA update methods (PlatformIO, espota.py)
+- **Docs:** Added ESP32 dual partition safety explanation
+
+> **Note:** ESP8266 fixes require community testing - we don't have working ESP8266 hardware.
+> Please [report your results](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)!
 
 ### v1.7.3
 Attempted fix for ESP8266 "Check for updates" and missing MQTT Diffuser entity:

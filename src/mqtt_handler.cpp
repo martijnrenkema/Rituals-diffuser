@@ -26,9 +26,10 @@ void MQTTHandler::begin() {
     _mqttClient.setCallback(mqttCallback);
     _mqttClient.setKeepAlive(MQTT_KEEPALIVE);
     _mqttClient.setSocketTimeout(3);  // 3 second socket timeout for PubSubClient operations
-    // ESP8266 has limited RAM, but fan discovery needs ~550 bytes
+    // ESP8266 has limited RAM, but fan discovery needs ~613 bytes + MQTT header (~50 bytes)
+    // Total MQTT packet: header + topic length + topic + payload = ~663 bytes
     #ifdef PLATFORM_ESP8266
-    _mqttClient.setBufferSize(640);
+    _mqttClient.setBufferSize(768);
     #else
     _mqttClient.setBufferSize(1536);  // Larger buffer for discovery payloads
     #endif
@@ -418,7 +419,9 @@ void MQTTHandler::publishFanDiscovery() {
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/fan/rd_" + _deviceId + "/config";
 
     Serial.printf("[MQTT] Fan discovery: %d bytes\n", p.length());
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Fan discovery publish FAILED - buffer too small?");
+    }
 }
 
 void MQTTHandler::publishIntervalSwitchDiscovery() {

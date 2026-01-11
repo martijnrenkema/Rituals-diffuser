@@ -278,6 +278,9 @@ void WebServer::setupRoutes() {
                 }
                 // Feed watchdog to prevent timeout on large uploads
                 yield();
+                #ifdef PLATFORM_ESP8266
+                ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
+                #endif
             }
 
             if (final) {
@@ -343,6 +346,9 @@ void WebServer::setupRoutes() {
                     return;
                 }
                 yield();
+                #ifdef PLATFORM_ESP8266
+                ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
+                #endif
             }
 
             if (final) {
@@ -417,7 +423,8 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     const DiffuserSettings& settings = storage.getSettings();  // Use cache, no NVS read
 
     // Use DynamicJsonDocument to avoid stack overflow on ESP8266 (limited 4KB stack)
-    DynamicJsonDocument doc(1280);  // Heap allocation, includes update info
+    // Reduced from 1280 to 1024 bytes for better ESP8266 memory usage
+    DynamicJsonDocument doc(1024);  // Heap allocation, includes update info
 
     // WiFi status
     doc["wifi"]["connected"] = wifiManager.isConnected();
@@ -702,7 +709,8 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
 
 void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
     // Use DynamicJsonDocument to avoid stack pressure on ESP8266
-    DynamicJsonDocument doc(512);
+    // Reduced from 512 to 384 bytes for better memory usage
+    DynamicJsonDocument doc(384);
 
     // Fan status - connected if we detect RPM when running
     uint16_t rpm = fanController.getRPM();

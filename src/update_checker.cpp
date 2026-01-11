@@ -96,6 +96,20 @@ void UpdateChecker::performCheck() {
         return;
     }
 
+    // ESP8266: Check if we have enough memory for BearSSL TLS handshake
+    // BearSSL needs ~10-20KB for TLS, skip check if heap is too low
+    #ifdef PLATFORM_ESP8266
+    uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < 20000) {
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Low memory (%lu bytes)", freeHeap);
+        logger.warnf("Update check skipped: only %lu bytes free (need 20KB)", freeHeap);
+        _state = UpdateCheckState::ERROR;
+        if (_stateCallback) _stateCallback();
+        _state = UpdateCheckState::IDLE;
+        return;
+    }
+    #endif
+
     _state = UpdateCheckState::CHECKING;
     memset(_info.errorMessage, 0, sizeof(_info.errorMessage));
     if (_stateCallback) _stateCallback();
@@ -185,7 +199,8 @@ bool UpdateChecker::parseReleaseJson(const char* json, size_t length) {
     filter["assets"][0]["browser_download_url"] = true;
 
     // Parse JSON response with filter - this drastically reduces memory needed
-    DynamicJsonDocument doc(2048);
+    // Reduced from 2048 to 1536 bytes for better ESP8266 memory usage
+    DynamicJsonDocument doc(1536);
     DeserializationError err = deserializeJson(doc, json, length, DeserializationOption::Filter(filter));
 
     if (err) {
