@@ -453,6 +453,15 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.7.5
+ESP8266 stability fixes for OTA crashes and LED flickering:
+
+- **Fix OTA crashes** at 11% (firmware) and 74% (filesystem): added watchdog feeds and yield calls during flash writes
+- **Fix LED flickering** when WiFi/MQTT connected: optimized LED updates and added strategic yields in main loop
+- **Fix `__yield` panic**: deferred logger file saves to prevent blocking I/O from async callbacks
+
+> **Testers needed:** We hope these fixes resolve the reported issues. Please test and [report your results](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)!
+
 ### v1.7.4
 ESP8266 stability improvements (requires community testing):
 

@@ -132,10 +132,15 @@ void Logger::saveToFile() {
 }
 
 void Logger::save() {
-    // Only save if dirty and enough time has passed
-    if (_dirty && (millis() - _lastSave >= LOG_SAVE_INTERVAL_MS)) {
+    // Save if urgent, or if dirty and enough time has passed
+    if (_dirty && (_urgentSave || (millis() - _lastSave >= LOG_SAVE_INTERVAL_MS))) {
         saveToFile();
+        _urgentSave = false;
     }
+}
+
+bool Logger::needsUrgentSave() const {
+    return _urgentSave;
 }
 
 void Logger::info(const char* message) {
@@ -202,9 +207,10 @@ void Logger::addEntry(LogLevel level, const char* message) {
 
     _dirty = true;
 
-    // Force save on important events (errors, warnings)
+    // Mark for urgent save on important events (but don't block here)
+    // The main loop will call save() which checks _urgentSave
     if (level == LogLevel::ERROR || level == LogLevel::WARN) {
-        saveToFile();
+        _urgentSave = true;
     }
 }
 

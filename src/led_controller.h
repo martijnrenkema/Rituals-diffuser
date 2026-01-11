@@ -57,6 +57,7 @@ private:
     CRGB _leds[NUM_LEDS];
     uint32_t _currentColor = LED_COLOR_BLUE;
     uint8_t _brightness = 255;
+    CRGB _lastShownColor = CRGB::Black;  // Track last shown color to avoid redundant updates
 
     void updateLed();
 };

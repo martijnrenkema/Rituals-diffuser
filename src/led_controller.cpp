@@ -23,13 +23,21 @@ void LedController::loop() {
 
     switch (_mode) {
         case LedMode::OFF:
-            _leds[0] = CRGB::Black;
-            FastLED.show();
+            // Only update if color actually changed
+            if (_lastShownColor != CRGB::Black) {
+                _leds[0] = CRGB::Black;
+                FastLED.show();
+                _lastShownColor = CRGB::Black;
+            }
             break;
 
         case LedMode::ON:
-            _leds[0] = _currentColor;
-            FastLED.show();
+            // Only update if color actually changed
+            if (_lastShownColor != CRGB(_currentColor)) {
+                _leds[0] = _currentColor;
+                FastLED.show();
+                _lastShownColor = _currentColor;
+            }
             break;
 
         case LedMode::BLINK_FAST:

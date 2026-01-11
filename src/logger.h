@@ -63,11 +63,15 @@ public:
     // Save logs to SPIFFS (called periodically)
     void save();
 
+    // Check if urgent save is needed (for main loop)
+    bool needsUrgentSave() const;
+
 private:
     LogEntry _entries[MAX_LOG_ENTRIES];
     uint16_t _head = 0;      // Next write position
     uint16_t _count = 0;     // Number of entries
     bool _dirty = false;     // True if logs changed since last save
+    bool _urgentSave = false; // True if ERROR/WARN needs immediate save
     unsigned long _lastSave = 0;
 
     void addEntry(LogLevel level, const char* message);

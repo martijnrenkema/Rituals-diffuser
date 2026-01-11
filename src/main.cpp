@@ -290,18 +290,28 @@ void setup() {
 }
 
 void loop() {
-    // Run all component loops
+    // Run all component loops with strategic yields for ESP8266 stability
     wifiManager.loop();
+    yield();
+
     fanController.loop();
     ledController.loop();
+
     otaHandler.loop();
     buttonHandler.loop();
     webServer.loop();  // Process pending web actions
+    yield();
+
     updateChecker.loop();  // Check for firmware updates
 
     // Run MQTT loop with extra yield time
     mqttHandler.loop();
     yield();
+
+    // Check for urgent log saves (ERROR/WARN logs need saving)
+    if (logger.needsUrgentSave()) {
+        logger.save();
+    }
 
     // Periodic tasks every minute
     unsigned long now = millis();

@@ -289,11 +289,26 @@ void UpdateChecker::startOTAUpdate() {
 }
 
 bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const char* label) {
+    // ESP8266: Check heap before starting OTA to prevent crashes
+    #ifdef PLATFORM_ESP8266
+    uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < 25000) {
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Low memory: %lu bytes", freeHeap);
+        logger.errorf("OTA aborted: only %lu bytes free", freeHeap);
+        return false;
+    }
+    #endif
+
     logger.infof("Downloading %s from: %s", label, url);
 
     WiFiClientSecure client;
     client.setInsecure();
     client.setTimeout(60);
+
+    // Reduce BearSSL buffers on ESP8266 to prevent OOM during OTA
+    #ifdef PLATFORM_ESP8266
+    client.setBufferSizes(512, 512);
+    #endif
 
     HTTPClient http;
     http.setTimeout(60000);
@@ -327,7 +342,11 @@ bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const ch
     }
 
     WiFiClient* stream = http.getStreamPtr();
+    #ifdef PLATFORM_ESP8266
+    uint8_t buffer[512];  // Smaller buffer for ESP8266's limited stack
+    #else
     uint8_t buffer[1024];
+    #endif
     size_t written = 0;
     size_t lastProgress = 0;
     unsigned long lastDataTime = millis();
@@ -338,6 +357,12 @@ bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const ch
         if (available > 0) {
             size_t toRead = min(available, sizeof(buffer));
             size_t bytesRead = stream->readBytes(buffer, toRead);
+
+            // Feed watchdog before flash write (can be slow)
+            #ifdef PLATFORM_ESP8266
+            ESP.wdtFeed();
+            #endif
+            yield();
 
             if (Update.write(buffer, bytesRead) != bytesRead) {
                 snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s write failed", label);
@@ -355,6 +380,12 @@ bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const ch
                 logger.infof("%s progress: %d%%", label, _info.downloadProgress);
                 if (_stateCallback) _stateCallback();
             }
+
+            // Feed watchdog after flash write
+            #ifdef PLATFORM_ESP8266
+            ESP.wdtFeed();
+            #endif
+            yield();
         } else {
             if (millis() - lastDataTime > OTA_STREAM_TIMEOUT) {
                 snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s timeout", label);
@@ -363,6 +394,9 @@ bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const ch
                 return false;
             }
             delay(10);
+            #ifdef PLATFORM_ESP8266
+            ESP.wdtFeed();
+            #endif
         }
         yield();
     }
