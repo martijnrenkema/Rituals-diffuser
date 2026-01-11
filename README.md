@@ -453,6 +453,11 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.7.6
+- **Fix web OTA crash on ESP8266**: removed `yield()` calls from AsyncWebServer upload handlers which run in system context where yield causes `__yield` panic
+
+Thanks to [@FredericMa](https://github.com/FredericMa) for the detailed crash logs! We hope this finally fixes OTA updates via the web interface.
+
 ### v1.7.5
 ESP8266 stability fixes for OTA crashes and LED flickering:
 

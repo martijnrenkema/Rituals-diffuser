@@ -277,7 +277,8 @@ void WebServer::setupRoutes() {
                     return;
                 }
                 // Feed watchdog to prevent timeout on large uploads
-                yield();
+                // NOTE: Do NOT call yield() here - on ESP8266 the AsyncWebServer upload
+                // handler runs in system context where yield() causes a panic crash
                 #ifdef PLATFORM_ESP8266
                 ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
                 #endif
@@ -345,7 +346,9 @@ void WebServer::setupRoutes() {
                     Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
                     return;
                 }
-                yield();
+                // Feed watchdog to prevent timeout on large uploads
+                // NOTE: Do NOT call yield() here - on ESP8266 the AsyncWebServer upload
+                // handler runs in system context where yield() causes a panic crash
                 #ifdef PLATFORM_ESP8266
                 ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
                 #endif
