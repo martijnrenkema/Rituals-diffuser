@@ -151,11 +151,76 @@
             font-size: 0.85em;
             margin-bottom: 16px;
         }
+        .info-box {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            margin-bottom: 16px;
+        }
         .version-info {
             text-align: center;
             color: #666;
             font-size: 0.8em;
             margin-top: 20px;
+        }
+
+        /* Modal overlay for ESP8266 countdown */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 400px;
+            margin: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-content h2 {
+            margin-bottom: 16px;
+            color: #f59e0b;
+        }
+        .modal-content p {
+            color: #888;
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+        .countdown {
+            font-size: 4em;
+            font-weight: bold;
+            color: #6366f1;
+            margin: 20px 0;
+        }
+        .countdown-text {
+            color: #888;
+            font-size: 0.9em;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(99, 102, 241, 0.3);
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -163,6 +228,11 @@
     <div class="container">
         <h1>Firmware Update</h1>
         <a href="/" class="back-link">&larr; Back to dashboard</a>
+
+        <!-- ESP8266 info box (shown only on ESP8266) -->
+        <div class="info-box" id="esp8266-info" style="display: none;">
+            <strong>ESP8266 detected:</strong> Updates use a special safe mode. MQTT will be temporarily paused during the update process.
+        </div>
 
         <!-- Firmware Update -->
         <div class="card">
@@ -212,7 +282,77 @@
         </div>
     </div>
 
+    <!-- ESP8266 OTA Mode Countdown Modal -->
+    <div class="modal-overlay" id="ota-modal">
+        <div class="modal-content">
+            <h2>ESP8266 Safe Update Mode</h2>
+            <p>The ESP8266 requires a dedicated update mode for stability. MQTT will be paused and you'll be redirected to a simplified update page.</p>
+            <div class="countdown" id="countdown">3</div>
+            <p class="countdown-text">Switching to safe mode...</p>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
     <script>
+        let isESP8266 = false;
+        let deviceIP = window.location.hostname;
+
+        // Check platform on load
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(d => {
+                document.getElementById('version-info').textContent =
+                    'Firmware: v' + (d.device?.version || '?') +
+                    ' | Platform: ' + (d.device?.platform || '?') +
+                    ' | MAC: ' + (d.device?.mac || 'Unknown');
+
+                isESP8266 = d.device?.platform === 'ESP8266';
+
+                if (isESP8266) {
+                    // ESP8266: Direct naar sync OTA mode - geen dubbele pagina's
+                    prepareOTAMode();
+                    return;
+                }
+            })
+            .catch(() => {
+                document.getElementById('version-info').textContent = 'Version info not available';
+            });
+
+        // ESP8266: Prepare OTA mode with countdown
+        function prepareOTAMode(callback) {
+            const modal = document.getElementById('ota-modal');
+            const countdownEl = document.getElementById('countdown');
+
+            modal.classList.add('show');
+
+            // Call prepare endpoint
+            fetch('/api/ota/prepare', { method: 'POST' })
+                .then(r => r.json())
+                .then(() => {
+                    // Start countdown
+                    let count = 3;
+                    countdownEl.textContent = count;
+
+                    const interval = setInterval(() => {
+                        count--;
+                        if (count > 0) {
+                            countdownEl.textContent = count;
+                        } else {
+                            clearInterval(interval);
+                            countdownEl.textContent = '...';
+                            // Redirect to OTA page (now served by sync server)
+                            setTimeout(() => {
+                                window.location.href = '/';
+                            }, 1000);
+                        }
+                    }, 1000);
+                })
+                .catch(err => {
+                    modal.classList.remove('show');
+                    alert('Failed to prepare OTA mode: ' + err.message);
+                });
+        }
+
         // File upload handling
         function setupUpload(areaId, fileId, btnId, progressId, fillId, textId, statusId, endpoint) {
             const area = document.getElementById(areaId);
@@ -258,10 +398,21 @@
                 }
             }
 
-            // Upload
+            // Upload button click
             btn.addEventListener('click', () => {
                 if (!fileInput.files.length) return;
 
+                // ESP8266: Show countdown and switch to OTA mode
+                if (isESP8266) {
+                    prepareOTAMode();
+                    return;
+                }
+
+                // ESP32: Direct upload (works with async server)
+                doUpload();
+            });
+
+            function doUpload() {
                 const file = fileInput.files[0];
                 const formData = new FormData();
                 formData.append('file', file);
@@ -307,23 +458,12 @@
                 });
 
                 xhr.send(formData);
-            });
+            }
         }
 
         // Setup both upload areas
         setupUpload('fw-upload-area', 'fw-file', 'fw-upload-btn', 'fw-progress', 'fw-progress-fill', 'fw-progress-text', 'fw-status', '/api/update/firmware');
         setupUpload('fs-upload-area', 'fs-file', 'fs-upload-btn', 'fs-progress', 'fs-progress-fill', 'fs-progress-text', 'fs-status', '/api/update/filesystem');
-
-        // Fetch version info
-        fetch('/api/status')
-            .then(r => r.json())
-            .then(d => {
-                document.getElementById('version-info').textContent =
-                    'Firmware: v' + (d.device?.version || '?') + ' | MAC: ' + (d.device?.mac || 'Unknown');
-            })
-            .catch(() => {
-                document.getElementById('version-info').textContent = 'Version info not available';
-            });
     </script>
 </body>
 </html>

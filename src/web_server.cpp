@@ -15,6 +15,16 @@ extern void updateLedStatus();
 extern bool otaInProgress;
 
 #ifdef PLATFORM_ESP8266
+// External flag from sync_ota.cpp
+extern volatile bool requestSyncOTAMode;
+#endif
+
+// Function to stop the async web server (called from sync_ota.cpp)
+void stopAsyncWebServer() {
+    webServer.stop();
+}
+
+#ifdef PLATFORM_ESP8266
     #include <LittleFS.h>
     #include <Updater.h>
     // Use LittleFS on ESP8266 (same as logger.cpp to avoid mounting two filesystems)
@@ -223,6 +233,20 @@ void WebServer::setupRoutes() {
     #ifndef PLATFORM_ESP8266
     _server->on("/api/update/install", HTTP_POST, [this](AsyncWebServerRequest* request) {
         handleStartUpdate(request);
+    });
+    #endif
+
+    #ifdef PLATFORM_ESP8266
+    // ESP8266: Prepare for sync OTA mode (stops async server, starts sync server)
+    _server->on("/api/ota/prepare", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        Serial.println("[OTA] Preparing for sync OTA mode...");
+        Serial.printf("[OTA] Flag BEFORE: %d\n", requestSyncOTAMode ? 1 : 0);
+
+        // Set flag BEFORE sending response - main loop will handle the actual switch
+        requestSyncOTAMode = true;
+
+        Serial.printf("[OTA] Flag AFTER: %d\n", requestSyncOTAMode ? 1 : 0);
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Switching to OTA mode...\"}");
     });
     #endif
 
@@ -455,6 +479,11 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["device"]["name"] = settings.deviceName;
     doc["device"]["mac"] = wifiManager.getMacAddress();
     doc["device"]["version"] = FIRMWARE_VERSION;
+    #ifdef PLATFORM_ESP8266
+    doc["device"]["platform"] = "ESP8266";
+    #else
+    doc["device"]["platform"] = "ESP32";
+    #endif
 
     // Statistics
     doc["stats"]["total_runtime"] = storage.getTotalRuntimeMinutes() / 60.0;  // hours

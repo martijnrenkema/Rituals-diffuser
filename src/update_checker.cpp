@@ -48,21 +48,28 @@ void UpdateChecker::loop() {
         performCheck();
     }
 
-    // Auto-check every 24 hours (only when WiFi connected and idle)
+    // Auto-check logic (only when WiFi connected and idle)
     if (_state == UpdateCheckState::IDLE && WiFi.status() == WL_CONNECTED) {
         unsigned long now = millis();
-        // Check if 24 hours have passed, or if we never checked and 2 minutes after boot
         bool shouldAutoCheck = false;
 
+#ifdef PLATFORM_ESP8266
+        // ESP8266: Only check ONCE, 15 seconds after boot
+        // This runs before MQTT is fully connected, when more heap is available
+        // Skip periodic checks - not enough RAM for BearSSL TLS after everything starts
+        if (_lastAutoCheck == 0 && (now - _bootTime >= 15000)) {
+            shouldAutoCheck = true;
+        }
+#else
+        // ESP32: Check 2 minutes after boot, then every 24 hours
         if (_lastAutoCheck == 0) {
-            // First check: wait 2 minutes after boot to let everything stabilize
-            // Use subtraction to handle millis() overflow correctly
             if (now - _bootTime >= 120000) {
                 shouldAutoCheck = true;
             }
         } else if (now - _lastAutoCheck >= UPDATE_CHECK_INTERVAL) {
             shouldAutoCheck = true;
         }
+#endif
 
         if (shouldAutoCheck) {
             _lastAutoCheck = now;
@@ -96,19 +103,21 @@ void UpdateChecker::performCheck() {
         return;
     }
 
+#ifdef PLATFORM_ESP8266
     // ESP8266: Check if we have enough memory for BearSSL TLS handshake
-    // BearSSL needs ~10-20KB for TLS, skip check if heap is too low
-    #ifdef PLATFORM_ESP8266
     uint32_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < 20000) {
+    logger.infof("Free heap for update check: %lu bytes", freeHeap);
+
+    // Need ~15KB minimum for BearSSL
+    if (freeHeap < 15000) {
         snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Low memory (%lu bytes)", freeHeap);
-        logger.warnf("Update check skipped: only %lu bytes free (need 20KB)", freeHeap);
+        logger.warnf("Update check skipped: only %lu bytes free", freeHeap);
         _state = UpdateCheckState::ERROR;
         if (_stateCallback) _stateCallback();
         _state = UpdateCheckState::IDLE;
         return;
     }
-    #endif
+#endif
 
     _state = UpdateCheckState::CHECKING;
     memset(_info.errorMessage, 0, sizeof(_info.errorMessage));

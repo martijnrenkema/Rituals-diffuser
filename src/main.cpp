@@ -10,8 +10,11 @@
 #include "ota_handler.h"
 #include "logger.h"
 #include "update_checker.h"
-
 #include "button_handler.h"
+
+#ifdef PLATFORM_ESP8266
+#include "sync_ota.h"
+#endif
 
 // Global settings
 DiffuserSettings settings;
@@ -258,6 +261,7 @@ void setup() {
     if (storage.hasWiFiCredentials()) {
         Serial.printf("[MAIN] Connecting to saved WiFi: %s\n", settings.wifiSsid);
         wifiManager.connect(settings.wifiSsid, settings.wifiPassword);
+
     } else {
         Serial.println("[MAIN] No WiFi credentials, starting AP mode");
         wifiManager.startAP();
@@ -274,8 +278,10 @@ void setup() {
     // Initialize web server
     webServer.begin();
 
-    // Initialize update checker
+    // Initialize update checker (ESP32 only - ESP8266 can't handle this due to RAM)
+#ifndef PLATFORM_ESP8266
     updateChecker.begin();
+#endif
 
     // Setup OTA callbacks
     otaHandler.onStart(onOTAStart);
@@ -290,6 +296,20 @@ void setup() {
 }
 
 void loop() {
+    #ifdef PLATFORM_ESP8266
+    // Check if sync OTA mode is requested
+    if (requestSyncOTAMode) {
+        Serial.println("[OTA-SYNC] *** FLAG DETECTED! ***");
+        requestSyncOTAMode = false;
+        Serial.printf("[OTA-SYNC] Sync OTA mode requested. Free heap: %u bytes\n", ESP.getFreeHeap());
+        // Longer delay to ensure HTTP response is fully sent
+        delay(500);
+        Serial.println("[OTA-SYNC] Starting sync OTA server...");
+        // runSyncOTAServer() will stop AsyncWebServer and MQTT to free memory
+        runSyncOTAServer();  // This function never returns (loops until reboot)
+    }
+    #endif
+
     // Run all component loops with strategic yields for ESP8266 stability
     wifiManager.loop();
     yield();
@@ -302,7 +322,9 @@ void loop() {
     webServer.loop();  // Process pending web actions
     yield();
 
-    updateChecker.loop();  // Check for firmware updates
+#ifndef PLATFORM_ESP8266
+    updateChecker.loop();  // Check for firmware updates (ESP32 only)
+#endif
 
     // Run MQTT loop with extra yield time
     mqttHandler.loop();

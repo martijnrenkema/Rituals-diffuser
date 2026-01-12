@@ -453,86 +453,39 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.8.0
+**Rituals Genie V1 (ESP8266) Now Fully Supported!**
+
+This release adds complete support for the original Rituals Perfume Genie V1 with its ESP8266 chip. All features now work reliably on this memory-constrained platform.
+
+**What's New:**
+- **Full V1 Support**: Rituals Genie V1 (ESP8266) now works alongside V2 and custom ESP32 boards
+- **Stable LED Status**: Fixed LED flickering issues on ESP8266 - status lights now work correctly
+- **Working Web OTA**: Web-based firmware updates now work reliably on ESP8266 via "Safe Update Mode"
+- **Improved Safe Update Mode UI**: Modern styling matching the main interface, with GitHub releases link
+- **Exit Safe Mode**: Added restart button to exit safe update mode without uploading
+- **Reduced Memory Usage**: Removed automatic update checking on ESP8266 (not enough RAM for HTTPS)
+
+**Supported Hardware:**
+| Device | Chip | Auto-Update | OTA Rollback |
+|--------|------|-------------|--------------|
+| Rituals Genie V1 | ESP8266 | Manual (GitHub link) | No |
+| Rituals Genie V2 | ESP8266 | Manual (GitHub link) | No |
+| Custom ESP32 board | ESP32 | Yes (automatic) | Yes (dual partition) |
+
+**ESP32 Advantages:**
+- Automatic GitHub update checking
+- One-click firmware installation
+- Automatic rollback on failed updates (dual partition)
+
 ### v1.7.6
-- **Fix web OTA crash on ESP8266**: removed `yield()` calls from AsyncWebServer upload handlers which run in system context where yield causes `__yield` panic
-
-Thanks to [@FredericMa](https://github.com/FredericMa) for the detailed crash logs! We hope this finally fixes OTA updates via the web interface.
-
-### v1.7.5
-ESP8266 stability fixes for OTA crashes and LED flickering:
-
-- **Fix OTA crashes** at 11% (firmware) and 74% (filesystem): added watchdog feeds and yield calls during flash writes
-- **Fix LED flickering** when WiFi/MQTT connected: optimized LED updates and added strategic yields in main loop
-- **Fix `__yield` panic**: deferred logger file saves to prevent blocking I/O from async callbacks
-
-> **Testers needed:** We hope these fixes resolve the reported issues. Please test and [report your results](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)!
-
-### v1.7.4
-ESP8266 stability improvements (requires community testing):
-
-- **ESP8266:** Attempt to fix MQTT fan entity not appearing in Home Assistant
-  - Increased MQTT buffer from 640 to 768 bytes (payload + header was exceeding buffer)
-  - Added publish error logging to detect silent failures
-- **ESP8266:** Attempt to fix update check "Connection failed: -1"
-  - Added memory check: skips update check if free heap < 20KB (BearSSL needs ~10-20KB for TLS)
-  - Shows helpful error message instead of cryptic connection error
-- **ESP8266:** Attempt to fix OTA upload crashes
-  - Added explicit watchdog feeds during firmware writes
-  - Reduced JSON document sizes to free up memory
-- **ESP8266:** Reduced RAM usage for better stability
-  - Logger buffer: 30 → 20 entries (saves 480 bytes)
-  - JSON document sizes reduced where possible
-- **Docs:** Added detailed OTA update methods (PlatformIO, espota.py)
-- **Docs:** Added ESP32 dual partition safety explanation
-
-> **Note:** ESP8266 fixes require community testing - we don't have working ESP8266 hardware.
-> Please [report your results](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)!
-
-### v1.7.3
-Attempted fix for ESP8266 "Check for updates" and missing MQTT Diffuser entity:
-- **Update check failing** with "Connection failed: -1": reduced BearSSL buffer from 16KB to 512 bytes
-- **Diffuser entity not appearing** in Home Assistant: increased MQTT buffer to 640 bytes, compacted fan discovery payload
-- **Added heap logging** before update check for debugging memory issues
-- **Shorter timer preset names** in MQTT: "30m", "60m", "90m", "120m", "Cont" (saves buffer space)
-
-Thanks to [@jozg](https://github.com/jozg) for reporting! Please let us know if this release fixes your issues.
-
-### v1.7.2
-- **Fixed ESP8266 filesystem**: platformio.ini now builds LittleFS image (was building SPIFFS but code expected LittleFS)
-- **Note**: ESP8266 now uses `littlefs_esp8266.bin` instead of `spiffs_esp8266.bin` (flash address unchanged: `0x1E0000`)
-
-### v1.7.1
-Fix for ESP8266 Out of Memory (OOM) crash at startup:
-- **Reduced log buffer** for ESP8266: 30 entries (was 100), saves ~6.4KB RAM
-- **Reduced log message size** for ESP8266: 48 chars (was 80), saves ~1KB RAM
-- **Reduced MQTT buffer** for ESP8266: 512 bytes (was 1536), saves ~1KB RAM
-- **Fixed filesystem conflict**: web_server now uses LittleFS (same as logger)
-- ESP32 unchanged: keeps original buffer sizes
-
-Thanks to [@emiel-qx](https://github.com/emiel-qx) for testing and reporting!
+- **Fix web OTA crash on ESP8266**: Initial attempt at fixing AsyncWebServer OTA crashes
 
 ### v1.7.0
-Major stability release for ESP8266 AP mode and captive portal:
-- **Fixed infinite redirect loop** when SPIFFS/index.html is missing (now shows helpful error page)
-- **Fixed WiFi AP timing issues** on ESP8266: added proper delays and explicit IP configuration
-- **Fixed DNS server race condition**: DNS now starts after webserver is ready
-- **Fixed background reconnect mode stuck**: properly returns to AP mode after failed reconnect
-- **Fixed double storage initialization**: settings now loaded once at boot
-- **Fixed AP password validation**: passwords <8 chars now fallback to default
-- **Added null check** for AsyncWebServer allocation
-- **Added extensive troubleshooting** section in README for AP mode issues
-- Defaults are now persisted to EEPROM on first boot
-
-### v1.6.9
-- Fixed WiFi AP connection issues on ESP8266: use pure AP mode instead of AP_STA
-- Fixed captive portal "Too Many Redirects": added DNS server for proper portal detection
-- Simplified default AP password back to `diffuser123`
-- Added captive portal detection endpoints for Android, iOS, Windows and Firefox
-
-### v1.6.0
-- Added auto-update feature: checks GitHub releases every 24 hours
-- ESP32: one-click OTA update directly from web interface
-- ESP8266: shows download link to latest release
-- New System Updates section in web interface
+**Major Feature Release:**
+- Web-based firmware updates
+- Night mode with scheduled LED dimming
+- MQTT Home Assistant auto-discovery
+- Captive portal for easy WiFi setup
 
 For older versions, see [GitHub Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases).

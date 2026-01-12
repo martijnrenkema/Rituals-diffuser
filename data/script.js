@@ -1,6 +1,7 @@
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const circumference=2*Math.PI*54;
 let state={on:false,speed:50};
+let isESP8266=false; // Platform detection - update features disabled on ESP8266
 
 setInterval(fetchStatus,5000);  // Poll every 5 seconds instead of 2
 fetchStatus();
@@ -65,10 +66,18 @@ function update(d){
             $$('.version').forEach(el=>el.textContent='v'+d.device.version);
             $('#footer-version').textContent='v'+d.device.version;
         }
+        // Platform detection - hide update section on ESP8266
+        if(d.device.platform){
+            isESP8266=d.device.platform==='ESP8266';
+            if(isESP8266){
+                $('#update-section')?.setAttribute('hidden','');
+                $('#update-banner')?.classList.add('hidden');
+            }
+        }
     }
 
-    // Update info from status
-    if(d.update){
+    // Update info from status (ESP32 only)
+    if(d.update&&!isESP8266){
         updateUpdateUI(d.update);
     }
 
@@ -503,6 +512,8 @@ function updateUpdateUI(d){
 }
 
 async function fetchUpdateStatus(){
+    // Skip on ESP8266 - no update checker running
+    if(isESP8266)return null;
     try{
         const r=await fetch('/api/update/status');
         const d=await r.json();

@@ -5,9 +5,12 @@
 #include "config.h"
 
 #ifdef PLATFORM_ESP8266
-    #define FASTLED_ESP8266_RAW_PIN_ORDER
+    // Use NeoPixelBus for ESP8266 - more stable on GPIO15 with WiFi
+    #include <NeoPixelBus.h>
+#else
+    // Use FastLED for ESP32
+    #include <FastLED.h>
 #endif
-#include <FastLED.h>
 
 enum class LedMode {
     OFF,
@@ -30,7 +33,7 @@ public:
     void on();
     void off();
 
-    // Color control (ESP8266 with WS2812)
+    // Color control
     void setColor(uint32_t color);
     void setColor(uint8_t r, uint8_t g, uint8_t b);
 
@@ -54,12 +57,22 @@ private:
     uint8_t _pulseValue = 0;
     bool _pulseDirection = true;
 
-    CRGB _leds[NUM_LEDS];
     uint32_t _currentColor = LED_COLOR_BLUE;
     uint8_t _brightness = 255;
-    CRGB _lastShownColor = CRGB::Black;  // Track last shown color to avoid redundant updates
+    uint8_t _r = 0, _g = 0, _b = 0;  // Current RGB values
+    bool _needsUpdate = true;  // Flag to force LED update
+
+#ifdef PLATFORM_ESP8266
+    // NeoPixelBus for ESP8266
+    NeoPixelBus<NeoGrbFeature, NeoEsp8266BitBang800KbpsMethod>* _strip = nullptr;
+#else
+    // FastLED for ESP32
+    CRGB _leds[NUM_LEDS];
+    CRGB _lastShownColor = CRGB::Black;
+#endif
 
     void updateLed();
+    void showLed();  // Actually send data to LED
 };
 
 extern LedController ledController;

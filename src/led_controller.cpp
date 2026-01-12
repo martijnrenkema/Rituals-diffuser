@@ -5,17 +5,37 @@ LedController ledController;
 
 void LedController::begin() {
 #ifdef PLATFORM_ESP8266
-    // Initialize FastLED for WS2812 on ESP8266
-    FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(_leds, NUM_LEDS);
-    Serial.println("[LED] WS2812 initialized on GPIO15");
+    // NeoPixelBus for ESP8266 - try different methods for GPIO15
+    // BitBang method is more compatible but slower
+    _strip = new NeoPixelBus<NeoGrbFeature, NeoEsp8266BitBang800KbpsMethod>(NUM_LEDS, LED_DATA_PIN);
+    _strip->Begin();
+    _strip->SetPixelColor(0, RgbColor(0, 0, 0));
+    _strip->Show();
+    Serial.println("[LED] NeoPixelBus initialized on GPIO15 (BitBang method)");
 #else
-    // Initialize FastLED for WS2812 on ESP32
+    // FastLED for ESP32
     FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(_leds, NUM_LEDS);
-    Serial.printf("[LED] WS2812 initialized on GPIO%d\n", LED_DATA_PIN);
-#endif
-    FastLED.setBrightness(50);  // Start at 50% brightness
+    FastLED.setBrightness(50);
     _leds[0] = CRGB::Black;
     FastLED.show();
+    Serial.printf("[LED] FastLED initialized on GPIO%d\n", LED_DATA_PIN);
+#endif
+    _brightness = 128;  // 50%
+}
+
+void LedController::showLed() {
+#ifdef PLATFORM_ESP8266
+    if (_strip) {
+        // Apply brightness to RGB values
+        uint8_t r = (_r * _brightness) / 255;
+        uint8_t g = (_g * _brightness) / 255;
+        uint8_t b = (_b * _brightness) / 255;
+        _strip->SetPixelColor(0, RgbColor(r, g, b));
+        _strip->Show();
+    }
+#else
+    FastLED.show();
+#endif
 }
 
 void LedController::loop() {
@@ -23,28 +43,34 @@ void LedController::loop() {
 
     switch (_mode) {
         case LedMode::OFF:
-            // Only update if color actually changed
-            if (_lastShownColor != CRGB::Black) {
-                _leds[0] = CRGB::Black;
-                FastLED.show();
-                _lastShownColor = CRGB::Black;
+            if (_needsUpdate) {
+                _r = _g = _b = 0;
+                showLed();
+                _needsUpdate = false;
             }
             break;
 
         case LedMode::ON:
-            // Only update if color actually changed
-            if (_lastShownColor != CRGB(_currentColor)) {
-                _leds[0] = _currentColor;
-                FastLED.show();
-                _lastShownColor = _currentColor;
+            if (_needsUpdate) {
+                _r = (_currentColor >> 16) & 0xFF;
+                _g = (_currentColor >> 8) & 0xFF;
+                _b = _currentColor & 0xFF;
+                showLed();
+                _needsUpdate = false;
             }
             break;
 
         case LedMode::BLINK_FAST:
             if (now - _lastToggle >= LED_BLINK_FAST) {
                 _ledState = !_ledState;
-                _leds[0] = _ledState ? CRGB(_currentColor) : CRGB::Black;
-                FastLED.show();
+                if (_ledState) {
+                    _r = (_currentColor >> 16) & 0xFF;
+                    _g = (_currentColor >> 8) & 0xFF;
+                    _b = _currentColor & 0xFF;
+                } else {
+                    _r = _g = _b = 0;
+                }
+                showLed();
                 _lastToggle = now;
             }
             break;
@@ -52,18 +78,21 @@ void LedController::loop() {
         case LedMode::BLINK_SLOW:
             if (now - _lastToggle >= LED_BLINK_SLOW) {
                 _ledState = !_ledState;
-                _leds[0] = _ledState ? CRGB(_currentColor) : CRGB::Black;
-                FastLED.show();
+                if (_ledState) {
+                    _r = (_currentColor >> 16) & 0xFF;
+                    _g = (_currentColor >> 8) & 0xFF;
+                    _b = _currentColor & 0xFF;
+                } else {
+                    _r = _g = _b = 0;
+                }
+                showLed();
                 _lastToggle = now;
             }
             break;
 
         case LedMode::PULSE:
-            // Smooth pulsing effect - adjusted for 20ms main loop
-            // Step size 10 instead of 5 to maintain smooth animation speed
             if (now - _lastToggle >= 20) {
                 if (_pulseDirection) {
-                    // Going up - check BEFORE adding to prevent uint8_t overflow
                     if (_pulseValue >= 245) {
                         _pulseValue = 255;
                         _pulseDirection = false;
@@ -71,7 +100,6 @@ void LedController::loop() {
                         _pulseValue += 10;
                     }
                 } else {
-                    // Going down - check BEFORE subtracting to prevent underflow
                     if (_pulseValue <= 20) {
                         _pulseValue = 10;
                         _pulseDirection = true;
@@ -79,19 +107,27 @@ void LedController::loop() {
                         _pulseValue -= 10;
                     }
                 }
+                // Apply pulse to color
+                _r = (((_currentColor >> 16) & 0xFF) * _pulseValue) / 255;
+                _g = (((_currentColor >> 8) & 0xFF) * _pulseValue) / 255;
+                _b = ((_currentColor & 0xFF) * _pulseValue) / 255;
+#ifdef PLATFORM_ESP8266
+                if (_strip) {
+                    _strip->SetPixelColor(0, RgbColor(_r, _g, _b));
+                    _strip->Show();
+                }
+#else
                 FastLED.setBrightness(_pulseValue);
-                _leds[0] = _currentColor;
+                _leds[0] = CRGB((_currentColor >> 16) & 0xFF, (_currentColor >> 8) & 0xFF, _currentColor & 0xFF);
                 FastLED.show();
+#endif
                 _lastToggle = now;
             }
             break;
 
         case LedMode::BREATHE_SLOW:
-            // Very slow breathing effect (~4 sec cycle) for Timer+Interval combined
-            // 30ms interval, step 4 = ~4 seconds per full breath cycle
             if (now - _lastToggle >= 30) {
                 if (_pulseDirection) {
-                    // Going up - check BEFORE adding to prevent uint8_t overflow
                     if (_pulseValue >= 251) {
                         _pulseValue = 255;
                         _pulseDirection = false;
@@ -99,7 +135,6 @@ void LedController::loop() {
                         _pulseValue += 4;
                     }
                 } else {
-                    // Going down - check BEFORE subtracting to prevent underflow
                     if (_pulseValue <= 24) {
                         _pulseValue = 20;
                         _pulseDirection = true;
@@ -107,19 +142,36 @@ void LedController::loop() {
                         _pulseValue -= 4;
                     }
                 }
+                // Apply breath to color
+                _r = (((_currentColor >> 16) & 0xFF) * _pulseValue) / 255;
+                _g = (((_currentColor >> 8) & 0xFF) * _pulseValue) / 255;
+                _b = ((_currentColor & 0xFF) * _pulseValue) / 255;
+#ifdef PLATFORM_ESP8266
+                if (_strip) {
+                    _strip->SetPixelColor(0, RgbColor(_r, _g, _b));
+                    _strip->Show();
+                }
+#else
                 FastLED.setBrightness(_pulseValue);
-                _leds[0] = _currentColor;
+                _leds[0] = CRGB((_currentColor >> 16) & 0xFF, (_currentColor >> 8) & 0xFF, _currentColor & 0xFF);
                 FastLED.show();
+#endif
                 _lastToggle = now;
             }
             break;
 
         case LedMode::OTA:
-            // Fast alternating for OTA
             if (now - _lastToggle >= 50) {
                 _ledState = !_ledState;
-                _leds[0] = _ledState ? CRGB(LED_COLOR_PURPLE) : CRGB::Black;
-                FastLED.show();
+                if (_ledState) {
+                    // Purple
+                    _r = 0xFF;
+                    _g = 0x00;
+                    _b = 0xFF;
+                } else {
+                    _r = _g = _b = 0;
+                }
+                showLed();
                 _lastToggle = now;
             }
             break;
@@ -131,27 +183,25 @@ void LedController::setMode(LedMode mode) {
         _mode = mode;
         _lastToggle = 0;
         _ledState = false;
+        _needsUpdate = true;  // Force update on mode change
 
-        // BREATHE_SLOW starts at max brightness and fades down first
         if (mode == LedMode::BREATHE_SLOW) {
             _pulseValue = 255;
-            _pulseDirection = false;  // Start going down
+            _pulseDirection = false;
         } else {
             _pulseValue = 0;
             _pulseDirection = true;
         }
 
-        // Restore saved brightness (preserves night mode setting)
-        // PULSE and BREATHE_SLOW modes override brightness for their animation
+#ifndef PLATFORM_ESP8266
+        // Restore brightness for non-pulse modes on ESP32
         if (mode != LedMode::PULSE && mode != LedMode::BREATHE_SLOW) {
-            // Prevent "brightness trap" - if brightness is 0 and we're turning ON,
-            // use a safe default so LED is visible
             if (_brightness == 0 && mode != LedMode::OFF) {
-                _brightness = 128;  // 50% as safe default
-                Serial.println("[LED] Brightness was 0, reset to 50%");
+                _brightness = 128;
             }
             FastLED.setBrightness(_brightness);
         }
+#endif
 
         Serial.printf("[LED] Mode changed to %d\n", (int)mode);
     }
@@ -171,17 +221,23 @@ void LedController::off() {
 
 void LedController::setColor(uint32_t color) {
     _currentColor = color;
+    _needsUpdate = true;
     if (_mode == LedMode::ON) {
-        _leds[0] = color;
-        FastLED.show();
+        _r = (color >> 16) & 0xFF;
+        _g = (color >> 8) & 0xFF;
+        _b = color & 0xFF;
+        showLed();
     }
 }
 
 void LedController::setColor(uint8_t r, uint8_t g, uint8_t b) {
     _currentColor = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    _needsUpdate = true;
     if (_mode == LedMode::ON) {
-        _leds[0] = CRGB(r, g, b);
-        FastLED.show();
+        _r = r;
+        _g = g;
+        _b = b;
+        showLed();
     }
 }
 
@@ -221,20 +277,25 @@ void LedController::showError() {
 }
 
 void LedController::updateLed() {
-    FastLED.show();
+    showLed();
 }
 
 void LedController::setBrightness(uint8_t percent) {
-    // Map percent (0-100) to FastLED brightness (0-255)
     _brightness = map(constrain(percent, 0, 100), 0, 100, 0, 255);
+    _needsUpdate = true;
 
-    // If brightness is 0, turn LED completely off
+#ifndef PLATFORM_ESP8266
     if (_brightness == 0) {
         _leds[0] = CRGB::Black;
     }
-
     FastLED.setBrightness(_brightness);
     FastLED.show();
+#else
+    // For NeoPixelBus, brightness is applied in showLed()
+    if (_mode == LedMode::ON) {
+        showLed();
+    }
+#endif
     Serial.printf("[LED] Brightness set to %d%%\n", percent);
 }
 
