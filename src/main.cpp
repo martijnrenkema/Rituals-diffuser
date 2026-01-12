@@ -245,8 +245,15 @@ void setup() {
 
     // Apply saved settings
     fanController.setSpeed(settings.fanSpeed);
-    fanController.setIntervalMode(settings.intervalEnabled);
     fanController.setIntervalTimes(settings.intervalOnTime, settings.intervalOffTime);
+    fanController.setIntervalMode(settings.intervalEnabled);
+
+    // Log saved settings for debugging
+    Serial.printf("[MAIN] Saved settings: speed=%d%%, interval=%s (%ds on, %ds off)\n",
+                  settings.fanSpeed,
+                  settings.intervalEnabled ? "ON" : "OFF",
+                  settings.intervalOnTime,
+                  settings.intervalOffTime);
 
     // Initialize buttons
     buttonHandler.begin();

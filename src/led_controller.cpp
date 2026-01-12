@@ -5,35 +5,37 @@ LedController ledController;
 
 void LedController::begin() {
 #ifdef PLATFORM_ESP8266
-    // NeoPixelBus for ESP8266 - try different methods for GPIO15
-    // BitBang method is more compatible but slower
+    // NeoPixelBus for ESP8266 - BitBang method is more compatible with GPIO15
     _strip = new NeoPixelBus<NeoGrbFeature, NeoEsp8266BitBang800KbpsMethod>(NUM_LEDS, LED_DATA_PIN);
     _strip->Begin();
     _strip->SetPixelColor(0, RgbColor(0, 0, 0));
     _strip->Show();
     Serial.println("[LED] NeoPixelBus initialized on GPIO15 (BitBang method)");
 #else
-    // FastLED for ESP32
+    // FastLED for ESP32 - brightness is handled in showLed() via RGB scaling
     FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(_leds, NUM_LEDS);
-    FastLED.setBrightness(50);
+    FastLED.setBrightness(255);  // Full brightness, we scale RGB values instead
     _leds[0] = CRGB::Black;
     FastLED.show();
     Serial.printf("[LED] FastLED initialized on GPIO%d\n", LED_DATA_PIN);
 #endif
-    _brightness = 128;  // 50%
+    _brightness = 128;  // 50% - applied via RGB scaling in showLed()
 }
 
 void LedController::showLed() {
+    // Apply brightness to RGB values for both platforms
+    // This ensures consistent behavior and proper night mode support
+    uint8_t r = ((uint16_t)_r * _brightness) / 255;
+    uint8_t g = ((uint16_t)_g * _brightness) / 255;
+    uint8_t b = ((uint16_t)_b * _brightness) / 255;
+
 #ifdef PLATFORM_ESP8266
     if (_strip) {
-        // Apply brightness to RGB values
-        uint8_t r = (_r * _brightness) / 255;
-        uint8_t g = (_g * _brightness) / 255;
-        uint8_t b = (_b * _brightness) / 255;
         _strip->SetPixelColor(0, RgbColor(r, g, b));
         _strip->Show();
     }
 #else
+    _leds[0] = CRGB(r, g, b);
     FastLED.show();
 #endif
 }
@@ -107,18 +109,19 @@ void LedController::loop() {
                         _pulseValue -= 10;
                     }
                 }
-                // Apply pulse to color
-                _r = (((_currentColor >> 16) & 0xFF) * _pulseValue) / 255;
-                _g = (((_currentColor >> 8) & 0xFF) * _pulseValue) / 255;
-                _b = ((_currentColor & 0xFF) * _pulseValue) / 255;
+                // Apply pulse to color, respecting night mode brightness
+                // Scale _pulseValue by _brightness so night mode dims the pulse effect
+                uint8_t scaledPulse = ((uint16_t)_pulseValue * _brightness) / 255;
+                _r = (((_currentColor >> 16) & 0xFF) * scaledPulse) / 255;
+                _g = (((_currentColor >> 8) & 0xFF) * scaledPulse) / 255;
+                _b = ((_currentColor & 0xFF) * scaledPulse) / 255;
 #ifdef PLATFORM_ESP8266
                 if (_strip) {
                     _strip->SetPixelColor(0, RgbColor(_r, _g, _b));
                     _strip->Show();
                 }
 #else
-                FastLED.setBrightness(_pulseValue);
-                _leds[0] = CRGB((_currentColor >> 16) & 0xFF, (_currentColor >> 8) & 0xFF, _currentColor & 0xFF);
+                _leds[0] = CRGB(_r, _g, _b);
                 FastLED.show();
 #endif
                 _lastToggle = now;
@@ -142,18 +145,18 @@ void LedController::loop() {
                         _pulseValue -= 4;
                     }
                 }
-                // Apply breath to color
-                _r = (((_currentColor >> 16) & 0xFF) * _pulseValue) / 255;
-                _g = (((_currentColor >> 8) & 0xFF) * _pulseValue) / 255;
-                _b = ((_currentColor & 0xFF) * _pulseValue) / 255;
+                // Apply breath to color, respecting night mode brightness
+                uint8_t scaledPulse = ((uint16_t)_pulseValue * _brightness) / 255;
+                _r = (((_currentColor >> 16) & 0xFF) * scaledPulse) / 255;
+                _g = (((_currentColor >> 8) & 0xFF) * scaledPulse) / 255;
+                _b = ((_currentColor & 0xFF) * scaledPulse) / 255;
 #ifdef PLATFORM_ESP8266
                 if (_strip) {
                     _strip->SetPixelColor(0, RgbColor(_r, _g, _b));
                     _strip->Show();
                 }
 #else
-                FastLED.setBrightness(_pulseValue);
-                _leds[0] = CRGB((_currentColor >> 16) & 0xFF, (_currentColor >> 8) & 0xFF, _currentColor & 0xFF);
+                _leds[0] = CRGB(_r, _g, _b);
                 FastLED.show();
 #endif
                 _lastToggle = now;
@@ -193,15 +196,10 @@ void LedController::setMode(LedMode mode) {
             _pulseDirection = true;
         }
 
-#ifndef PLATFORM_ESP8266
-        // Restore brightness for non-pulse modes on ESP32
-        if (mode != LedMode::PULSE && mode != LedMode::BREATHE_SLOW) {
-            if (_brightness == 0 && mode != LedMode::OFF) {
-                _brightness = 128;
-            }
-            FastLED.setBrightness(_brightness);
+        // Ensure brightness is not zero when turning on (unless explicitly set)
+        if (_brightness == 0 && mode != LedMode::OFF) {
+            _brightness = 128;
         }
-#endif
 
         Serial.printf("[LED] Mode changed to %d\n", (int)mode);
     }
@@ -284,18 +282,13 @@ void LedController::setBrightness(uint8_t percent) {
     _brightness = map(constrain(percent, 0, 100), 0, 100, 0, 255);
     _needsUpdate = true;
 
-#ifndef PLATFORM_ESP8266
-    if (_brightness == 0) {
-        _leds[0] = CRGB::Black;
-    }
-    FastLED.setBrightness(_brightness);
-    FastLED.show();
-#else
-    // For NeoPixelBus, brightness is applied in showLed()
-    if (_mode == LedMode::ON) {
+    // Brightness is applied via RGB scaling in showLed() for both platforms
+    // Force immediate update if LED is currently on
+    if (_mode == LedMode::ON || _mode == LedMode::BLINK_FAST || _mode == LedMode::BLINK_SLOW) {
         showLed();
     }
-#endif
+    // PULSE and BREATHE_SLOW modes will pick up the new _brightness on next frame
+
     Serial.printf("[LED] Brightness set to %d%%\n", percent);
 }
 

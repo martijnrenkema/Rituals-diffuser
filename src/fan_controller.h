@@ -45,15 +45,17 @@ private:
     uint8_t _targetSpeed = 0;
     bool _isOn = false;
 
-    // Timer
-    unsigned long _timerEndTime = 0;
+    // Timer (using start+duration for millis() overflow safety)
+    unsigned long _timerStartTime = 0;
+    unsigned long _timerDuration = 0;
     bool _timerActive = false;
 
-    // Interval mode
+    // Interval mode (using start+duration for millis() overflow safety)
     bool _intervalMode = false;
     uint8_t _intervalOnTime = 30;
     uint8_t _intervalOffTime = 30;
-    unsigned long _intervalNextToggle = 0;
+    unsigned long _intervalToggleStart = 0;
+    unsigned long _intervalToggleDuration = 0;
     bool _intervalCurrentlyOn = true;
 
     // RPM measurement via tachometer (GPIO5/TP17)

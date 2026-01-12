@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.7.4-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.8.2-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Untested-yellow)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
@@ -452,6 +452,18 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.8.2
+**Bug Fixes (Critical):**
+- **Fix millis() overflow after ~49 days**: Timer and interval mode used direct comparison (`now >= endTime`) which fails when millis() wraps around. Now uses subtraction-based comparison that handles overflow correctly.
+- **Fix night mode ignored by LED animations**: Pulse and breathing LED effects now respect the global brightness setting. Night mode dimming now works correctly for all LED states.
+- **Unified brightness handling**: LED brightness is now consistently applied via RGB scaling on both ESP8266 and ESP32 platforms.
+
+### v1.8.1
+**Bug Fixes:**
+- **Fix ESP32 LED not working**: LED was broken in v1.8.0 due to refactoring for NeoPixelBus on ESP8266. The `showLed()` function now correctly sets the LED color on ESP32.
+- **Fix interval mode auto-starting fan**: The fan no longer automatically turns on when interval mode is enabled. Interval mode now only activates when the user explicitly turns on the fan.
+- **Better startup logging**: Added logging of saved settings (speed, interval mode) at startup to help debug issues.
 
 ### v1.8.0
 **Rituals Genie V1 (ESP8266) Now Fully Supported!**

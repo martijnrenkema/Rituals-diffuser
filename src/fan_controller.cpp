@@ -139,25 +139,27 @@ void FanController::loop() {
         }
     }
 
-    // Handle timer
-    if (_timerActive && now >= _timerEndTime) {
+    // Handle timer (subtraction handles millis() overflow correctly)
+    if (_timerActive && (now - _timerStartTime >= _timerDuration)) {
         Serial.println("[FAN] Timer expired");
         turnOff();
         _timerActive = false;
     }
 
-    // Handle interval mode
-    if (_isOn && _intervalMode && now >= _intervalNextToggle) {
+    // Handle interval mode (subtraction handles millis() overflow correctly)
+    if (_isOn && _intervalMode && (now - _intervalToggleStart >= _intervalToggleDuration)) {
         if (_intervalCurrentlyOn) {
             // Turn off (but keep _isOn true for interval cycling)
             applyPWM(0);
             _intervalCurrentlyOn = false;
-            _intervalNextToggle = now + (_intervalOffTime * 1000UL);
+            _intervalToggleStart = now;
+            _intervalToggleDuration = _intervalOffTime * 1000UL;
         } else {
             // Turn back on
             applyPWM(_speed);
             _intervalCurrentlyOn = true;
-            _intervalNextToggle = now + (_intervalOnTime * 1000UL);
+            _intervalToggleStart = now;
+            _intervalToggleDuration = _intervalOnTime * 1000UL;
         }
     }
 }
@@ -197,10 +199,11 @@ void FanController::turnOn() {
         _softStartTime = millis();
         _softStartTarget = _speed;
 
-        // Reset interval mode
+        // Reset interval mode timing
         if (_intervalMode) {
             _intervalCurrentlyOn = true;
-            _intervalNextToggle = millis() + (_intervalOnTime * 1000UL);
+            _intervalToggleStart = millis();
+            _intervalToggleDuration = _intervalOnTime * 1000UL;
         }
 
         Serial.printf("[FAN] Turned ON at %d%%\n", _speed);
@@ -239,7 +242,8 @@ bool FanController::isOn() {
 
 void FanController::setTimer(uint16_t minutes) {
     if (minutes > 0) {
-        _timerEndTime = millis() + (minutes * 60000UL);
+        _timerStartTime = millis();
+        _timerDuration = minutes * 60000UL;
         _timerActive = true;
         if (!_isOn) turnOn();
         Serial.printf("[FAN] Timer set for %d minutes\n", minutes);
@@ -253,10 +257,10 @@ void FanController::cancelTimer() {
 
 uint16_t FanController::getRemainingMinutes() {
     if (!_timerActive) return 0;
-    unsigned long now = millis();
-    if (now >= _timerEndTime) return 0;
+    unsigned long elapsed = millis() - _timerStartTime;
+    if (elapsed >= _timerDuration) return 0;
     // Round down - shows actual complete minutes remaining
-    return (_timerEndTime - now) / 60000;
+    return (_timerDuration - elapsed) / 60000;
 }
 
 bool FanController::isTimerActive() {
@@ -264,23 +268,30 @@ bool FanController::isTimerActive() {
 }
 
 void FanController::setIntervalMode(bool enabled) {
+    bool wasEnabled = _intervalMode;
     _intervalMode = enabled;
+
     if (enabled) {
-        // Interval mode requires fan to be on
-        if (!_isOn) {
-            _isOn = true;
-            if (_speed == 0) _speed = 50;  // Default speed if not set
+        // Initialize interval timing - but DON'T auto-start the fan
+        // The fan state (on/off) is independent from interval mode setting
+        if (_isOn) {
+            // Fan is already running, start interval cycling
+            _intervalCurrentlyOn = true;
+            _intervalToggleStart = millis();
+            _intervalToggleDuration = _intervalOnTime * 1000UL;
+            applyPWM(_speed);
         }
-        _intervalCurrentlyOn = true;
-        _intervalNextToggle = millis() + (_intervalOnTime * 1000UL);
+        // If fan is off, interval mode is just "armed" and will activate when fan turns on
+    } else if (_isOn && wasEnabled) {
+        // Interval mode turned off while fan is running - ensure continuous operation
         applyPWM(_speed);
-        notifyStateChange();
-    } else if (_isOn) {
-        // Interval mode off, but fan stays on at constant speed
-        applyPWM(_speed);
-        notifyStateChange();
     }
-    Serial.printf("[FAN] Interval mode: %s\n", enabled ? "ON" : "OFF");
+
+    // Always notify state change so LED and MQTT update correctly
+    notifyStateChange();
+
+    Serial.printf("[FAN] Interval mode: %s%s\n", enabled ? "ON" : "OFF",
+                  (enabled && !_isOn) ? " (will activate when fan starts)" : "");
 }
 
 bool FanController::isIntervalMode() {
