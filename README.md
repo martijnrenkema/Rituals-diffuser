@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.8.3-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.8.4-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -479,6 +479,10 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.8.4
+**Bug Fixes:**
+- **Fix auto-update selecting wrong firmware**: ESP32 DevKit was incorrectly downloading ESP32-C3 firmware because both filenames contain "esp32". Now correctly distinguishes between `firmware_esp32.bin` and `firmware_esp32c3.bin`.
 
 ### v1.8.3
 **New Hardware Support:**

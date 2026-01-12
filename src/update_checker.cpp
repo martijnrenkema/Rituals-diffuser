@@ -248,14 +248,23 @@ bool UpdateChecker::parseReleaseJson(const char* json, size_t length) {
         if (name) {
             const char* downloadUrl = asset["browser_download_url"];
             if (downloadUrl) {
-                // Look for esp32 firmware binary
-                if (strstr(name, "firmware") != nullptr && strstr(name, "esp32") != nullptr) {
+                #ifdef ESP32C3_SUPERMINI
+                // ESP32-C3: Look for esp32c3 binaries
+                if (strstr(name, "firmware") != nullptr && strstr(name, "esp32c3") != nullptr) {
                     strlcpy(_info.downloadUrl, downloadUrl, sizeof(_info.downloadUrl));
                 }
-                // Look for esp32 SPIFFS binary
-                else if (strstr(name, "spiffs") != nullptr && strstr(name, "esp32") != nullptr) {
+                else if (strstr(name, "spiffs") != nullptr && strstr(name, "esp32c3") != nullptr) {
                     strlcpy(_info.spiffsUrl, downloadUrl, sizeof(_info.spiffsUrl));
                 }
+                #else
+                // Standard ESP32: Look for esp32 binaries but NOT esp32c3
+                if (strstr(name, "firmware") != nullptr && strstr(name, "esp32") != nullptr && strstr(name, "esp32c3") == nullptr) {
+                    strlcpy(_info.downloadUrl, downloadUrl, sizeof(_info.downloadUrl));
+                }
+                else if (strstr(name, "spiffs") != nullptr && strstr(name, "esp32") != nullptr && strstr(name, "esp32c3") == nullptr) {
+                    strlcpy(_info.spiffsUrl, downloadUrl, sizeof(_info.spiffsUrl));
+                }
+                #endif
             }
         }
     }
