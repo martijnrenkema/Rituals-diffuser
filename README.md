@@ -6,14 +6,15 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.8.2-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.8.3-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
-![ESP8266](https://img.shields.io/badge/ESP8266-Untested-yellow)
+![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
+![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Build-orange)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT-41BDF5)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-> **Looking for ESP8266 testers!** The ESP8266 version builds successfully but has not been tested on actual hardware. If you have a Rituals Perfume Genie 2.0 with the original ESP-WROOM-02, please help test and [report any issues](https://github.com/martijnrenkema/Rituals-diffuser/issues).
+> **Community tested!** Both ESP8266 (Rituals Genie V1/V2) and ESP32 versions are actively used by the community. Found an issue? [Report it here](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
 ## Features
 
@@ -28,6 +29,11 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
 - **Web Interface** - Configure WiFi, MQTT, passwords, and control the diffuser
 - **RGB LED Status** - Visual feedback for device state
 - **Physical Buttons** - Front and rear button support
+
+<p align="center">
+  <img src="docs/images/night-mode.png" alt="Night Mode" width="280"/>
+  <img src="docs/images/system-logs.png" alt="System Logs" width="280"/>
+</p>
 
 ## Quick Start
 
@@ -46,6 +52,9 @@ cd Rituals-diffuser
 # Build for ESP32 (recommended)
 pio run -e esp32dev
 
+# Or build for ESP32-C3 SuperMini
+pio run -e esp32c3_supermini
+
 # Or build for ESP8266 (original chip)
 pio run -e esp8266
 ```
@@ -56,7 +65,7 @@ pio run -e esp8266
 >
 > This firmware is developed for the **Rituals Perfume Genie 2.0** which contains an ESP-WROOM-02 (ESP8266) chip. Have a different hardware version? Feel free to try and [share your feedback](https://github.com/martijnrenkema/Rituals-diffuser/issues)!
 
-This firmware supports both **ESP32** (recommended) and the original **ESP-WROOM-02** (ESP8266).
+This firmware supports **ESP32**, **ESP32-C3 SuperMini**, and the original **ESP-WROOM-02** (ESP8266).
 
 ### ESP32 Wiring (Recommended for new builds)
 
@@ -85,6 +94,20 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 | GPIO15 | LED | WS2812 RGB LED |
 | GPIO14 | SW2 | Connect button |
 | GPIO13 | SW1 | Cold reset button |
+
+### ESP32-C3 SuperMini Pinout
+
+Compact alternative to the full ESP32 DevKit. Uses safe GPIO pins (avoids strapping pins 2, 8, 9).
+
+| GPIO | Function | Description |
+|------|----------|-------------|
+| GPIO3 | Fan PWM | Speed control |
+| GPIO4 | Fan Tacho | RPM feedback |
+| GPIO10 | LED | WS2812 RGB LED |
+| GPIO5 | Button | Connect button |
+| GPIO6 | Button | Cold reset button |
+
+> The ESP32-C3 SuperMini has native USB - no USB-to-serial chip needed. Serial output works directly via USB-C.
 
 ## Installation
 
@@ -177,6 +200,10 @@ Once installed, you can update wirelessly using one of these methods:
 3. Upload the firmware `.bin` file
 4. Upload the filesystem `.bin` file (optional, for web interface updates)
 5. Wait for restart
+
+<p align="center">
+  <img src="docs/images/firmware-update.png" alt="Firmware Update" width="300"/>
+</p>
 
 ### Method 2: PlatformIO OTA (Developers)
 
@@ -453,6 +480,13 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.8.3
+**New Hardware Support:**
+- **ESP32-C3 SuperMini**: Added full support for the compact ESP32-C3 SuperMini development board. Uses safe GPIO pins (avoids strapping pins 2, 8, 9) and native USB serial.
+
+**Bug Fixes:**
+- **Fix fan whine/noise at lower speeds on ESP8266**: Increased PWM frequency from 1kHz to 25kHz. The old 1kHz frequency was in the audible range, causing a high-pitched whine when the fan was dimmed. Now matches ESP32 at 25kHz (above human hearing).
+
 ### v1.8.2
 **Bug Fixes (Critical):**
 - **Fix millis() overflow after ~49 days**: Timer and interval mode used direct comparison (`now >= endTime`) which fails when millis() wraps around. Now uses subtraction-based comparison that handles overflow correctly.
@@ -484,8 +518,9 @@ This release adds complete support for the original Rituals Perfume Genie V1 wit
 | Rituals Genie V1 | ESP8266 | Manual (GitHub link) | No |
 | Rituals Genie V2 | ESP8266 | Manual (GitHub link) | No |
 | Custom ESP32 board | ESP32 | Yes (automatic) | Yes (dual partition) |
+| ESP32-C3 SuperMini | ESP32-C3 | Yes (automatic) | Yes (dual partition) |
 
-**ESP32 Advantages:**
+**ESP32/ESP32-C3 Advantages:**
 - Automatic GitHub update checking
 - One-click firmware installation
 - Automatic rollback on failed updates (dual partition)

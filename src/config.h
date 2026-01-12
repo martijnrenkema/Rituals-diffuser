@@ -21,6 +21,14 @@
     #define BUTTON_FRONT_PIN    14      // GPIO14 - Connect button (SW2)
     #define BUTTON_REAR_PIN     13      // GPIO13 - Cold reset button (SW1)
     #define NUM_LEDS            1       // Single WS2812 LED
+#elif defined(ESP32C3_SUPERMINI)
+    // ESP32-C3 SuperMini pinout (avoids strapping pins GPIO 2, 8, 9)
+    #define FAN_PWM_PIN         3       // GPIO3 - Fan PWM speed control
+    #define FAN_TACHO_PIN       4       // GPIO4 - Fan tachometer/RPM
+    #define LED_DATA_PIN        10      // GPIO10 - WS2812 RGB LED
+    #define BUTTON_FRONT_PIN    5       // GPIO5 - Connect button
+    #define BUTTON_REAR_PIN     6       // GPIO6 - Cold reset button
+    #define NUM_LEDS            1       // Single WS2812 LED
 #else
     // ESP32 DevKit pinout voor Rituals Genie
     // Sluit de Genie board draden aan op deze ESP32 pinnen:
@@ -36,7 +44,7 @@
 // PWM Configuration
 // ===========================================
 #ifdef PLATFORM_ESP8266
-    #define PWM_FREQUENCY       1000    // ESP8266 default PWM freq
+    #define PWM_FREQUENCY       25000   // 25kHz - above audible range (was 1kHz = audible whine)
     #define PWM_RANGE           255     // 8-bit PWM
 #else
     #define PWM_FREQUENCY       25000   // 25kHz - optimal for 4-wire fans
@@ -153,7 +161,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.8.2"
+#define FIRMWARE_VERSION        "1.8.3"
 
 // ===========================================
 // Update Checker Settings
