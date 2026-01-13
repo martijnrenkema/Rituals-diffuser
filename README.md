@@ -1,6 +1,6 @@
-# Rituals Perfume Genie 2.0 - Custom Firmware
+# Rituals Perfume Genie - Custom Firmware
 
-Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-dependent Rituals firmware with fully local control via Home Assistant.
+Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the cloud-dependent Rituals firmware with fully local control via Home Assistant.
 
 <p align="center">
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
@@ -61,11 +61,9 @@ pio run -e esp8266
 
 ## Hardware
 
-> **ℹ️ Developed for Rituals Perfume Genie 2.0**
+> **ℹ️ Supported Hardware**
 >
-> This firmware is developed for the **Rituals Perfume Genie 2.0** which contains an ESP-WROOM-02 (ESP8266) chip. Have a different hardware version? Feel free to try and [share your feedback](https://github.com/martijnrenkema/Rituals-diffuser/issues)!
-
-This firmware supports **ESP32**, **ESP32-C3 SuperMini**, and the original **ESP-WROOM-02** (ESP8266).
+> This firmware supports both **Rituals Perfume Genie V1** and **V2** (both contain ESP8266), as well as custom builds with **ESP32** or **ESP32-C3 SuperMini**. Have a different hardware version? Feel free to try and [share your feedback](https://github.com/martijnrenkema/Rituals-diffuser/issues)!
 
 ### ESP32 Wiring (Recommended for new builds)
 
@@ -85,7 +83,7 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 >
 > When installing an ESP32 dev board inside the metal housing, position the board so the WiFi antenna points toward the nozzle opening. The metal enclosure acts as a Faraday cage, blocking WiFi signals. The nozzle opening is the only path for the signal to escape.
 
-### ESP8266 Pinout (Original chip)
+### ESP8266 Pinout (Genie V1/V2)
 
 | GPIO | Function | Description |
 |------|----------|-------------|
