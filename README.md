@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie 2.0 diffuser. Replaces the cloud-d
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.8.4-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.8.5-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -97,15 +97,15 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 
 ### ESP32-C3 SuperMini Pinout
 
-Compact alternative to the full ESP32 DevKit. Uses safe GPIO pins (avoids strapping pins 2, 8, 9).
+Compact alternative to the full ESP32 DevKit. Uses safe GPIO pins (ADC1 only, avoids strapping pins 2, 8, 9 and ADC2 pins which have WiFi interference).
 
 | GPIO | Function | Description |
 |------|----------|-------------|
-| GPIO3 | Fan PWM | Speed control |
-| GPIO4 | Fan Tacho | RPM feedback |
+| GPIO3 | Fan PWM | Speed control (ADC1, safe) |
+| GPIO4 | Fan Tacho | RPM feedback (ADC1, interrupt) |
 | GPIO10 | LED | WS2812 RGB LED |
-| GPIO5 | Button | Connect button |
-| GPIO6 | Button | Cold reset button |
+| GPIO0 | SW2 | Connect button |
+| GPIO1 | SW1 | Cold reset button |
 
 > The ESP32-C3 SuperMini has native USB - no USB-to-serial chip needed. Serial output works directly via USB-C.
 
@@ -479,6 +479,14 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.8.5
+**ESP32-C3 Pinout Fix:**
+- **Fix fan PWM and tachometer issues on ESP32-C3**: Fan was running slowly and tachometer reported extremely high RPM values. Root cause: GPIO5 (ADC2) has WiFi interference, GPIO6 (JTAG MTCK) was picking up noise.
+- **New pinout**: Moved FAN_PWM to GPIO3 and FAN_TACHO to GPIO4 (both ADC1, no WiFi conflicts).
+- **Arduino-ESP32 v3.x compatibility**: Added LEDC API compatibility for newer ESP32 Arduino core.
+
+> ⚠️ **Soldering required**: If upgrading from v1.8.3/v1.8.4, re-solder blue wire to GPIO3 and yellow wire to GPIO4.
 
 ### v1.8.4
 **Bug Fixes:**

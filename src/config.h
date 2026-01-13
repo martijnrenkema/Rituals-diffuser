@@ -22,12 +22,14 @@
     #define BUTTON_REAR_PIN     13      // GPIO13 - Cold reset button (SW1)
     #define NUM_LEDS            1       // Single WS2812 LED
 #elif defined(ESP32C3_SUPERMINI)
-    // ESP32-C3 SuperMini pinout (avoids strapping pins GPIO 2, 8, 9)
-    #define FAN_PWM_PIN         3       // GPIO3 - Fan PWM speed control
-    #define FAN_TACHO_PIN       4       // GPIO4 - Fan tachometer/RPM
+    // ESP32-C3 SuperMini optimized pinout v1.8.5
+    // GPIO3/4 used for fan (avoid ADC2 pins and JTAG MTCK/MTDI)
+    // GPIO0/1 used for buttons (INPUT_PULLUP, less timing-critical)
+    #define FAN_PWM_PIN         3       // GPIO3 - Fan PWM speed control (ADC1, safe)
+    #define FAN_TACHO_PIN       4       // GPIO4 - Fan tachometer/RPM (ADC1, interrupt)
     #define LED_DATA_PIN        10      // GPIO10 - WS2812 RGB LED
-    #define BUTTON_FRONT_PIN    5       // GPIO5 - Connect button
-    #define BUTTON_REAR_PIN     6       // GPIO6 - Cold reset button
+    #define BUTTON_FRONT_PIN    0       // GPIO0 - Connect button
+    #define BUTTON_REAR_PIN     1       // GPIO1 - Cold reset button
     #define NUM_LEDS            1       // Single WS2812 LED
 #else
     // ESP32 DevKit pinout voor Rituals Genie
@@ -161,7 +163,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.8.4"
+#define FIRMWARE_VERSION        "1.8.5"
 
 // ===========================================
 // Update Checker Settings

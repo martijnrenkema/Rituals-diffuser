@@ -2,6 +2,13 @@
 #include "config.h"
 #include "storage.h"
 
+// Helper macro for LEDC write - new API uses pin, old API uses channel
+#if defined(PLATFORM_ESP32) && ESP_ARDUINO_VERSION_MAJOR >= 3
+    #define FAN_LEDC_WRITE(duty) ledcWrite(FAN_PWM_PIN, duty)
+#elif defined(PLATFORM_ESP32)
+    #define FAN_LEDC_WRITE(duty) ledcWrite(PWM_CHANNEL, duty)
+#endif
+
 FanController fanController;
 
 // Tachometer interrupt voor RPM meting
@@ -24,9 +31,18 @@ void FanController::begin() {
     attachInterrupt(digitalPinToInterrupt(FAN_TACHO_PIN), tachoISR, FALLING);
 #else
     // ESP32: Setup LEDC PWM
-    ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcAttachPin(FAN_PWM_PIN, PWM_CHANNEL);
-    ledcWrite(PWM_CHANNEL, 0);
+    // Arduino-ESP32 v3.x uses new LEDC API, v2.x uses old API
+    #if ESP_ARDUINO_VERSION_MAJOR >= 3
+        // New API: ledcAttach(pin, freq, resolution) returns true on success
+        if (!ledcAttach(FAN_PWM_PIN, PWM_FREQUENCY, PWM_RESOLUTION)) {
+            Serial.println("[FAN] ERROR: Failed to attach LEDC to pin");
+        }
+    #else
+        // Old API: separate setup and attach
+        ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
+        ledcAttachPin(FAN_PWM_PIN, PWM_CHANNEL);
+    #endif
+    FAN_LEDC_WRITE(0);
 
     // Setup tachometer input with interrupt
     pinMode(FAN_TACHO_PIN, INPUT_PULLUP);
@@ -70,7 +86,7 @@ void FanController::loop() {
 #ifdef PLATFORM_ESP8266
             analogWrite(FAN_PWM_PIN, 0);
 #else
-            ledcWrite(PWM_CHANNEL, 0);
+            FAN_LEDC_WRITE(0);
 #endif
             _currentPWM = 0;
             Serial.println("[FAN] Calibration timeout - aborted after 60s");
@@ -94,7 +110,7 @@ void FanController::loop() {
 #ifdef PLATFORM_ESP8266
                 analogWrite(FAN_PWM_PIN, 0);
 #else
-                ledcWrite(PWM_CHANNEL, 0);
+                FAN_LEDC_WRITE(0);
 #endif
                 _currentPWM = 0;
 
@@ -105,7 +121,7 @@ void FanController::loop() {
 #ifdef PLATFORM_ESP8266
                 analogWrite(FAN_PWM_PIN, _calibrationPWM);
 #else
-                ledcWrite(PWM_CHANNEL, _calibrationPWM);
+                FAN_LEDC_WRITE(_calibrationPWM);
 #endif
                 _currentPWM = _calibrationPWM;
             } else {
@@ -115,7 +131,7 @@ void FanController::loop() {
 #ifdef PLATFORM_ESP8266
                 analogWrite(FAN_PWM_PIN, 0);
 #else
-                ledcWrite(PWM_CHANNEL, 0);
+                FAN_LEDC_WRITE(0);
 #endif
                 _currentPWM = 0;
                 Serial.println("[FAN] Calibration failed - no RPM detected");
@@ -345,7 +361,7 @@ void FanController::applyPWM(uint8_t percent) {
     analogWrite(FAN_PWM_PIN, pwmValue);
 #else
     // ESP32: LEDC PWM speed control
-    ledcWrite(PWM_CHANNEL, pwmValue);
+    FAN_LEDC_WRITE(pwmValue);
 #endif
 }
 
@@ -356,7 +372,7 @@ void FanController::setRawPWM(uint8_t value) {
 #ifdef PLATFORM_ESP8266
     analogWrite(FAN_PWM_PIN, value);
 #else
-    ledcWrite(PWM_CHANNEL, value);
+    FAN_LEDC_WRITE(value);
 #endif
 }
 
@@ -397,7 +413,7 @@ void FanController::startCalibration() {
 #ifdef PLATFORM_ESP8266
     analogWrite(FAN_PWM_PIN, 0);
 #else
-    ledcWrite(PWM_CHANNEL, 0);
+    FAN_LEDC_WRITE(0);
 #endif
     _currentPWM = 0;
 }
