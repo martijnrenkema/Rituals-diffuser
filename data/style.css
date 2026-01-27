@@ -113,3 +113,6 @@ footer a:hover{text-decoration:underline}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));transition:width .3s}
 #update-progress-text{display:block;text-align:center;color:var(--dim);font-size:.85rem;margin-top:4px}
 .hidden{display:none!important}
+.rfid-info{text-align:center;padding:8px 0}
+.scent-name{font-size:1.1rem;font-weight:500;color:var(--text);margin-bottom:4px}
+.scent-uid{font-size:.75rem;color:var(--dim);font-family:'SF Mono',Monaco,'Courier New',monospace}

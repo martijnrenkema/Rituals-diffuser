@@ -240,6 +240,46 @@ function updateExtended(d){
         $('#night-bright').value=d.night.brightness;
         $('#night-bright-val').textContent=d.night.brightness+'%';
     }
+
+    // RFID / Scent Cartridge (ESP32-C3 SuperMini only)
+    const rfidSection=$('#rfid-section');
+    if(d.rfid){
+        if(rfidSection)rfidSection.style.display='';
+
+        // Status indicator: green=cartridge present, orange=reader connected but no cartridge, red=not connected
+        const dot=$('#rfid-dot');
+        if(d.rfid.cartridge_present){
+            dot.classList.add('on');
+            dot.classList.remove('scanning');
+        }else if(d.rfid.connected){
+            dot.classList.remove('on');
+            dot.classList.add('scanning');  // Orange pulsing = waiting for cartridge
+        }else{
+            dot.classList.remove('on','scanning');
+        }
+
+        // Content based on state
+        if(d.rfid.cartridge_present&&d.rfid.last_scent){
+            // Cartridge is present NOW
+            $('#scent-name').textContent=d.rfid.last_scent;
+            $('#scent-uid').textContent='UID: '+d.rfid.last_uid;
+        }else if(d.rfid.has_tag&&d.rfid.last_scent){
+            // Had a cartridge but removed (show last known + removed message)
+            $('#scent-name').textContent=d.rfid.last_scent+' (removed)';
+            $('#scent-uid').textContent='Place cartridge back on reader';
+        }else if(d.rfid.connected){
+            // Reader connected, never had a cartridge
+            $('#scent-name').textContent='No cartridge detected';
+            $('#scent-uid').textContent='Place a Rituals cartridge on the reader';
+        }else{
+            // Reader not connected
+            $('#scent-name').textContent='RFID reader not connected';
+            $('#scent-uid').textContent='Check wiring';
+        }
+    }else{
+        // Hide RFID section if not available (ESP8266 or no RFID)
+        if(rfidSection)rfidSection.style.display='none';
+    }
 }
 
 // Wrap original update to include extended data
