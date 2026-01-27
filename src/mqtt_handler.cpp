@@ -265,7 +265,13 @@ void MQTTHandler::processPublishStateMachine() {
 
         case MqttPublishState::STATE_UPDATE:
             _mqttClient.publish((base + "/update_available").c_str(), updateChecker.isUpdateAvailable() ? "ON" : "OFF", true);
-            _mqttClient.publish((base + "/latest_version").c_str(), updateChecker.getLatestVersion(), true);
+            // Only publish latest_version if we have a valid value (not empty)
+            {
+                const char* latestVer = updateChecker.getLatestVersion();
+                if (latestVer && latestVer[0] != '\0') {
+                    _mqttClient.publish((base + "/latest_version").c_str(), latestVer, true);
+                }
+            }
             _mqttClient.publish((base + "/current_version").c_str(), updateChecker.getCurrentVersion(), true);
             _publishState = MqttPublishState::STATE_SCENT;
             break;
