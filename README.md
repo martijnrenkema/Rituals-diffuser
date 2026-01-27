@@ -101,29 +101,32 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 | GPIO4 | Fan PWM | Speed control (blue wire) |
 | GPIO5 | Fan Tacho | RPM feedback (yellow wire) |
 | GPIO15 | LED | WS2812 RGB LED |
-| GPIO14 | SW2 / SPI CLK | Connect button / RC522 SCK |
-| GPIO13 | SW1 / SPI MOSI | Cold reset button / RC522 MOSI |
-| GPIO12 | SPI MISO | RC522 MISO |
+| GPIO16 | SW2 | Front/Connect button |
+| GPIO3 | SW1 | Rear button (RX pin) |
+| GPIO14 | SPI CLK | RC522 SCK (HSPI) |
+| GPIO13 | SPI MOSI | RC522 MOSI (HSPI) |
+| GPIO12 | SPI MISO | RC522 MISO (HSPI) |
 | GPIO0 | RC522 CS | RC522 Chip Select |
-| GPIO16 | RC522 RST | RC522 Reset |
+| GPIO2 | RC522 RST | RC522 Reset |
 
-> **NFC Reader (RC522)**: The Rituals Genie has a built-in RC522 NFC reader on the HSPI bus. It shares pins with the buttons but works correctly after boot.
+> **NFC Reader (RC522)**: The Rituals Genie has a built-in RC522 NFC reader on the HSPI bus (GPIO12/13/14). Active after boot.
 
 ### ESP32-C3 SuperMini Pinout
 
-Compact alternative to the full ESP32 DevKit. Uses safe GPIO pins (ADC1 only, avoids strapping pins 2, 8, 9 and ADC2 pins which have WiFi interference).
+Compact alternative to the full ESP32 DevKit. Can be soldered directly to the original ESP8266 pads on the Rituals Genie board. Uses safe GPIO pins (ADC1 only, avoids strapping pins 2, 8, 9).
 
 | GPIO | Function | Description |
 |------|----------|-------------|
 | GPIO3 | Fan PWM | Speed control (ADC1, safe) |
 | GPIO4 | Fan Tacho | RPM feedback (ADC1, interrupt) |
 | GPIO10 | LED | WS2812 RGB LED |
-| GPIO0 | SW2 / RC522 RST | Connect button / RC522 Reset |
-| GPIO1 | SW1 | Cold reset button |
+| GPIO0 | SW2 | Front/Connect button |
+| GPIO1 | SW1 | Rear button |
 | GPIO6 | SPI CLK | RC522 SCK |
 | GPIO7 | SPI MOSI | RC522 MOSI |
-| GPIO20 | SPI MISO | RC522 MISO (RX pin) |
+| GPIO20 | SPI MISO | RC522 MISO |
 | GPIO5 | RC522 CS | RC522 Chip Select |
+| GPIO21 | RC522 RST | RC522 Reset |
 
 > The ESP32-C3 SuperMini has native USB - no USB-to-serial chip needed. Serial output works directly via USB-C.
 
