@@ -10,6 +10,11 @@
 #include "logger.h"
 #include <ArduinoJson.h>
 
+// RFID support for all platforms with RC522_ENABLED
+#if defined(RC522_ENABLED)
+#include "rfid_handler.h"
+#endif
+
 // External function and flag from main.cpp for LED priority system
 extern void updateLedStatus();
 extern bool otaInProgress;
@@ -450,8 +455,8 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     const DiffuserSettings& settings = storage.getSettings();  // Use cache, no NVS read
 
     // Use DynamicJsonDocument to avoid stack overflow on ESP8266 (limited 4KB stack)
-    // Reduced from 1280 to 1024 bytes for better ESP8266 memory usage
-    DynamicJsonDocument doc(1024);  // Heap allocation, includes update info
+    // Size increased to 1280 to include RFID data on ESP32-C3
+    DynamicJsonDocument doc(1280);  // Heap allocation, includes update + RFID info
 
     // WiFi status
     doc["wifi"]["connected"] = wifiManager.isConnected();
@@ -505,6 +510,16 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["update"]["can_auto_update"] = true;
     #else
     doc["update"]["can_auto_update"] = false;
+    #endif
+
+    // RFID status (ESP32-C3 SuperMini only)
+    #if defined(RC522_ENABLED)
+    doc["rfid"]["connected"] = rfidIsConnected();
+    doc["rfid"]["has_tag"] = rfidHasTag();
+    doc["rfid"]["cartridge_present"] = rfidIsCartridgePresent();  // Is cartridge NOW present?
+    doc["rfid"]["last_uid"] = rfidGetLastUID();
+    doc["rfid"]["last_scent"] = rfidGetLastScent();
+    doc["rfid"]["time_since_tag"] = rfidTimeSinceLastTag();
     #endif
 
     String response;

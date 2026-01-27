@@ -7,6 +7,11 @@
 #include "update_checker.h"
 #include <ArduinoJson.h>
 
+// RFID support for all platforms with RC522_ENABLED
+#if defined(RC522_ENABLED)
+#include "rfid_handler.h"
+#endif
+
 // WiFi library is included via mqtt_handler.h
 
 // External function from main.cpp for LED priority system
@@ -176,6 +181,20 @@ void MQTTHandler::processPublishStateMachine() {
 
         case MqttPublishState::DISC_CURRENT_VERSION:
             publishCurrentVersionSensorDiscovery();
+            _publishState = MqttPublishState::DISC_SCENT;
+            break;
+
+        case MqttPublishState::DISC_SCENT:
+            #if defined(RC522_ENABLED)
+            publishScentSensorDiscovery();
+            #endif
+            _publishState = MqttPublishState::DISC_CARTRIDGE;
+            break;
+
+        case MqttPublishState::DISC_CARTRIDGE:
+            #if defined(RC522_ENABLED)
+            publishCartridgeBinarySensorDiscovery();
+            #endif
             _publishState = MqttPublishState::DISC_DONE;
             break;
 
@@ -248,6 +267,19 @@ void MQTTHandler::processPublishStateMachine() {
             _mqttClient.publish((base + "/update_available").c_str(), updateChecker.isUpdateAvailable() ? "ON" : "OFF", true);
             _mqttClient.publish((base + "/latest_version").c_str(), updateChecker.getLatestVersion(), true);
             _mqttClient.publish((base + "/current_version").c_str(), updateChecker.getCurrentVersion(), true);
+            _publishState = MqttPublishState::STATE_SCENT;
+            break;
+
+        case MqttPublishState::STATE_SCENT:
+            #if defined(RC522_ENABLED)
+            {
+                // Publish scent name
+                String scent = rfidIsCartridgePresent() ? rfidGetLastScent() : "No cartridge";
+                _mqttClient.publish((base + "/scent").c_str(), scent.c_str(), true);
+                // Publish cartridge present state
+                _mqttClient.publish((base + "/cartridge_present").c_str(), rfidIsCartridgePresent() ? "ON" : "OFF", true);
+            }
+            #endif
             _publishState = MqttPublishState::STATE_DONE;
             break;
 
@@ -585,6 +617,43 @@ void MQTTHandler::publishCurrentVersionSensorDiscovery() {
     _mqttClient.publish(topic.c_str(), p.c_str(), true);
 }
 
+#if defined(RC522_ENABLED)
+void MQTTHandler::publishScentSensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Scent Cartridge\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_scent\",";
+    p += "\"stat_t\":\"" + b + "/scent\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"ic\":\"mdi:spray\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_scent/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+
+void MQTTHandler::publishCartridgeBinarySensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Cartridge Present\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_cartridge\",";
+    p += "\"stat_t\":\"" + b + "/cartridge_present\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"dev_cla\":\"presence\",";
+    p += "\"ic\":\"mdi:tag-outline\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/binary_sensor/rd_" + _deviceId + "_cartridge/config";
+    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+}
+#else
+// Empty stubs for non-RFID builds
+void MQTTHandler::publishScentSensorDiscovery() {}
+void MQTTHandler::publishCartridgeBinarySensorDiscovery() {}
+#endif
+
 void MQTTHandler::removeDiscovery() {
     String pre = String(MQTT_DISCOVERY_PREFIX);
     String id = "rd_" + _deviceId;
@@ -596,6 +665,9 @@ void MQTTHandler::removeDiscovery() {
     _mqttClient.publish((pre + "/sensor/" + id + "_rem/config").c_str(), "", true);
     _mqttClient.publish((pre + "/sensor/" + id + "_rpm/config").c_str(), "", true);
     _mqttClient.publish((pre + "/sensor/" + id + "_wifi/config").c_str(), "", true);
+    // RFID entities
+    _mqttClient.publish((pre + "/sensor/" + id + "_scent/config").c_str(), "", true);
+    _mqttClient.publish((pre + "/binary_sensor/" + id + "_cartridge/config").c_str(), "", true);
 
     _discoveryPublished = false;
     Serial.println("[MQTT] Discovery removed");

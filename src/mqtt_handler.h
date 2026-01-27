@@ -27,6 +27,8 @@ enum class MqttPublishState {
     DISC_UPDATE_AVAILABLE,
     DISC_LATEST_VERSION,
     DISC_CURRENT_VERSION,
+    DISC_SCENT,           // RFID scent sensor
+    DISC_CARTRIDGE,       // RFID cartridge present binary sensor
     DISC_DONE,
     // State publish states
     STATE_FAN,
@@ -38,6 +40,7 @@ enum class MqttPublishState {
     STATE_RPM_WIFI,
     STATE_RUNTIME,
     STATE_UPDATE,
+    STATE_SCENT,          // RFID scent state
     STATE_DONE
 };
 
@@ -109,6 +112,8 @@ private:
     void publishUpdateAvailableBinarySensorDiscovery();
     void publishLatestVersionSensorDiscovery();
     void publishCurrentVersionSensorDiscovery();
+    void publishScentSensorDiscovery();
+    void publishCartridgeBinarySensorDiscovery();
 
     String getBaseTopic();
     String getDeviceJson();
