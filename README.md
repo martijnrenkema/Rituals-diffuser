@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.8.5-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.0-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -20,6 +20,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
 
 - **Local Control** - No cloud dependency, works offline
 - **Home Assistant Integration** - MQTT auto-discovery
+- **NFC Scent Detection** - Automatically detects Rituals scent cartridges (v1.9.0+)
 - **Timer Presets** - 30, 60, 90, 120 minutes + continuous
 - **Interval Mode** - Pulsing mode to save fragrance
 - **Night Mode** - Auto-dim LED during configured hours
@@ -79,6 +80,16 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 | GND | GND | Black | Ground |
 | 3.3V | 3.3V | Red | Power |
 
+**RC522 NFC Reader (optional):**
+
+| ESP32 GPIO | RC522 Pin | Function |
+|------------|-----------|----------|
+| GPIO18 | SCK | SPI Clock (VSPI) |
+| GPIO23 | MOSI | SPI Data Out |
+| GPIO19 | MISO | SPI Data In |
+| GPIO16 | SDA/CS | Chip Select |
+| GPIO17 | RST | Reset |
+
 > **⚠️ Important: Antenna Placement**
 >
 > When installing an ESP32 dev board inside the metal housing, position the board so the WiFi antenna points toward the nozzle opening. The metal enclosure acts as a Faraday cage, blocking WiFi signals. The nozzle opening is the only path for the signal to escape.
@@ -90,8 +101,13 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 | GPIO4 | Fan PWM | Speed control (blue wire) |
 | GPIO5 | Fan Tacho | RPM feedback (yellow wire) |
 | GPIO15 | LED | WS2812 RGB LED |
-| GPIO14 | SW2 | Connect button |
-| GPIO13 | SW1 | Cold reset button |
+| GPIO14 | SW2 / SPI CLK | Connect button / RC522 SCK |
+| GPIO13 | SW1 / SPI MOSI | Cold reset button / RC522 MOSI |
+| GPIO12 | SPI MISO | RC522 MISO |
+| GPIO0 | RC522 CS | RC522 Chip Select |
+| GPIO16 | RC522 RST | RC522 Reset |
+
+> **NFC Reader (RC522)**: The Rituals Genie has a built-in RC522 NFC reader on the HSPI bus. It shares pins with the buttons but works correctly after boot.
 
 ### ESP32-C3 SuperMini Pinout
 
@@ -102,8 +118,12 @@ Compact alternative to the full ESP32 DevKit. Uses safe GPIO pins (ADC1 only, av
 | GPIO3 | Fan PWM | Speed control (ADC1, safe) |
 | GPIO4 | Fan Tacho | RPM feedback (ADC1, interrupt) |
 | GPIO10 | LED | WS2812 RGB LED |
-| GPIO0 | SW2 | Connect button |
+| GPIO0 | SW2 / RC522 RST | Connect button / RC522 Reset |
 | GPIO1 | SW1 | Cold reset button |
+| GPIO6 | SPI CLK | RC522 SCK |
+| GPIO7 | SPI MOSI | RC522 MOSI |
+| GPIO20 | SPI MISO | RC522 MISO (RX pin) |
+| GPIO5 | RC522 CS | RC522 Chip Select |
 
 > The ESP32-C3 SuperMini has native USB - no USB-to-serial chip needed. Serial output works directly via USB-C.
 
@@ -278,6 +298,8 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 | Fan RPM | Sensor | Current fan speed |
 | WiFi Signal | Sensor | Signal strength (dBm) |
 | Total Runtime | Sensor | Total device runtime (hours) |
+| Scent | Sensor | Current fragrance name (v1.9.0+) |
+| Cartridge Present | Binary Sensor | NFC cartridge detected (v1.9.0+) |
 
 ### Timer Presets
 
@@ -477,6 +499,18 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.9.0 (Experimental)
+**NFC Scent Cartridge Detection:**
+- **Automatic scent detection**: Reads Rituals scent cartridges via the built-in RC522 NFC reader
+- **MQTT sensors**: New `scent` and `cartridge_present` sensors for Home Assistant
+- **Web interface**: Shows current scent name and cartridge status
+- **Multi-platform support**: Works on ESP8266, ESP32 DevKit, and ESP32-C3 SuperMini
+
+> ⚠️ **Experimental**: ESP8266 NFC support needs community testing. The original ESP8266 was damaged during reverse engineering, so testing is done on ESP32-C3. Please report issues!
+
+**Bug Fixes:**
+- **Fix empty latest_version in MQTT**: No longer publishes empty values when update check hasn't completed
 
 ### v1.8.5
 **ESP32-C3 Pinout Fix:**
