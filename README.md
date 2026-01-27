@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.0-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.1-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -500,14 +500,26 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
-### v1.9.0 (Experimental)
+### v1.9.1
+**Critical Bug Fixes:**
+- **Fix ESP8266 button pins**: Front and rear buttons were mapped to wrong GPIOs (GPIO14/13 instead of GPIO16/3). Buttons now work correctly on original Rituals Genie board.
+- **Fix ESP32-C3 startup issues**: RC522 RST pin conflicted with front button (both on GPIO0). Moved RC522 RST to GPIO21.
+- **Fix ESP8266 RC522 RST conflict**: RC522 RST was on GPIO16 (same as front button). Moved to GPIO2.
+
+**Documentation:**
+- Added ESP32-C3 wiring mapping for Rituals Genie board installation to CLAUDE.md
+- Improved pin configuration comments in config.h
+
+> ⚠️ **ESP32-C3 Users**: If you connected RC522 RST to GPIO0, rewire to GPIO21.
+
+### v1.9.0 (Known Issues - Use v1.9.1)
+> ⚠️ **Do not use**: This version has critical pin mapping bugs. Use v1.9.1 instead.
+
 **NFC Scent Cartridge Detection:**
 - **Automatic scent detection**: Reads Rituals scent cartridges via the built-in RC522 NFC reader
 - **MQTT sensors**: New `scent` and `cartridge_present` sensors for Home Assistant
 - **Web interface**: Shows current scent name and cartridge status
 - **Multi-platform support**: Works on ESP8266, ESP32 DevKit, and ESP32-C3 SuperMini
-
-> ⚠️ **Experimental**: ESP8266 NFC support needs community testing. The original ESP8266 was damaged during reverse engineering, so testing is done on ESP32-C3. Please report issues!
 
 **Bug Fixes:**
 - **Fix empty latest_version in MQTT**: No longer publishes empty values when update check hasn't completed

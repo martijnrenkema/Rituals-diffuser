@@ -14,12 +14,12 @@
 // Pin Definitions - Rituals Perfume Genie 2.0
 // ===========================================
 #ifdef PLATFORM_ESP8266
-    // Rituals Genie ESP-WROOM-02 pinout
+    // Rituals Genie ESP-WROOM-02 pinout (verified via ESPHome project)
     #define FAN_PWM_PIN         4       // GPIO4 - Fan PWM speed control (blue wire)
     #define FAN_TACHO_PIN       5       // GPIO5 - Fan tachometer/RPM (yellow wire, TP17)
     #define LED_DATA_PIN        15      // GPIO15 - WS2812 RGB LED
-    #define BUTTON_FRONT_PIN    14      // GPIO14 - Connect button (SW2)
-    #define BUTTON_REAR_PIN     13      // GPIO13 - Cold reset button (SW1)
+    #define BUTTON_FRONT_PIN    16      // GPIO16 - Connect button (SW2) - was incorrectly 14
+    #define BUTTON_REAR_PIN     3       // GPIO3 - Fan toggle button (SW1) - was incorrectly 13
     #define NUM_LEDS            1       // Single WS2812 LED
 
     // RC522 RFID Reader - Native on Rituals Genie board (HSPI)
@@ -28,25 +28,25 @@
     #define RC522_MOSI_PIN      13      // GPIO13 - HSPI_MOSI
     #define RC522_MISO_PIN      12      // GPIO12 - HSPI_MISO
     #define RC522_CS_PIN        0       // GPIO0 - Boot pin (safe after boot)
-    #define RC522_RST_PIN       16      // GPIO16 - Wake/reset pin
+    #define RC522_RST_PIN       2       // GPIO2 - Reset (was 16, conflicted with front button)
 #elif defined(ESP32C3_SUPERMINI)
-    // ESP32-C3 SuperMini optimized pinout v1.8.5
-    // GPIO3/4 used for fan (avoid ADC2 pins and JTAG MTCK/MTDI)
-    // GPIO0/1 used for buttons (INPUT_PULLUP, less timing-critical)
-    #define FAN_PWM_PIN         3       // GPIO3 - Fan PWM speed control (ADC1, safe)
-    #define FAN_TACHO_PIN       4       // GPIO4 - Fan tachometer/RPM (ADC1, interrupt)
-    #define LED_DATA_PIN        10      // GPIO10 - WS2812 RGB LED
-    #define BUTTON_FRONT_PIN    0       // GPIO0 - Connect button
-    #define BUTTON_REAR_PIN     1       // GPIO1 - Cold reset button
+    // ESP32-C3 SuperMini - soldered to original Rituals Genie ESP8266 pads
+    // Wiring: ESP32-C3 GPIO → Original ESP8266 GPIO pad (uses existing PCB traces)
+    // See CLAUDE.md for full wiring mapping
+    #define FAN_PWM_PIN         3       // GPIO3 → ESP8266 GPIO4 pad (fan PWM, blue wire)
+    #define FAN_TACHO_PIN       4       // GPIO4 → ESP8266 GPIO5 pad (fan tachometer)
+    #define LED_DATA_PIN        10      // GPIO10 → ESP8266 GPIO15 pad (WS2812 LED)
+    #define BUTTON_FRONT_PIN    0       // GPIO0 → ESP8266 GPIO16 pad (front button)
+    #define BUTTON_REAR_PIN     1       // GPIO1 - NOT CONNECTED (ESP8266 GPIO3 pad unused)
     #define NUM_LEDS            1       // Single WS2812 LED
 
-    // RC522 RFID Reader - SPI on ESP32-C3 SuperMini
+    // RC522 RFID Reader - using original Rituals board HSPI traces
     #define RC522_ENABLED       1
-    #define RC522_SCK_PIN       6       // GPIO6 - SPI CLK
-    #define RC522_MOSI_PIN      7       // GPIO7 - SPI MOSI
-    #define RC522_MISO_PIN      20      // GPIO20 - SPI MISO (RX)
-    #define RC522_CS_PIN        5       // GPIO5 - Chip Select
-    #define RC522_RST_PIN       0       // GPIO0 - Reset (shared with button, but OK)
+    #define RC522_SCK_PIN       6       // GPIO6 → ESP8266 GPIO14 pad (HSPI_CLK)
+    #define RC522_MOSI_PIN      7       // GPIO7 → ESP8266 GPIO13 pad (HSPI_MOSI)
+    #define RC522_MISO_PIN      20      // GPIO20 → ESP8266 GPIO12 pad (HSPI_MISO)
+    #define RC522_CS_PIN        5       // GPIO5 → ESP8266 GPIO0 pad (Chip Select)
+    #define RC522_RST_PIN       21      // GPIO21 → ESP8266 GPIO2 pad (Reset)
 #else
     // ESP32 DevKit pinout voor Rituals Genie
     // Sluit de Genie board draden aan op deze ESP32 pinnen:
@@ -187,7 +187,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.9.0"
+#define FIRMWARE_VERSION        "1.9.1"
 
 // ===========================================
 // Update Checker Settings
