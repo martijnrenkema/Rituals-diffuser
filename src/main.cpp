@@ -1,3 +1,6 @@
+// Skip main.cpp when building RC522 test firmware
+#ifndef RC522_TEST_MODE
+
 #include <Arduino.h>
 #include <time.h>
 #include "config.h"
@@ -15,6 +18,11 @@
 
 #ifdef PLATFORM_ESP8266
 #include "sync_ota.h"
+#endif
+
+// RFID support for all platforms with RC522_ENABLED
+#if defined(RC522_ENABLED)
+#include "rfid_handler.h"
 #endif
 
 // Global settings
@@ -295,6 +303,15 @@ void setup() {
     otaHandler.onStart(onOTAStart);
     otaHandler.onEnd(onOTAEnd);
 
+    // Initialize RFID (all platforms with RC522_ENABLED)
+#if defined(RC522_ENABLED)
+    if (rfidInit()) {
+        Serial.println("[MAIN] RFID reader initialized");
+    } else {
+        Serial.println("[MAIN] RFID reader NOT detected - check wiring");
+    }
+#endif
+
     // Ensure LED shows correct status after all initialization
     // This handles the case where WiFi was already connected via SDK auto-reconnect
     updateLedStatus();
@@ -343,6 +360,11 @@ void loop() {
         logger.save();
     }
 
+    // RFID loop (all platforms with RC522_ENABLED)
+#if defined(RC522_ENABLED)
+    rfidLoop();
+#endif
+
     // Periodic tasks every minute
     unsigned long now = millis();
     if (now - lastNightModeCheck >= 60000) {
@@ -358,3 +380,5 @@ void loop() {
     // ESP32 needs longer delay than ESP8266
     delay(20);
 }
+
+#endif // RC522_TEST_MODE

@@ -21,6 +21,14 @@
     #define BUTTON_FRONT_PIN    14      // GPIO14 - Connect button (SW2)
     #define BUTTON_REAR_PIN     13      // GPIO13 - Cold reset button (SW1)
     #define NUM_LEDS            1       // Single WS2812 LED
+
+    // RC522 RFID Reader - Native on Rituals Genie board (HSPI)
+    #define RC522_ENABLED       1
+    #define RC522_SCK_PIN       14      // GPIO14 - HSPI_CLK
+    #define RC522_MOSI_PIN      13      // GPIO13 - HSPI_MOSI
+    #define RC522_MISO_PIN      12      // GPIO12 - HSPI_MISO
+    #define RC522_CS_PIN        0       // GPIO0 - Boot pin (safe after boot)
+    #define RC522_RST_PIN       16      // GPIO16 - Wake/reset pin
 #elif defined(ESP32C3_SUPERMINI)
     // ESP32-C3 SuperMini optimized pinout v1.8.5
     // GPIO3/4 used for fan (avoid ADC2 pins and JTAG MTCK/MTDI)
@@ -40,6 +48,14 @@
     #define BUTTON_FRONT_PIN    13      // GPIO13 → Genie IO16 (Connect button SW2)
     #define BUTTON_REAR_PIN     14      // GPIO14 → Genie IO14 (Cold reset SW1)
     #define NUM_LEDS            1       // Single WS2812 LED
+
+    // RC522 RFID Reader - VSPI on ESP32 DevKit
+    #define RC522_ENABLED       1
+    #define RC522_SCK_PIN       18      // GPIO18 - VSPI_CLK
+    #define RC522_MOSI_PIN      23      // GPIO23 - VSPI_MOSI
+    #define RC522_MISO_PIN      19      // GPIO19 - VSPI_MISO
+    #define RC522_CS_PIN        16      // GPIO16 - Chip Select
+    #define RC522_RST_PIN       17      // GPIO17 - Reset
 #endif
 
 // ===========================================
@@ -163,7 +179,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.8.5"
+#define FIRMWARE_VERSION        "1.9.0"
 
 // ===========================================
 // Update Checker Settings
