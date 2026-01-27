@@ -39,6 +39,14 @@
     #define BUTTON_FRONT_PIN    0       // GPIO0 - Connect button
     #define BUTTON_REAR_PIN     1       // GPIO1 - Cold reset button
     #define NUM_LEDS            1       // Single WS2812 LED
+
+    // RC522 RFID Reader - SPI on ESP32-C3 SuperMini
+    #define RC522_ENABLED       1
+    #define RC522_SCK_PIN       6       // GPIO6 - SPI CLK
+    #define RC522_MOSI_PIN      7       // GPIO7 - SPI MOSI
+    #define RC522_MISO_PIN      20      // GPIO20 - SPI MISO (RX)
+    #define RC522_CS_PIN        5       // GPIO5 - Chip Select
+    #define RC522_RST_PIN       0       // GPIO0 - Reset (shared with button, but OK)
 #else
     // ESP32 DevKit pinout voor Rituals Genie
     // Sluit de Genie board draden aan op deze ESP32 pinnen:
