@@ -9,6 +9,7 @@
 // RC522 instance
 static MFRC522* mfrc522 = nullptr;
 static bool rc522Connected = false;
+static uint8_t rc522VersionReg = 0;  // Store version for debug
 
 // Laatste gedetecteerde tag
 static String lastUID = "";
@@ -21,7 +22,7 @@ static bool cartridgePresent = false;
 
 // Timeout: als geen tag gedetecteerd in 5 seconden, is cartridge verwijderd
 #define CARTRIDGE_TIMEOUT_MS 5000
-// Scan interval: check elke 1000ms of cartridge nog aanwezig is (was 500ms, verhoogd voor WiFi stabiliteit)
+// Scan interval: check elke 1000ms of cartridge nog aanwezig is
 #define SCAN_INTERVAL_MS 1000
 
 // Geurtabel - officieel gedeeld
@@ -31,81 +32,101 @@ struct ScentEntry {
 };
 
 // Geurtabel met hex codes - zowel 3-letter ASCII als officiële codes
-// Format: {"hex-code", "Full scent name"}
+// Elke geur heeft lowercase, uppercase (capitalized) en officiële hex varianten
 static const ScentEntry scentTable[] = {
     // ============ KARMA ============
-    {"6B6172", "The Ritual of Karma"},           // "kar" ASCII - VERIFIED
+    {"6B6172", "The Ritual of Karma"},           // "kar" ASCII lowercase
+    {"4B6172", "The Ritual of Karma"},           // "Kar" ASCII uppercase
     {"06B617", "The Ritual of Karma"},           // Officieel (alternatief)
 
     // ============ DAO ============
-    {"64616F", "The Ritual of Dao"},             // "dao" ASCII (lowercase)
-    {"44616F", "The Ritual of Dao"},             // "Dao" ASCII (capitalized)
+    {"64616F", "The Ritual of Dao"},             // "dao" ASCII lowercase
+    {"44616F", "The Ritual of Dao"},             // "Dao" ASCII uppercase
     {"044616", "The Ritual of Dao"},             // Officieel
 
     // ============ HAPPY BUDDHA ============
-    {"686170", "The Ritual of Happy Buddha"},    // "hap" ASCII
+    {"686170", "The Ritual of Happy Buddha"},    // "hap" ASCII lowercase
+    {"486170", "The Ritual of Happy Buddha"},    // "Hap" ASCII uppercase
     {"04C617", "The Ritual of Happy Buddha"},    // Officieel
 
     // ============ SAKURA ============
-    {"73616B", "The Ritual of Sakura"},          // "sak" ASCII
+    {"73616B", "The Ritual of Sakura"},          // "sak" ASCII lowercase
+    {"53616B", "The Ritual of Sakura"},          // "Sak" ASCII uppercase
     {"053616", "The Ritual of Sakura"},          // Officieel
 
     // ============ AYURVEDA ============
-    {"617975", "The Ritual of Ayurveda"},        // "ayu" ASCII
+    {"617975", "The Ritual of Ayurveda"},        // "ayu" ASCII lowercase
+    {"417975", "The Ritual of Ayurveda"},        // "Ayu" ASCII uppercase
     {"047975", "The Ritual of Ayurveda"},        // Officieel
 
     // ============ HAMMAM ============
-    {"68616D", "The Ritual of Hammam"},          // "ham" ASCII
+    {"68616D", "The Ritual of Hammam"},          // "ham" ASCII lowercase
+    {"48616D", "The Ritual of Hammam"},          // "Ham" ASCII uppercase
     {"048616", "The Ritual of Hammam"},          // Officieel
 
     // ============ JING ============
-    {"6A696E", "The Ritual of Jing"},            // "jin" ASCII
+    {"6A696E", "The Ritual of Jing"},            // "jin" ASCII lowercase
+    {"4A696E", "The Ritual of Jing"},            // "Jin" ASCII uppercase
     {"04A696", "The Ritual of Jing"},            // Officieel
 
     // ============ MEHR ============
-    {"6D6568", "The Ritual of Mehr"},            // "meh" ASCII
+    {"6D6568", "The Ritual of Mehr"},            // "meh" ASCII lowercase
+    {"4D6568", "The Ritual of Mehr"},            // "Meh" ASCII uppercase
     {"06D656", "The Ritual of Mehr"},            // Officieel
 
     // ============ SPRING GARDEN ============
-    {"737072", "The Ritual of Spring Garden"},   // "spr" ASCII
+    {"737072", "The Ritual of Spring Garden"},   // "spr" ASCII lowercase
+    {"537072", "The Ritual of Spring Garden"},   // "Spr" ASCII uppercase
     {"057072", "The Ritual of Spring Garden"},   // Officieel
 
     // ============ PRIVATE COLLECTION ============
-    {"676F6A", "Private Collection Goji Berry"},          // "goj" ASCII
+    {"676F6A", "Private Collection Goji Berry"},          // "goj" ASCII lowercase
+    {"476F6A", "Private Collection Goji Berry"},          // "Goj" ASCII uppercase
     {"0476F6", "Private Collection Goji Berry"},          // Officieel
 
-    {"766574", "Private Collection Oriental Vetiver"},    // "vet" ASCII
+    {"766574", "Private Collection Oriental Vetiver"},    // "vet" ASCII lowercase
+    {"566574", "Private Collection Oriental Vetiver"},    // "Vet" ASCII uppercase
     {"04F726", "Private Collection Oriental Vetiver"},    // Officieel
 
-    {"6F7564", "Private Collection Black Oudh"},          // "oud" ASCII
+    {"6F7564", "Private Collection Black Oudh"},          // "oud" ASCII lowercase
+    {"4F7564", "Private Collection Black Oudh"},          // "Oud" ASCII uppercase
     {"0426C6", "Private Collection Black Oudh"},          // Officieel
 
-    {"616D62", "Private Collection Precious Amber"},      // "amb" ASCII
+    {"616D62", "Private Collection Precious Amber"},      // "amb" ASCII lowercase
+    {"416D62", "Private Collection Precious Amber"},      // "Amb" ASCII uppercase
     {"057265", "Private Collection Precious Amber"},      // Officieel
 
-    {"6A6173", "Private Collection Sweet Jasmine"},       // "jas" ASCII
+    {"6A6173", "Private Collection Sweet Jasmine"},       // "jas" ASCII lowercase
+    {"4A6173", "Private Collection Sweet Jasmine"},       // "Jas" ASCII uppercase
     {"057765", "Private Collection Sweet Jasmine"},       // Officieel
 
-    {"726F73", "Private Collection Imperial Rose"},       // "ros" ASCII
+    {"726F73", "Private Collection Imperial Rose"},       // "ros" ASCII lowercase
+    {"526F73", "Private Collection Imperial Rose"},       // "Ros" ASCII uppercase
     {"0496D7", "Private Collection Imperial Rose"},       // Officieel
 
-    {"736176", "Private Collection Savage Garden"},       // "sav" ASCII
+    {"736176", "Private Collection Savage Garden"},       // "sav" ASCII lowercase
+    {"536176", "Private Collection Savage Garden"},       // "Sav" ASCII uppercase
     {"056176", "Private Collection Savage Garden"},       // Officieel
 
-    {"76616E", "Private Collection Suede Vanilla"},       // "van" ASCII
+    {"76616E", "Private Collection Suede Vanilla"},       // "van" ASCII lowercase
+    {"56616E", "Private Collection Suede Vanilla"},       // "Van" ASCII uppercase
     {"056616", "Private Collection Suede Vanilla"},       // Officieel
 
-    {"636F74", "Private Collection Cotton Blossom"},      // "cot" ASCII
+    {"636F74", "Private Collection Cotton Blossom"},      // "cot" ASCII lowercase
+    {"436F74", "Private Collection Cotton Blossom"},      // "Cot" ASCII uppercase
     {"0426C6", "Private Collection Cotton Blossom"},      // Officieel
 
-    {"636172", "Private Collection Green Cardamom"},      // "car" ASCII
+    {"636172", "Private Collection Green Cardamom"},      // "car" ASCII lowercase
+    {"436172", "Private Collection Green Cardamom"},      // "Car" ASCII uppercase
     {"047265", "Private Collection Green Cardamom"},      // Officieel
 
-    {"746561", "Private Collection Royal Tea"},           // "tea" ASCII
+    {"746561", "Private Collection Royal Tea"},           // "tea" ASCII lowercase
+    {"546561", "Private Collection Royal Tea"},           // "Tea" ASCII uppercase
     {"047275", "Private Collection Royal Tea"},           // Officieel
 
     // ============ JING NIGHT ============
-    {"6E6967", "The Ritual of Jing Night"},      // "nig" ASCII (night)
+    {"6E6967", "The Ritual of Jing Night"},      // "nig" ASCII lowercase
+    {"4E6967", "The Ritual of Jing Night"},      // "Nig" ASCII uppercase
     {"047375", "The Ritual of Jing Night"},      // Officieel
 
     // ============ INVALID ============
@@ -119,23 +140,61 @@ bool rfidInit() {
     Serial.printf("[RFID] Pins: SCK=%d, MOSI=%d, MISO=%d, CS=%d, RST=%d\n",
                   RC522_SCK_PIN, RC522_MOSI_PIN, RC522_MISO_PIN, RC522_CS_PIN, RC522_RST_PIN);
 
+    // Setup CS and RST pins BEFORE SPI init
+    pinMode(RC522_CS_PIN, OUTPUT);
+    pinMode(RC522_RST_PIN, OUTPUT);
+    digitalWrite(RC522_CS_PIN, HIGH);   // CS inactive
+    digitalWrite(RC522_RST_PIN, HIGH);  // Not in reset
+    Serial.println("[RFID] CS and RST pins configured");
+
     // Initialize SPI - platform specific
 #ifdef PLATFORM_ESP8266
     // ESP8266 uses fixed HSPI pins (GPIO14=SCK, GPIO12=MISO, GPIO13=MOSI)
-    // No custom pin configuration possible via SPI.begin()
+    Serial.println("[RFID] ESP8266: Using hardware HSPI");
     SPI.begin();
 #else
     // ESP32 supports custom SPI pins
+    Serial.println("[RFID] ESP32: Using custom SPI pins");
     SPI.begin(RC522_SCK_PIN, RC522_MISO_PIN, RC522_MOSI_PIN, RC522_CS_PIN);
 #endif
 
-    // Maak MFRC522 instance
+    delay(50);  // Let SPI stabilize
+
+    // Perform hardware reset
+    Serial.println("[RFID] Performing hardware reset...");
+    digitalWrite(RC522_RST_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(RC522_RST_PIN, HIGH);
+    delay(50);  // Wait for oscillator startup
+
+    // Create MFRC522 instance
     mfrc522 = new MFRC522(RC522_CS_PIN, RC522_RST_PIN);
+
+    // Initialize the MFRC522
+    Serial.println("[RFID] Calling PCD_Init()...");
     mfrc522->PCD_Init();
     delay(100);
 
-    // Check of RC522 gedetecteerd is
-    byte version = mfrc522->PCD_ReadRegister(mfrc522->VersionReg);
+    // Read version register multiple times to check stability
+    Serial.println("[RFID] Reading version register...");
+    byte version1 = mfrc522->PCD_ReadRegister(mfrc522->VersionReg);
+    delay(10);
+    byte version2 = mfrc522->PCD_ReadRegister(mfrc522->VersionReg);
+    delay(10);
+    byte version3 = mfrc522->PCD_ReadRegister(mfrc522->VersionReg);
+
+    Serial.printf("[RFID] Version reads: 0x%02X, 0x%02X, 0x%02X\n", version1, version2, version3);
+
+    // Use the most common value (simple majority vote)
+    byte version = version1;
+    if (version1 == version2 || version1 == version3) {
+        version = version1;
+    } else if (version2 == version3) {
+        version = version2;
+    }
+
+    // Store for debug access via web API
+    rc522VersionReg = version;
 
     if (version == 0x91 || version == 0x92 || version == 0x88) {
         rc522Connected = true;
@@ -143,11 +202,34 @@ bool rfidInit() {
         if (version == 0x91) Serial.println(" (v1.0)");
         else if (version == 0x92) Serial.println(" (v2.0)");
         else if (version == 0x88) Serial.println(" (clone)");
+        else Serial.println();
+
+        // Perform self-test
+        Serial.println("[RFID] RC522 self-test...");
+        bool selfTestOk = mfrc522->PCD_PerformSelfTest();
+        Serial.printf("[RFID] Self-test result: %s\n", selfTestOk ? "PASS" : "FAIL");
+
+        // Re-init after self-test (self-test disables crypto)
+        mfrc522->PCD_Init();
+
         return true;
     } else {
         rc522Connected = false;
         Serial.printf("[RFID] RC522 NOT detected! Got version: 0x%02X\n", version);
+        if (version == 0x00) {
+            Serial.println("[RFID] Version 0x00 suggests: no communication (check wiring/CS pin)");
+        } else if (version == 0xFF) {
+            Serial.println("[RFID] Version 0xFF suggests: no communication (check wiring/power)");
+        }
+        Serial.println("[RFID] Expected: 0x91 (v1.0), 0x92 (v2.0), or 0x88 (clone)");
         Serial.println("[RFID] Check wiring!");
+
+        // Debug: try reading other registers
+        Serial.println("[RFID] Debug - reading other registers:");
+        byte commandReg = mfrc522->PCD_ReadRegister(mfrc522->CommandReg);
+        byte statusReg = mfrc522->PCD_ReadRegister(mfrc522->Status1Reg);
+        Serial.printf("[RFID] CommandReg: 0x%02X, Status1Reg: 0x%02X\n", commandReg, statusReg);
+
         return false;
     }
 }
@@ -166,7 +248,7 @@ void rfidLoop() {
         mqttHandler.requestStatePublish();  // Notify MQTT immediately
     }
 
-    // Scan niet te vaak (elke 500ms)
+    // Scan niet te vaak (elke 1000ms)
     if (now - lastScanTime < SCAN_INTERVAL_MS) {
         return;
     }
@@ -366,6 +448,10 @@ ScentInfo rfidLookupScent(const String& hexData) {
 
 bool rfidIsConnected() {
     return rc522Connected;
+}
+
+uint8_t rfidGetVersionReg() {
+    return rc522VersionReg;
 }
 
 #endif // RC522_ENABLED
