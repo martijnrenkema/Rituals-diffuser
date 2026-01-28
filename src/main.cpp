@@ -375,6 +375,15 @@ void loop() {
         logger.save();
     }
 
+#ifdef PLATFORM_ESP8266
+    // Log heap every 60 seconds for OOM debugging
+    static unsigned long lastHeapLog = 0;
+    if (now - lastHeapLog > 60000) {
+        Serial.printf("[HEAP] Free: %u bytes\n", ESP.getFreeHeap());
+        lastHeapLog = now;
+    }
+#endif
+
     // Give async tasks (WiFi, MQTT, WebServer) enough CPU time
     // This prevents the AsyncTCP watchdog timeout
     // ESP32 needs longer delay than ESP8266

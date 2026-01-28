@@ -452,6 +452,14 @@ void WebServer::setupRoutes() {
 }
 
 void WebServer::handleStatus(AsyncWebServerRequest* request) {
+#ifdef PLATFORM_ESP8266
+    // Protect against OOM during response generation
+    if (ESP.getFreeHeap() < 8000) {
+        request->send(503, "application/json", "{\"error\":\"Low memory, please retry\"}");
+        return;
+    }
+#endif
+
     const DiffuserSettings& settings = storage.getSettings();  // Use cache, no NVS read
 
     // Use DynamicJsonDocument to avoid stack overflow on ESP8266 (limited 4KB stack)
@@ -759,6 +767,14 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
 // =====================================================
 
 void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
+#ifdef PLATFORM_ESP8266
+    // Protect against OOM during response generation
+    if (ESP.getFreeHeap() < 8000) {
+        request->send(503, "application/json", "{\"error\":\"Low memory, please retry\"}");
+        return;
+    }
+#endif
+
     // Use DynamicJsonDocument to avoid stack pressure on ESP8266
     // Reduced from 512 to 384 bytes for better memory usage
     DynamicJsonDocument doc(384);

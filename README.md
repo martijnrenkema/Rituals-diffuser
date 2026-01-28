@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.1-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.3-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -502,6 +502,14 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.9.3
+**ESP8266 Stability Hotfix:**
+- **Heap protection**: Web server handlers now return HTTP 503 when free heap is below 8KB, preventing OOM crashes during response generation
+- **Reduced polling frequency**: Diagnostic button polling reduced from 500ms to 2000ms to reduce memory pressure
+- **Heap logging**: Added periodic heap monitoring (every 60s) to serial output for debugging memory issues
+
+> 💡 **For OOM issues**: If crashes persist, avoid keeping the Hardware Diagnostics section open for extended periods. The reduced polling helps but does not eliminate memory usage.
 
 ### v1.9.2
 **Scent Recognition Fix:**

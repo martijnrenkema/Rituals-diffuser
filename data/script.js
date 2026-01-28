@@ -400,12 +400,12 @@ $('#set-min-btn').onclick=async()=>{
 // Initial diagnostic fetch
 fetchDiagnostic();
 
-// Poll buttons every 500ms when diagnostic section is open (was 200ms)
+// Poll buttons every 2000ms when diagnostic section is open (reduced from 500ms for ESP8266 stability)
 let buttonPollInterval=null;
 document.querySelector('details:has(.diag-section)')?.addEventListener('toggle',function(e){
     if(this.open){
         fetchDiagnostic();
-        buttonPollInterval=setInterval(pollButtons,500);
+        buttonPollInterval=setInterval(pollButtons,2000);
     }else{
         if(buttonPollInterval)clearInterval(buttonPollInterval);
     }
