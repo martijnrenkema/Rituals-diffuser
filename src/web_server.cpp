@@ -512,7 +512,7 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["update"]["can_auto_update"] = false;
     #endif
 
-    // RFID status (ESP32-C3 SuperMini only)
+    // RFID status
     #if defined(RC522_ENABLED)
     doc["rfid"]["connected"] = rfidIsConnected();
     doc["rfid"]["has_tag"] = rfidHasTag();
@@ -520,6 +520,10 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["rfid"]["last_uid"] = rfidGetLastUID();
     doc["rfid"]["last_scent"] = rfidGetLastScent();
     doc["rfid"]["time_since_tag"] = rfidTimeSinceLastTag();
+    // Debug info: version register (0x91/0x92/0x88 = valid, 0x00/0xFF = no communication)
+    char versionHex[5];
+    snprintf(versionHex, sizeof(versionHex), "0x%02X", rfidGetVersionReg());
+    doc["rfid"]["version_reg"] = versionHex;
     #endif
 
     String response;

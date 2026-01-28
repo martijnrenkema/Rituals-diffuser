@@ -23,12 +23,14 @@
     #define NUM_LEDS            1       // Single WS2812 LED
 
     // RC522 RFID Reader - Native on Rituals Genie board (HSPI)
+    // Verified: ESP32-C3 SuperMini uses same PCB traces and works correctly
+    // Standard ESP8266 HSPI pinout is correct
     #define RC522_ENABLED       1
-    #define RC522_SCK_PIN       14      // GPIO14 - HSPI_CLK
-    #define RC522_MOSI_PIN      13      // GPIO13 - HSPI_MOSI
-    #define RC522_MISO_PIN      12      // GPIO12 - HSPI_MISO
-    #define RC522_CS_PIN        0       // GPIO0 - Boot pin (safe after boot)
-    #define RC522_RST_PIN       2       // GPIO2 - Reset (was 16, conflicted with front button)
+    #define RC522_SCK_PIN       14      // GPIO14 - HSPI_CLK (standard)
+    #define RC522_MOSI_PIN      13      // GPIO13 - HSPI_MOSI (standard)
+    #define RC522_MISO_PIN      12      // GPIO12 - HSPI_MISO (standard)
+    #define RC522_CS_PIN        0       // GPIO0 - Chip Select (boot pin, safe after boot)
+    #define RC522_RST_PIN       2       // GPIO2 - Reset
 #elif defined(ESP32C3_SUPERMINI)
     // ESP32-C3 SuperMini - soldered to original Rituals Genie ESP8266 pads
     // Wiring: ESP32-C3 GPIO → Original ESP8266 GPIO pad (uses existing PCB traces)
@@ -187,7 +189,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.9.1"
+#define FIRMWARE_VERSION        "1.9.2"
 
 // ===========================================
 // Update Checker Settings

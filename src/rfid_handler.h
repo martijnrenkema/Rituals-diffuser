@@ -40,6 +40,9 @@ ScentInfo rfidLookupScent(const String& uid);
 // Is de RC522 geïnitialiseerd en werkend?
 bool rfidIsConnected();
 
+// Debug: Get the version register value read during init (0 if not read)
+uint8_t rfidGetVersionReg();
+
 #endif // RC522_ENABLED
 
 #endif // RFID_HANDLER_H

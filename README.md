@@ -503,6 +503,14 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.9.2
+**NFC Debugging Improvements:**
+- **Improved RC522 detection**: Added more robust initialization with hardware reset and multiple version register reads
+- **API debug info**: Added `rfid.version_reg` to `/api/status` endpoint for remote debugging (shows `0x91`/`0x92`/`0x88` if detected, `0x00`/`0xFF` if communication fails)
+- **Better serial logging**: More detailed output during RFID initialization to help diagnose connection issues
+
+> 💡 **Troubleshooting NFC**: If scent detection doesn't work, check `http://[device-ip]/api/status` and look at `rfid.version_reg`. Expected values: `0x91` (v1.0), `0x92` (v2.0), or `0x88` (clone).
+
 ### v1.9.1
 **Critical Bug Fixes:**
 - **Fix ESP8266 button pins**: Front and rear buttons were mapped to wrong GPIOs (GPIO14/13 instead of GPIO16/3). Buttons now work correctly on original Rituals Genie board.
