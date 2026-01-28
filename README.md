@@ -504,10 +504,14 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 ## Changelog
 
 ### v1.9.2
+**Scent Recognition Fix:**
+- **Fix capitalized scent codes**: Rituals cartridges can use uppercase first letters (e.g., "Jin" instead of "jin"). Added uppercase hex variants for all scents to ensure proper recognition.
+- **Fixes issue #7**: Jing (`4A696E`) and Sakura (`53616B`) cartridges now correctly identified instead of showing "Unknown".
+
 **NFC Debugging Improvements:**
-- **Improved RC522 detection**: Added more robust initialization with hardware reset and multiple version register reads
+- **Improved RC522 detection**: More robust initialization with hardware reset and multiple version register reads
 - **API debug info**: Added `rfid.version_reg` to `/api/status` endpoint for remote debugging (shows `0x91`/`0x92`/`0x88` if detected, `0x00`/`0xFF` if communication fails)
-- **Better serial logging**: More detailed output during RFID initialization to help diagnose connection issues
+- **Better serial logging**: Detailed output during RFID initialization to help diagnose connection issues
 
 > 💡 **Troubleshooting NFC**: If scent detection doesn't work, check `http://[device-ip]/api/status` and look at `rfid.version_reg`. Expected values: `0x91` (v1.0), `0x92` (v2.0), or `0x88` (clone).
 
