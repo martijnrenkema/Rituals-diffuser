@@ -255,14 +255,21 @@ const char* Logger::levelToString(LogLevel level) {
 }
 
 String Logger::toJson() {
-    String json = "[";
+    // Pre-allocate to avoid heap fragmentation from repeated concatenation
+    // Each entry: ~80 bytes JSON overhead + message (max 64 chars) + escaping = ~160 bytes max
+    // Reserve enough for all entries plus array brackets
+    String json;
+    json.reserve(_count * 160 + 2);
+
+    json = "[";
 
     for (uint16_t i = 0; i < _count; i++) {
         const LogEntry* entry = getEntry(i);
         if (!entry) continue;
 
-        if (i > 0) json += ",";
+        if (i > 0) json += ',';
 
+        // Build entry JSON - use char for single characters to avoid String temporaries
         json += "{\"u\":";
         json += String(entry->uptimeMs);
         json += ",\"e\":";
@@ -273,16 +280,17 @@ String Logger::toJson() {
 
         // Escape quotes and backslashes in message
         for (const char* p = entry->message; *p; p++) {
-            if (*p == '"') json += "\\\"";
-            else if (*p == '\\') json += "\\\\";
-            else if (*p == '\n') json += "\\n";
-            else if (*p == '\r') json += "\\r";
-            else json += *p;
+            char c = *p;
+            if (c == '"') json += "\\\"";
+            else if (c == '\\') json += "\\\\";
+            else if (c == '\n') json += "\\n";
+            else if (c == '\r') json += "\\r";
+            else json += c;  // Single char, not string
         }
 
         json += "\"}";
     }
 
-    json += "]";
+    json += ']';
     return json;
 }

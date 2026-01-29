@@ -20,14 +20,15 @@ private:
     SettingsCallback _settingsCallback = nullptr;
 
     // Deferred action flags (to avoid blocking in async callbacks)
+    // Use char arrays instead of String to avoid heap fragmentation
     bool _pendingWifiConnect = false;
-    String _pendingWifiSsid;
-    String _pendingWifiPassword;
+    char _pendingWifiSsid[33];      // Max SSID length + null
+    char _pendingWifiPassword[65];  // Max password length + null
     bool _pendingMqttConnect = false;
-    String _pendingMqttHost;
+    char _pendingMqttHost[65];      // Max hostname length + null
     uint16_t _pendingMqttPort = 1883;
-    String _pendingMqttUser;
-    String _pendingMqttPassword;
+    char _pendingMqttUser[33];      // Max username length + null
+    char _pendingMqttPassword[65];  // Max password length + null
     bool _pendingReset = false;
     bool _pendingRestart = false;
     bool _pendingUpdateCheck = false;
@@ -38,6 +39,7 @@ private:
 
     void setupRoutes();
     void handleStatus(AsyncWebServerRequest* request);
+    void handleStatusLite(AsyncWebServerRequest* request);
     void handleSaveWifi(AsyncWebServerRequest* request);
     void handleSaveMqtt(AsyncWebServerRequest* request);
     void handleFanControl(AsyncWebServerRequest* request);

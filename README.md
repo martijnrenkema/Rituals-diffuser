@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.3-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.4-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -16,11 +16,13 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
 
 > **Community tested!** Both ESP8266 (Rituals Genie V1/V2) and ESP32 versions are actively used by the community. Found an issue? [Report it here](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
+> **ESP8266 Stability Notice:** NFC scent detection (v1.9.0+) is **experimental** on ESP8266 due to memory constraints. If you experience instability, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as a stable fallback. ESP32/ESP32-C3 users have no limitations.
+
 ## Features
 
 - **Local Control** - No cloud dependency, works offline
 - **Home Assistant Integration** - MQTT auto-discovery
-- **NFC Scent Detection** - Automatically detects Rituals scent cartridges (v1.9.0+)
+- **NFC Scent Detection** - Automatically detects Rituals scent cartridges (v1.9.0+, experimental on ESP8266)
 - **Timer Presets** - 30, 60, 90, 120 minutes + continuous
 - **Interval Mode** - Pulsing mode to save fragrance
 - **Night Mode** - Auto-dim LED during configured hours
@@ -502,6 +504,27 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.9.4
+**ESP8266 Memory Optimization:**
+- **Lite status endpoint**: New `/api/status/lite` endpoint for polling uses `StaticJsonDocument` on stack instead of heap allocation, eliminating heap fragmentation
+- **Gzip compression**: Web interface files are now gzip compressed (62KB → 15KB, 76% reduction)
+- **Logger optimization**: `toJson()` now pre-allocates memory with `reserve()` to prevent heap fragmentation from repeated string concatenation
+- **Diagnostic endpoint fix**: `handleDiagnostic()` now uses `StaticJsonDocument` on stack instead of heap
+- **PROGMEM strings**: Captive portal responses moved to flash memory, saving ~500 bytes RAM
+- **Fixed-size buffers**: Replaced String members with char arrays for pending WiFi/MQTT credentials
+
+**Bug Fixes:**
+- **Input validation**: WiFi/MQTT credential handlers now validate length limits and return proper error messages instead of silently truncating
+- **Fan control validation**: Numeric parameters (speed, timer, intervals) are now validated to prevent unexpected behavior from malformed input
+- **RFID memory leak**: Fixed potential memory leak if RFID is re-initialized (previous MFRC522 instance is now properly deleted)
+
+**Technical changes:**
+- `data/` folder now contains `.gz` files only (originals in `data_src/`)
+- Web UI polls `/api/status/lite` every 5 seconds, full `/api/status` only at page load
+- All frequently-called handlers now use stack-based JSON documents
+
+> 💡 **ESP8266 users**: This update significantly improves stability by reducing heap usage and fragmentation during normal operation. If you still experience crashes with NFC enabled, use [v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5) as a stable fallback.
 
 ### v1.9.3
 **ESP8266 Stability Hotfix:**

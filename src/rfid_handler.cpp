@@ -167,7 +167,11 @@ bool rfidInit() {
     digitalWrite(RC522_RST_PIN, HIGH);
     delay(50);  // Wait for oscillator startup
 
-    // Create MFRC522 instance
+    // Create MFRC522 instance (delete existing if re-initializing to prevent memory leak)
+    if (mfrc522 != nullptr) {
+        delete mfrc522;
+        mfrc522 = nullptr;
+    }
     mfrc522 = new MFRC522(RC522_CS_PIN, RC522_RST_PIN);
 
     // Initialize the MFRC522

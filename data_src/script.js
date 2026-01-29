@@ -3,8 +3,8 @@ const circumference=2*Math.PI*54;
 let state={on:false,speed:50};
 let isESP8266=false; // Platform detection - update features disabled on ESP8266
 
-setInterval(fetchStatus,5000);  // Poll every 5 seconds instead of 2
-fetchStatus();
+setInterval(fetchStatusLite,5000);  // Poll lite endpoint every 5 seconds for reduced memory usage
+fetchStatus();  // Full status only at page load
 
 async function fetchStatus(){
     try{
@@ -12,6 +12,40 @@ async function fetchStatus(){
         const d=await r.json();
         update(d);
     }catch(e){console.error(e)}
+}
+
+async function fetchStatusLite(){
+    try{
+        const r=await fetch('/api/status/lite');
+        const d=await r.json();
+        updateLite(d);
+    }catch(e){console.error(e)}
+}
+
+function updateLite(d){
+    // Lightweight update for polling - only updates dynamic elements
+    if(d.wifi){
+        $('#wifi-dot').classList.toggle('on',d.wifi.connected||d.wifi.ap_mode);
+    }
+    if(d.mqtt){
+        $('#mqtt-dot').classList.toggle('on',d.mqtt.connected);
+    }
+    updateFan(d.fan);
+
+    // RFID status (lite version)
+    if(d.rfid){
+        const dot=$('#rfid-dot');
+        if(d.rfid.cartridge_present){
+            dot?.classList.add('on');
+            dot?.classList.remove('scanning');
+            if(d.rfid.last_scent)$('#scent-name').textContent=d.rfid.last_scent;
+        }else if(d.rfid.connected){
+            dot?.classList.remove('on');
+            dot?.classList.add('scanning');
+        }else{
+            dot?.classList.remove('on','scanning');
+        }
+    }
 }
 
 function updateFan(f){

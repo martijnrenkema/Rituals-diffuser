@@ -98,7 +98,7 @@ void WebServer::loop() {
     if (_pendingWifiConnect) {
         _pendingWifiConnect = false;
         _pendingActionTime = 0;
-        wifiManager.connect(_pendingWifiSsid.c_str(), _pendingWifiPassword.c_str());
+        wifiManager.connect(_pendingWifiSsid, _pendingWifiPassword);
         if (_settingsCallback) _settingsCallback();
     }
 
@@ -106,8 +106,8 @@ void WebServer::loop() {
         _pendingMqttConnect = false;
         _pendingActionTime = 0;
         mqttHandler.disconnect();
-        mqttHandler.connect(_pendingMqttHost.c_str(), _pendingMqttPort,
-                           _pendingMqttUser.c_str(), _pendingMqttPassword.c_str());
+        mqttHandler.connect(_pendingMqttHost, _pendingMqttPort,
+                           _pendingMqttUser, _pendingMqttPassword);
         if (_settingsCallback) _settingsCallback();
     }
 
@@ -150,6 +150,11 @@ void WebServer::setupRoutes() {
     // API endpoints
     _server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         handleStatus(request);
+    });
+
+    // Lite status endpoint for polling - uses stack allocation to reduce heap pressure on ESP8266
+    _server->on("/api/status/lite", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleStatusLite(request);
     });
 
     _server->on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest* request) {
@@ -398,6 +403,9 @@ void WebServer::setupRoutes() {
     );
 
     // Captive portal detection endpoints
+    // Use PROGMEM strings to save RAM on ESP8266
+    static const char PROGMEM captiveSuccess[] = "<html><body>Success</body></html>";
+
     // Android requests /generate_204 - returning 204 signals "no internet" which triggers portal popup
     _server->on("/generate_204", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(204);
@@ -408,24 +416,24 @@ void WebServer::setupRoutes() {
     });
     // iOS/macOS captive portal detection
     _server->on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/html", "<html><body>Success</body></html>");
+        request->send_P(200, "text/html", captiveSuccess);
     });
     _server->on("/library/test/success.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/html", "<html><body>Success</body></html>");
+        request->send_P(200, "text/html", captiveSuccess);
     });
     // Windows captive portal detection
     _server->on("/connecttest.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/plain", "Microsoft Connect Test");
+        request->send(200, "text/plain", F("Microsoft Connect Test"));
     });
     _server->on("/ncsi.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/plain", "Microsoft NCSI");
+        request->send(200, "text/plain", F("Microsoft NCSI"));
     });
     // Firefox captive portal detection
     _server->on("/canonical.html", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/html", "<html><body>Success</body></html>");
+        request->send_P(200, "text/html", captiveSuccess);
     });
     _server->on("/success.txt", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/plain", "success");
+        request->send(200, "text/plain", F("success"));
     });
 
     // Captive portal redirect - only in AP mode, redirect to config page
@@ -544,22 +552,66 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     request->send(200, "application/json", response);
 }
 
+void WebServer::handleStatusLite(AsyncWebServerRequest* request) {
+    // Lite status endpoint for frequent polling - uses StaticJsonDocument on STACK
+    // to avoid heap allocation and fragmentation on ESP8266
+    // Contains only data needed for UI polling updates
+    StaticJsonDocument<384> doc;
+
+    // Fan status (essential for UI updates)
+    doc["fan"]["on"] = fanController.isOn();
+    doc["fan"]["speed"] = fanController.getSpeed();
+    doc["fan"]["rpm"] = fanController.getRPM();
+    doc["fan"]["timer_active"] = fanController.isTimerActive();
+    doc["fan"]["remaining_minutes"] = fanController.getRemainingMinutes();
+    doc["fan"]["interval_mode"] = fanController.isIntervalMode();
+    doc["fan"]["interval_on"] = fanController.getIntervalOnTime();
+    doc["fan"]["interval_off"] = fanController.getIntervalOffTime();
+
+    // Connectivity status (for status dots)
+    doc["wifi"]["connected"] = wifiManager.isConnected();
+    doc["wifi"]["ap_mode"] = wifiManager.isAPMode();
+    doc["mqtt"]["connected"] = mqttHandler.isConnected();
+
+    // RFID status (only if enabled)
+    #if defined(RC522_ENABLED)
+    doc["rfid"]["connected"] = rfidIsConnected();
+    doc["rfid"]["cartridge_present"] = rfidIsCartridgePresent();
+    doc["rfid"]["last_scent"] = rfidGetLastScent();
+    #endif
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
 void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
     if (!request->hasParam("ssid", true) || !request->hasParam("password", true)) {
         request->send(400, "application/json", "{\"error\":\"Missing parameters\"}");
         return;
     }
 
-    String ssid = request->getParam("ssid", true)->value();
-    String password = request->getParam("password", true)->value();
+    const String& ssid = request->getParam("ssid", true)->value();
+    const String& password = request->getParam("password", true)->value();
+
+    // Validate credential lengths (WiFi standards: SSID max 32, WPA password 8-63)
+    if (ssid.length() == 0 || ssid.length() > 32) {
+        request->send(400, "application/json", "{\"error\":\"SSID must be 1-32 characters\"}");
+        return;
+    }
+    if (password.length() > 0 && (password.length() < 8 || password.length() > 63)) {
+        request->send(400, "application/json", "{\"error\":\"Password must be 8-63 characters (or empty for open network)\"}");
+        return;
+    }
 
     storage.setWiFi(ssid.c_str(), password.c_str());
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"WiFi saved, connecting...\"}");
 
     // Schedule WiFi connect in loop() to avoid blocking async callback
-    _pendingWifiSsid = ssid;
-    _pendingWifiPassword = password;
+    // Use strlcpy for safe copy to fixed-size char arrays
+    strlcpy(_pendingWifiSsid, ssid.c_str(), sizeof(_pendingWifiSsid));
+    strlcpy(_pendingWifiPassword, password.c_str(), sizeof(_pendingWifiPassword));
     _pendingWifiConnect = true;
     _pendingActionTime = millis();
 }
@@ -570,34 +622,55 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
         return;
     }
 
-    String host = request->getParam("host", true)->value();
+    const String& host = request->getParam("host", true)->value();
+
+    // Validate host length
+    if (host.length() == 0 || host.length() > 64) {
+        request->send(400, "application/json", "{\"error\":\"Host must be 1-64 characters\"}");
+        return;
+    }
+
     uint16_t port = 1883;
-    String user = "";
-    String password = "";
 
     if (request->hasParam("port", true)) {
         int portVal = request->getParam("port", true)->value().toInt();
         // Validate MQTT port range (1-65535)
         if (portVal > 0 && portVal <= 65535) {
             port = portVal;
+        } else if (request->getParam("port", true)->value().length() > 0) {
+            request->send(400, "application/json", "{\"error\":\"Port must be 1-65535\"}");
+            return;
         }
     }
+
+    // Get user and password if provided, with length validation
+    String userStr = "";
+    String passwordStr = "";
     if (request->hasParam("user", true)) {
-        user = request->getParam("user", true)->value();
+        userStr = request->getParam("user", true)->value();
+        if (userStr.length() > 32) {
+            request->send(400, "application/json", "{\"error\":\"Username must be max 32 characters\"}");
+            return;
+        }
     }
     if (request->hasParam("password", true)) {
-        password = request->getParam("password", true)->value();
+        passwordStr = request->getParam("password", true)->value();
+        if (passwordStr.length() > 64) {
+            request->send(400, "application/json", "{\"error\":\"Password must be max 64 characters\"}");
+            return;
+        }
     }
 
-    storage.setMQTT(host.c_str(), port, user.c_str(), password.c_str());
+    storage.setMQTT(host.c_str(), port, userStr.c_str(), passwordStr.c_str());
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"MQTT saved, connecting...\"}");
 
     // Schedule MQTT reconnect in loop() to avoid blocking async callback
-    _pendingMqttHost = host;
+    // Use strlcpy for safe copy to fixed-size char arrays
+    strlcpy(_pendingMqttHost, host.c_str(), sizeof(_pendingMqttHost));
     _pendingMqttPort = port;
-    _pendingMqttUser = user;
-    _pendingMqttPassword = password;
+    strlcpy(_pendingMqttUser, userStr.c_str(), sizeof(_pendingMqttUser));
+    strlcpy(_pendingMqttPassword, passwordStr.c_str(), sizeof(_pendingMqttPassword));
     _pendingMqttConnect = true;
     _pendingActionTime = millis();
 }
@@ -610,23 +683,49 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
         String power = request->getParam("power", true)->value();
         if (power == "on") {
             fanController.turnOn();
-        } else {
+        } else if (power == "off") {
             fanController.turnOff();
         }
+        // Ignore invalid power values silently (backwards compatible)
     }
 
     if (request->hasParam("speed", true)) {
-        int speed = request->getParam("speed", true)->value().toInt();
-        fanController.setSpeed(speed);
-        storage.setFanSpeed(speed);
+        const String& speedStr = request->getParam("speed", true)->value();
+        // Validate: must be numeric and 0-100
+        bool validSpeed = true;
+        for (unsigned int i = 0; i < speedStr.length(); i++) {
+            if (!isDigit(speedStr[i])) {
+                validSpeed = false;
+                break;
+            }
+        }
+        if (validSpeed && speedStr.length() > 0) {
+            int speed = speedStr.toInt();
+            if (speed >= 0 && speed <= 100) {
+                fanController.setSpeed(speed);
+                storage.setFanSpeed(speed);
+            }
+        }
+        // Ignore invalid speed values silently (backwards compatible)
     }
 
     if (request->hasParam("timer", true)) {
-        int timer = request->getParam("timer", true)->value().toInt();
-        if (timer > 0) {
-            fanController.setTimer(timer);
-        } else {
-            fanController.cancelTimer();
+        const String& timerStr = request->getParam("timer", true)->value();
+        // Validate: must be numeric
+        bool validTimer = true;
+        for (unsigned int i = 0; i < timerStr.length(); i++) {
+            if (!isDigit(timerStr[i])) {
+                validTimer = false;
+                break;
+            }
+        }
+        if (validTimer && timerStr.length() > 0) {
+            int timer = timerStr.toInt();
+            if (timer > 0 && timer <= 1440) {  // Max 24 hours
+                fanController.setTimer(timer);
+            } else if (timer == 0) {
+                fanController.cancelTimer();
+            }
         }
         updateLedStatus();
     }
@@ -640,10 +739,24 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     }
 
     if (request->hasParam("interval_on", true) && request->hasParam("interval_off", true)) {
-        int onTime = request->getParam("interval_on", true)->value().toInt();
-        int offTime = request->getParam("interval_off", true)->value().toInt();
-        fanController.setIntervalTimes(onTime, offTime);
-        storage.setIntervalMode(fanController.isIntervalMode(), onTime, offTime);
+        const String& onStr = request->getParam("interval_on", true)->value();
+        const String& offStr = request->getParam("interval_off", true)->value();
+        // Validate: must be numeric
+        bool validOn = onStr.length() > 0;
+        bool validOff = offStr.length() > 0;
+        for (unsigned int i = 0; i < onStr.length() && validOn; i++) {
+            if (!isDigit(onStr[i])) validOn = false;
+        }
+        for (unsigned int i = 0; i < offStr.length() && validOff; i++) {
+            if (!isDigit(offStr[i])) validOff = false;
+        }
+        if (validOn && validOff) {
+            int onTime = onStr.toInt();
+            int offTime = offStr.toInt();
+            // FanController::setIntervalTimes already constrains to INTERVAL_MIN/MAX
+            fanController.setIntervalTimes(onTime, offTime);
+            storage.setIntervalMode(fanController.isIntervalMode(), onTime, offTime);
+        }
     }
 
     // Return current state
@@ -767,17 +880,9 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
 // =====================================================
 
 void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
-#ifdef PLATFORM_ESP8266
-    // Protect against OOM during response generation
-    if (ESP.getFreeHeap() < 8000) {
-        request->send(503, "application/json", "{\"error\":\"Low memory, please retry\"}");
-        return;
-    }
-#endif
-
-    // Use DynamicJsonDocument to avoid stack pressure on ESP8266
-    // Reduced from 512 to 384 bytes for better memory usage
-    DynamicJsonDocument doc(384);
+    // Use StaticJsonDocument on stack to avoid heap allocation and fragmentation
+    // ESP8266 has 4KB stack which can handle 384 bytes
+    StaticJsonDocument<384> doc;
 
     // Fan status - connected if we detect RPM when running
     uint16_t rpm = fanController.getRPM();
