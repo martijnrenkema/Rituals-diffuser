@@ -245,10 +245,19 @@ void runSyncOTAServer() {
 
     // Run the server indefinitely (until reboot after update)
     // This is blocking - takes over from main loop
+    // Add timeout to restart device if no activity for 5 minutes (prevents permanent hang)
+    unsigned long lastActivity = millis();
     while (true) {
         syncServer.handleClient();
         ESP.wdtFeed();
         delay(10);
+        
+        // Check for timeout - restart if no HTTP activity for 5 minutes
+        // This prevents the device from being stuck if something goes wrong
+        if (millis() - lastActivity > 300000) {
+            Serial.println("[OTA-SYNC] No activity for 5 minutes, restarting...");
+            ESP.restart();
+        }
     }
 }
 

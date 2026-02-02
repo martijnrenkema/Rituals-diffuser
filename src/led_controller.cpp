@@ -3,8 +3,22 @@
 
 LedController ledController;
 
+LedController::~LedController() {
+#ifdef PLATFORM_ESP8266
+    if (_strip != nullptr) {
+        delete _strip;
+        _strip = nullptr;
+    }
+#endif
+}
+
 void LedController::begin() {
 #ifdef PLATFORM_ESP8266
+    // Clean up existing instance if begin() is called again (prevents memory leak)
+    if (_strip != nullptr) {
+        delete _strip;
+        _strip = nullptr;
+    }
     // NeoPixelBus for ESP8266 - BitBang method is more compatible with GPIO15
     _strip = new NeoPixelBus<NeoGrbFeature, NeoEsp8266BitBang800KbpsMethod>(NUM_LEDS, LED_DATA_PIN);
     _strip->Begin();

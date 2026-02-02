@@ -432,17 +432,17 @@ ScentInfo rfidLookupScent(const String& hexData) {
     // Normalize to uppercase for matching
     String data = hexData;
     data.toUpperCase();
+    const char* dataPtr = data.c_str();
 
-    // Search for hex codes in the tag data
+    // Search for hex codes in the tag data using direct C-string comparison
+    // This avoids creating String objects in the loop, reducing heap fragmentation
     for (int i = 0; scentTable[i].uid != nullptr; i++) {
-        String tableCode = String(scentTable[i].uid);
-        tableCode.toUpperCase();
-
-        // Check if the hex code appears in the tag data
-        if (data.indexOf(tableCode) >= 0) {
+        // Table UIDs are already uppercase, use case-insensitive search
+        // strstr is case-sensitive, but we've already uppercased data
+        if (strstr(dataPtr, scentTable[i].uid) != nullptr) {
             info.name = String(scentTable[i].name);
             info.valid = true;
-            Serial.printf("[RFID] Found hex pattern: %s\n", tableCode.c_str());
+            Serial.printf("[RFID] Found hex pattern: %s\n", scentTable[i].uid);
             break;
         }
     }

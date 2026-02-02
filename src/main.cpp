@@ -75,8 +75,11 @@ void checkNightMode() {
 
     bool isNight = storage.isNightModeActive(hour);
     static bool wasNight = false;
+    static bool initialized = false;
 
-    if (isNight != wasNight) {
+    // On first call after NTP sync, always apply the correct brightness
+    if (!initialized || isNight != wasNight) {
+        initialized = true;
         if (isNight) {
             ledController.setBrightness(storage.getNightModeBrightness());
             Serial.printf("[MAIN] Night mode activated (hour=%d)\n", hour);

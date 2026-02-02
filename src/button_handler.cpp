@@ -7,6 +7,11 @@ void ButtonHandler::begin() {
     // Both buttons use internal pullup (GPIO13 and GPIO14 support this on ESP32)
     pinMode(BUTTON_FRONT_PIN, INPUT_PULLUP);
     pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
+    
+    // Initialize press times to prevent false long-press detection if button held during boot
+    _frontPressTime = millis();
+    _rearPressTime = millis();
+    
     Serial.println("[BTN] Button handler initialized");
     Serial.printf("[BTN] Front (SW2): GPIO%d, Rear (SW1): GPIO%d\n", BUTTON_FRONT_PIN, BUTTON_REAR_PIN);
 }

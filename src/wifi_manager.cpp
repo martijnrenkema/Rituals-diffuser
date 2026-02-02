@@ -86,7 +86,7 @@ void WiFiManager::loop() {
                 // Switch to AP_STA mode to allow WiFi connection while keeping AP active
                 WiFi.mode(WIFI_AP_STA);
                 WiFi.begin(_ssid.c_str(), _password.c_str());
-                _connectStartTime = now;  // Track when we started trying
+                _apRetryConnectStart = now;  // Use separate timestamp for AP retry
             }
 
             // Check if background reconnect succeeded or timed out
@@ -97,7 +97,7 @@ void WiFiManager::loop() {
                 _reconnectAttempts = 0;
                 stopAP();
                 setState(WifiStatus::CONNECTED);
-            } else if (WiFi.getMode() == WIFI_AP_STA && now - _connectStartTime >= 30000) {
+            } else if (WiFi.getMode() == WIFI_AP_STA && now - _apRetryConnectStart >= 30000) {
                 // Background reconnect timed out after 30s, switch back to pure AP mode
                 Serial.println("[WIFI] Background reconnect timeout, staying in AP mode");
                 WiFi.mode(WIFI_AP);
