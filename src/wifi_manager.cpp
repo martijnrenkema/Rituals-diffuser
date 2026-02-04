@@ -32,9 +32,15 @@ void WiFiManager::loop() {
             if (WiFi.status() == WL_CONNECTED) {
                 _reconnectAttempts = 0;
                 setState(WifiStatus::CONNECTED);
+#ifdef PLATFORM_ESP8266
+                Serial.printf("[WIFI] Connected to %s\n", _ssid);
+                Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
+                logger.infof("WiFi connected: %s (%s)", _ssid, WiFi.localIP().toString().c_str());
+#else
                 Serial.printf("[WIFI] Connected to %s\n", _ssid.c_str());
                 Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
                 logger.infof("WiFi connected: %s (%s)", _ssid.c_str(), WiFi.localIP().toString().c_str());
+#endif
             } else if (now - _connectStartTime >= WIFI_CONNECT_TIMEOUT) {
                 _reconnectAttempts++;
                 Serial.printf("[WIFI] Connection timeout (attempt %d/%d)\n", _reconnectAttempts, MAX_RECONNECT_ATTEMPTS);
@@ -62,10 +68,17 @@ void WiFiManager::loop() {
 
         case WifiStatus::DISCONNECTED:
             // Auto reconnect if we have credentials
+#ifdef PLATFORM_ESP8266
+            if (_ssid[0] != '\0' && now - _lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
+                Serial.println("[WIFI] Attempting reconnect...");
+                connect(_ssid, _password);
+            }
+#else
             if (_ssid.length() > 0 && now - _lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
                 Serial.println("[WIFI] Attempting reconnect...");
                 connect(_ssid.c_str(), _password.c_str());
             }
+#endif
             break;
 
         case WifiStatus::AP_MODE:
@@ -80,6 +93,16 @@ void WiFiManager::loop() {
             _dnsServer.processNextRequest();
 
             // Periodically try to reconnect to saved WiFi while in AP mode
+#ifdef PLATFORM_ESP8266
+            if (_ssid[0] != '\0' && now - _lastAPRetry >= AP_RETRY_INTERVAL) {
+                _lastAPRetry = now;
+                Serial.println("[WIFI] AP mode: trying saved WiFi in background...");
+                // Switch to AP_STA mode to allow WiFi connection while keeping AP active
+                WiFi.mode(WIFI_AP_STA);
+                WiFi.begin(_ssid, _password);
+                _apRetryConnectStart = now;  // Use separate timestamp for AP retry
+            }
+#else
             if (_ssid.length() > 0 && now - _lastAPRetry >= AP_RETRY_INTERVAL) {
                 _lastAPRetry = now;
                 Serial.println("[WIFI] AP mode: trying saved WiFi in background...");
@@ -88,6 +111,7 @@ void WiFiManager::loop() {
                 WiFi.begin(_ssid.c_str(), _password.c_str());
                 _apRetryConnectStart = now;  // Use separate timestamp for AP retry
             }
+#endif
 
             // Check if background reconnect succeeded or timed out
             if (WiFi.status() == WL_CONNECTED) {
@@ -107,8 +131,15 @@ void WiFiManager::loop() {
 }
 
 void WiFiManager::connect(const char* ssid, const char* password) {
+#ifdef PLATFORM_ESP8266
+    strncpy(_ssid, ssid, sizeof(_ssid) - 1);
+    _ssid[sizeof(_ssid) - 1] = '\0';
+    strncpy(_password, password, sizeof(_password) - 1);
+    _password[sizeof(_password) - 1] = '\0';
+#else
     _ssid = ssid;
     _password = password;
+#endif
 
     // Stop AP if running
     if (_state == WifiStatus::AP_MODE) {
@@ -159,7 +190,11 @@ void WiFiManager::startAP() {
     const char* apPassword = storage.getAPPassword();
 
     // Start the AP - on ESP8266, channel and hidden params help stability
+#ifdef PLATFORM_ESP8266
+    bool apStarted = WiFi.softAP(_apName, apPassword, 1, false, 4);
+#else
     bool apStarted = WiFi.softAP(_apName.c_str(), apPassword, 1, false, 4);
+#endif
 
     if (!apStarted) {
         Serial.println("[WIFI] ERROR: Failed to start AP!");
@@ -179,10 +214,17 @@ void WiFiManager::startAP() {
     }
 
     setState(WifiStatus::AP_MODE);
+#ifdef PLATFORM_ESP8266
+    Serial.printf("[WIFI] AP started: %s\n", _apName);
+    Serial.printf("[WIFI] AP Password: %s\n", apPassword);
+    Serial.printf("[WIFI] AP IP: %s\n", currentIP.toString().c_str());
+    logger.infof("AP mode started: %s", _apName);
+#else
     Serial.printf("[WIFI] AP started: %s\n", _apName.c_str());
     Serial.printf("[WIFI] AP Password: %s\n", apPassword);
     Serial.printf("[WIFI] AP IP: %s\n", currentIP.toString().c_str());
     logger.infof("AP mode started: %s", _apName.c_str());
+#endif
 
     // DNS server will be started after webserver is ready (in main.cpp)
     // This prevents race condition where DNS redirects before webserver is listening
@@ -206,7 +248,11 @@ WifiStatus WiFiManager::getState() {
 
 String WiFiManager::getSSID() {
     if (_state == WifiStatus::AP_MODE) {
+#ifdef PLATFORM_ESP8266
+        return String(_apName);
+#else
         return _apName;
+#endif
     }
     return WiFi.SSID();
 }
@@ -230,7 +276,11 @@ String WiFiManager::getMacAddress() {
 }
 
 String WiFiManager::getAPName() {
+#ifdef PLATFORM_ESP8266
+    return String(_apName);
+#else
     return _apName;
+#endif
 }
 
 void WiFiManager::onStateChange(StateChangeCallback callback) {
@@ -251,5 +301,9 @@ void WiFiManager::generateAPName() {
     WiFi.macAddress(mac);
     char suffix[5];
     snprintf(suffix, sizeof(suffix), "%02X%02X", mac[4], mac[5]);
+#ifdef PLATFORM_ESP8266
+    snprintf(_apName, sizeof(_apName), "%s%s", WIFI_AP_SSID_PREFIX, suffix);
+#else
     _apName = String(WIFI_AP_SSID_PREFIX) + suffix;
+#endif
 }

@@ -17,12 +17,20 @@ struct UpdateInfo {
     bool available;
     char latestVersion[16];     // e.g., "1.6.0"
     char currentVersion[16];    // e.g., "1.5.4"
+#ifdef PLATFORM_ESP8266
+    // ESP8266 uses web OTA, not direct download - smaller buffers
+    char downloadUrl[1];        // Placeholder, not used on ESP8266
+    char spiffsUrl[1];          // Placeholder, not used on ESP8266
+    char releaseUrl[100];       // GitHub releases page URL (shorter)
+    char errorMessage[48];      // Shorter error messages
+#else
     char downloadUrl[196];      // GitHub release asset URL (firmware)
     char spiffsUrl[196];        // GitHub release asset URL (SPIFFS)
     char releaseUrl[128];       // GitHub releases page URL
+    char errorMessage[64];
+#endif
     unsigned long lastCheckTime;// millis() of last successful check
     uint8_t downloadProgress;   // 0-100 for ESP32 download
-    char errorMessage[64];
 };
 
 class UpdateChecker {

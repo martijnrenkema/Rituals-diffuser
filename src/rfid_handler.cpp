@@ -12,9 +12,16 @@ static bool rc522Connected = false;
 static uint8_t rc522VersionReg = 0;  // Store version for debug
 
 // Laatste gedetecteerde tag
+#ifdef PLATFORM_ESP8266
+// Use fixed char arrays on ESP8266 to avoid heap fragmentation
+static char lastUID[24] = "";           // UID max ~14 chars for 7-byte UID + null
+static char lastScent[48] = "";         // Scent name
+static char lastScentCode[12] = "";     // 8 hex chars + null
+#else
 static String lastUID = "";
 static String lastScent = "";
 static String lastScentCode = "";  // 3-letter code from page 4
+#endif
 static unsigned long lastTagTime = 0;
 static unsigned long lastScanTime = 0;
 static bool hasValidTag = false;
@@ -26,6 +33,7 @@ static bool cartridgePresent = false;
 #define SCAN_INTERVAL_MS 1000
 
 // Geurtabel - officieel gedeeld
+// Use PROGMEM on ESP8266 to store table in Flash instead of RAM
 struct ScentEntry {
     const char* uid;      // UID prefix (eerste 4 bytes als hex)
     const char* name;
@@ -33,7 +41,12 @@ struct ScentEntry {
 
 // Geurtabel met hex codes - zowel 3-letter ASCII als officiële codes
 // Elke geur heeft lowercase, uppercase (capitalized) en officiële hex varianten
+#ifdef PLATFORM_ESP8266
+#include <pgmspace.h>
+static const ScentEntry scentTable[] PROGMEM = {
+#else
 static const ScentEntry scentTable[] = {
+#endif
     // ============ KARMA ============
     {"6B6172", "The Ritual of Karma"},           // "kar" ASCII lowercase
     {"4B6172", "The Ritual of Karma"},           // "Kar" ASCII uppercase
@@ -280,6 +293,19 @@ void rfidLoop() {
     bool wasPresent = cartridgePresent;
     cartridgePresent = true;
 
+#ifdef PLATFORM_ESP8266
+    // ESP8266: Use char array to avoid String heap allocation
+    char uid[24];
+    uid[0] = '\0';
+    for (byte i = 0; i < mfrc522->uid.size && i < 10; i++) {
+        char hex[3];
+        snprintf(hex, sizeof(hex), "%02X", mfrc522->uid.uidByte[i]);
+        strcat(uid, hex);
+    }
+    
+    // Check of dit dezelfde kaart is als vorige keer
+    bool isNewCard = (strcmp(uid, lastUID) != 0) || !wasPresent;
+#else
     // Bouw UID string om te checken of het dezelfde kaart is
     String uid = "";
     for (byte i = 0; i < mfrc522->uid.size; i++) {
@@ -292,6 +318,7 @@ void rfidLoop() {
 
     // Check of dit dezelfde kaart is als vorige keer
     bool isNewCard = (uid != lastUID) || !wasPresent;
+#endif
 
     // Update state
     hasValidTag = true;
@@ -304,14 +331,65 @@ void rfidLoop() {
     }
 
     // NIEUWE KAART - volledige verwerking
+#ifdef PLATFORM_ESP8266
+    strncpy(lastUID, uid, sizeof(lastUID) - 1);
+    lastUID[sizeof(lastUID) - 1] = '\0';
+#else
     lastUID = uid;
+#endif
 
     // Get tag type
     MFRC522::PICC_Type piccType = mfrc522->PICC_GetType(mfrc522->uid.sak);
     Serial.println();
     Serial.println("========== NEW CARTRIDGE DETECTED ==========");
+#ifdef PLATFORM_ESP8266
+    Serial.printf("UID: %s (%d bytes)\n", uid, mfrc522->uid.size);
+#else
     Serial.printf("UID: %s (%d bytes)\n", uid.c_str(), mfrc522->uid.size);
+#endif
     Serial.printf("Tag type: %s\n", mfrc522->PICC_GetTypeName(piccType));
+
+#ifdef PLATFORM_ESP8266
+    // ESP8266: Minimal read - only page 4 (scent code) to save RAM
+    // MIFARE_Read reads 16 bytes starting from page, so page 4 gives us pages 4-7
+    byte buffer[18];  // 16 bytes + 2 CRC
+    byte size = sizeof(buffer);
+    
+    MFRC522::StatusCode status = mfrc522->MIFARE_Read(4, buffer, &size);
+    if (status == MFRC522::STATUS_OK) {
+        // Extract page 4 (first 4 bytes of buffer)
+        char page4Hex[9];
+        snprintf(page4Hex, sizeof(page4Hex), "%02X%02X%02X%02X", 
+                 buffer[0], buffer[1], buffer[2], buffer[3]);
+        strncpy(lastScentCode, page4Hex, sizeof(lastScentCode) - 1);
+        lastScentCode[sizeof(lastScentCode) - 1] = '\0';
+        
+        // ASCII for unknown scents
+        char page4Ascii[5];
+        for (int i = 0; i < 4; i++) {
+            page4Ascii[i] = (buffer[i] >= 32 && buffer[i] < 127) ? (char)buffer[i] : '.';
+        }
+        page4Ascii[4] = '\0';
+        
+        Serial.printf("[RFID] Page 4: %s (ASCII: %s)\n", page4Hex, page4Ascii);
+        
+        // Lookup scent
+        ScentInfo info = rfidLookupScent(page4Hex);
+        if (info.valid) {
+            strncpy(lastScent, info.name.c_str(), sizeof(lastScent) - 1);
+            lastScent[sizeof(lastScent) - 1] = '\0';
+            Serial.printf("[RFID] Matched scent: %s\n", lastScent);
+        } else {
+            snprintf(lastScent, sizeof(lastScent), "Unknown: %s", page4Ascii);
+            Serial.printf("[RFID] Unknown scent\n");
+        }
+    } else {
+        Serial.printf("[RFID] Read failed: %d\n", status);
+        strncpy(lastScent, "Read Error", sizeof(lastScent) - 1);
+        lastScent[sizeof(lastScent) - 1] = '\0';
+    }
+#else
+    // ESP32: Full debug dump (more RAM available)
     Serial.printf("SAK: 0x%02X\n", mfrc522->uid.sak);
 
     // Try to read memory pages (works for MIFARE Ultralight / NTAG)
@@ -389,6 +467,9 @@ void rfidLoop() {
         lastScent = "Unknown: " + page4Ascii;
         Serial.printf("[RFID] Unknown scent - hex: %s, ascii: %s\n", page4Hex.c_str(), page4Ascii.c_str());
     }
+#endif
+
+    Serial.println("============================================\n");
 
     // Notify MQTT of new cartridge
     mqttHandler.requestStatePublish();
@@ -436,6 +517,20 @@ ScentInfo rfidLookupScent(const String& hexData) {
 
     // Search for hex codes in the tag data using direct C-string comparison
     // This avoids creating String objects in the loop, reducing heap fragmentation
+#ifdef PLATFORM_ESP8266
+    // Read from PROGMEM on ESP8266
+    ScentEntry entry;
+    for (int i = 0; ; i++) {
+        memcpy_P(&entry, &scentTable[i], sizeof(ScentEntry));
+        if (entry.uid == nullptr) break;
+        if (strstr(dataPtr, entry.uid) != nullptr) {
+            info.name = String(entry.name);
+            info.valid = true;
+            Serial.printf("[RFID] Found hex pattern: %s\n", entry.uid);
+            break;
+        }
+    }
+#else
     for (int i = 0; scentTable[i].uid != nullptr; i++) {
         // Table UIDs are already uppercase, use case-insensitive search
         // strstr is case-sensitive, but we've already uppercased data
@@ -446,6 +541,7 @@ ScentInfo rfidLookupScent(const String& hexData) {
             break;
         }
     }
+#endif
 
     return info;
 }

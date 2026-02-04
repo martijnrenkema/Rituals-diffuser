@@ -22,6 +22,15 @@ private:
     // Deferred action flags (to avoid blocking in async callbacks)
     // Use char arrays instead of String to avoid heap fragmentation
     bool _pendingWifiConnect = false;
+#ifdef PLATFORM_ESP8266
+    char _pendingWifiSsid[33];      // Max SSID length + null
+    char _pendingWifiPassword[48];  // Most passwords < 48 chars
+    bool _pendingMqttConnect = false;
+    char _pendingMqttHost[48];      // Most hostnames < 48 chars
+    uint16_t _pendingMqttPort = 1883;
+    char _pendingMqttUser[24];      // Most usernames < 24 chars
+    char _pendingMqttPassword[48];  // Most passwords < 48 chars
+#else
     char _pendingWifiSsid[33];      // Max SSID length + null
     char _pendingWifiPassword[65];  // Max password length + null
     bool _pendingMqttConnect = false;
@@ -29,6 +38,7 @@ private:
     uint16_t _pendingMqttPort = 1883;
     char _pendingMqttUser[33];      // Max username length + null
     char _pendingMqttPassword[65];  // Max password length + null
+#endif
     bool _pendingReset = false;
     bool _pendingRestart = false;
     bool _pendingUpdateCheck = false;

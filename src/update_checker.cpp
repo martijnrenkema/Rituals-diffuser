@@ -153,14 +153,19 @@ bool UpdateChecker::fetchGitHubRelease() {
     client.setTimeout(UPDATE_CHECK_TIMEOUT);
     logger.infof("Free heap: %d bytes", ESP.getFreeHeap());
     #else
-    client.setInsecure();  // Skip certificate verification
+    // ESP32 - older framework versions may not have setInsecure()
+    #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 2
+    client.setInsecure();  // Skip certificate verification (ESP32 v2.x+)
+    #endif
     client.setTimeout(UPDATE_CHECK_TIMEOUT / 1000);  // ESP32 uses seconds
     #endif
 
     HTTPClient http;
     http.setTimeout(UPDATE_CHECK_TIMEOUT);
     http.setUserAgent("ESP-Rituals-Diffuser/" FIRMWARE_VERSION);
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 2
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);  // ESP32 v2.x+ only
+    #endif
 
     if (!http.begin(client, GITHUB_API_URL)) {
         strlcpy(_info.errorMessage, "HTTP begin failed", sizeof(_info.errorMessage));
@@ -320,7 +325,9 @@ bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const ch
     logger.infof("Downloading %s from: %s", label, url);
 
     WiFiClientSecure client;
-    client.setInsecure();
+    #if defined(PLATFORM_ESP8266) || (defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 2)
+    client.setInsecure();  // Skip certificate verification
+    #endif
     client.setTimeout(60);
 
     // Reduce BearSSL buffers on ESP8266 to prevent OOM during OTA
@@ -330,7 +337,9 @@ bool UpdateChecker::downloadAndInstall(const char* url, int updateType, const ch
 
     HTTPClient http;
     http.setTimeout(60000);
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 2
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);  // ESP32 v2.x+ only
+    #endif
 
     if (!http.begin(client, url)) {
         snprintf(_info.errorMessage, sizeof(_info.errorMessage), "%s: HTTP begin failed", label);

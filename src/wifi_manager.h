@@ -50,9 +50,16 @@ private:
     unsigned long _connectStartTime = 0;
     unsigned long _lastReconnectAttempt = 0;
     uint8_t _reconnectAttempts = 0;
+#ifdef PLATFORM_ESP8266
+    // Use char arrays instead of String to reduce static RAM overhead
+    char _ssid[33];         // Max SSID 32 + null
+    char _password[48];     // Most passwords < 48
+    char _apName[24];       // Short AP names
+#else
     String _ssid;
     String _password;
     String _apName;
+#endif
     StateChangeCallback _callback = nullptr;
 
     static const uint8_t MAX_RECONNECT_ATTEMPTS = 3;

@@ -5,21 +5,38 @@
 #include "config.h"
 
 // Settings structure - stored in EEPROM/NVS
+// ESP8266: Use smaller buffers to save ~100 bytes RAM
 struct DiffuserSettings {
     uint32_t magic;  // Magic number to verify valid data
 
-    // WiFi
+    // WiFi (SSID max 32, password max 63)
+#ifdef PLATFORM_ESP8266
+    char wifiSsid[33];         // Max SSID + null
+    char wifiPassword[48];     // Most passwords are < 48 chars
+#else
     char wifiSsid[64];
     char wifiPassword[64];
+#endif
 
     // MQTT
+#ifdef PLATFORM_ESP8266
+    char mqttHost[48];         // Most hostnames < 48 chars
+    uint16_t mqttPort;
+    char mqttUser[24];         // Most usernames < 24 chars
+    char mqttPassword[48];
+#else
     char mqttHost[64];
     uint16_t mqttPort;
     char mqttUser[32];
     char mqttPassword[64];
+#endif
 
     // Device
+#ifdef PLATFORM_ESP8266
+    char deviceName[24];       // Shorter device names
+#else
     char deviceName[32];
+#endif
 
     // Fan
     uint8_t fanSpeed;
@@ -29,8 +46,13 @@ struct DiffuserSettings {
     uint8_t intervalOffTime;
 
     // Security - configurable passwords
+#ifdef PLATFORM_ESP8266
+    char otaPassword[20];      // OTA passwords typically short
+    char apPassword[20];       // AP passwords typically short
+#else
     char otaPassword[32];
     char apPassword[32];
+#endif
 
     // Usage Statistics
     uint32_t totalRuntimeMinutes;     // Total fan runtime ever
@@ -56,7 +78,12 @@ struct DiffuserSettings {
 // v4 (0x04): Added night mode and runtime stats
 // v5 (0x05): Removed unused sessionStartTime field
 // v6 (0x06): Added update checker fields
+// v7 (0x07): ESP8266 smaller buffer sizes for RAM optimization
+#ifdef PLATFORM_ESP8266
+#define SETTINGS_MAGIC 0xD1FF0007
+#else
 #define SETTINGS_MAGIC 0xD1FF0006
+#endif
 
 class Storage {
 public:

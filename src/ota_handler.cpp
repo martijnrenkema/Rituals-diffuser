@@ -2,6 +2,8 @@
 #include "config.h"
 #include "storage.h"
 
+#ifdef FEATURE_ARDUINO_OTA
+
 #ifdef PLATFORM_ESP8266
     #include <ArduinoOTA.h>
 #else
@@ -65,6 +67,21 @@ void OTAHandler::begin() {
 void OTAHandler::loop() {
     ArduinoOTA.handle();
 }
+
+#else // FEATURE_ARDUINO_OTA not defined
+
+// Stub implementation when ArduinoOTA is disabled
+OTAHandler otaHandler;
+
+void OTAHandler::begin() {
+    Serial.println("[OTA] ArduinoOTA disabled (using web OTA only)");
+}
+
+void OTAHandler::loop() {
+    // No-op
+}
+
+#endif // FEATURE_ARDUINO_OTA
 
 void OTAHandler::onProgress(OTACallback callback) {
     _progressCallback = callback;

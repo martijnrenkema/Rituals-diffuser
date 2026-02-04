@@ -15,11 +15,11 @@ enum class LogLevel {
     ERROR
 };
 
-// ESP8266 has limited RAM (~80KB), reduce buffer sizes to prevent OOM
-// Reduced from 30 to 20 entries to save 480 bytes (10 * 48 bytes per entry)
+// ESP8266 has limited RAM (~80KB), minimize buffer sizes
+// 10 entries × 52 bytes = 520 bytes (was 15 × 56 = 840 bytes, saves 320 bytes)
 #ifdef PLATFORM_ESP8266
-    #define MAX_LOG_ENTRIES 20
-    #define LOG_MESSAGE_SIZE 48
+    #define MAX_LOG_ENTRIES 10
+    #define LOG_MESSAGE_SIZE 36
 #else
     #define MAX_LOG_ENTRIES 100
     #define LOG_MESSAGE_SIZE 80

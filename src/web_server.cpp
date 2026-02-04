@@ -34,8 +34,8 @@ void stopAsyncWebServer() {
     #include <Updater.h>
     // Use LittleFS on ESP8266 (same as logger.cpp to avoid mounting two filesystems)
     #define FILESYSTEM LittleFS
-    // ESP8266 uses different method names
-    #define UPDATE_ERROR_STRING() Update.getErrorString()
+    // ESP8266 Arduino Core 3.x: getErrorString() returns a String
+    #define UPDATE_ERROR_STRING() Update.getErrorString().c_str()
     // Linker symbols for filesystem size
     extern "C" uint32_t _FS_start;
     extern "C" uint32_t _FS_end;
@@ -43,6 +43,7 @@ void stopAsyncWebServer() {
     #include <SPIFFS.h>
     #include <Update.h>
     #define FILESYSTEM SPIFFS
+    // ESP32: errorString() returns const char*
     #define UPDATE_ERROR_STRING() Update.errorString()
 #endif
 
@@ -303,7 +304,7 @@ void WebServer::setupRoutes() {
                 #else
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
                 #endif
-                    Serial.printf("[OTA] Update.begin failed: %d\n", UPDATE_ERROR_STRING());
+                    Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
                     Update.printError(Serial);
                     return;
                 }
@@ -316,7 +317,7 @@ void WebServer::setupRoutes() {
 
             if (len) {
                 if (Update.write(data, len) != len) {
-                    Serial.printf("[OTA] Update.write failed: %d\n", UPDATE_ERROR_STRING());
+                    Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
                     return;
                 }
                 // Feed watchdog to prevent timeout on large uploads
@@ -331,7 +332,7 @@ void WebServer::setupRoutes() {
                 if (Update.end(true)) {
                     Serial.printf("[OTA] Firmware update success: %u bytes\n", index + len);
                 } else {
-                    Serial.printf("[OTA] Firmware update failed: %d\n", UPDATE_ERROR_STRING());
+                    Serial.printf("[OTA] Firmware update failed: %s\n", UPDATE_ERROR_STRING());
                     Update.printError(Serial);
                     // Reset OTA flag on failure so LED returns to normal
                     otaInProgress = false;
@@ -373,7 +374,7 @@ void WebServer::setupRoutes() {
                 #else
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS)) {
                 #endif
-                    Serial.printf("[OTA] Update.begin failed: %d\n", UPDATE_ERROR_STRING());
+                    Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
                     Update.printError(Serial);
                     return;
                 }
@@ -386,7 +387,7 @@ void WebServer::setupRoutes() {
 
             if (len) {
                 if (Update.write(data, len) != len) {
-                    Serial.printf("[OTA] Update.write failed: %d\n", UPDATE_ERROR_STRING());
+                    Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
                     return;
                 }
                 // Feed watchdog to prevent timeout on large uploads
@@ -401,7 +402,7 @@ void WebServer::setupRoutes() {
                 if (Update.end(true)) {
                     Serial.printf("[OTA] Filesystem update success: %u bytes\n", index + len);
                 } else {
-                    Serial.printf("[OTA] Filesystem update failed: %d\n", UPDATE_ERROR_STRING());
+                    Serial.printf("[OTA] Filesystem update failed: %s\n", UPDATE_ERROR_STRING());
                     Update.printError(Serial);
                     // Reset OTA flag on failure so LED returns to normal
                     otaInProgress = false;
