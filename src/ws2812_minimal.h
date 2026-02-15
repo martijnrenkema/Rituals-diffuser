@@ -1,7 +1,7 @@
 /**
  * ws2812_minimal.h - Minimal WS2812B driver for ESP8266
  * 
- * Replaces NeoPixelBus for single-LED applications to save ~10KB Flash, ~280 bytes RAM.
+ * Direct bit-bang WS2812B driver for single-LED applications.
  * Uses CPU cycle-counter for precise WS2812B timing that automatically adapts
  * to any CPU frequency (80MHz or 160MHz). Based on the same approach used by
  * the proven Adafruit NeoPixel library.

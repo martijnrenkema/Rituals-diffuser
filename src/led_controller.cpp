@@ -9,7 +9,7 @@ LedController::~LedController() {
 
 void LedController::begin() {
 #ifdef PLATFORM_ESP8266
-    // Minimal WS2812 driver - no dynamic allocation, saves ~10KB Flash, ~280 bytes RAM
+    // Minimal WS2812 driver - no dynamic allocation
     _led.begin(LED_DATA_PIN);
     _led.setColor(0, 0, 0);
     _led.show();

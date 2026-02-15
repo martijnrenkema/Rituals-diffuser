@@ -2,17 +2,6 @@
 #define CONFIG_H
 
 // ===========================================
-// Feature Flags (for size optimization)
-// Comment out features to reduce flash usage
-// ===========================================
-// #define FEATURE_ARDUINO_OTA     // ArduinoOTA IDE updates (~13KB) - web OTA still works
-#define FEATURE_MQTT               // MQTT/Home Assistant integration (~10KB)
-#define FEATURE_UPDATE_CHECKER     // GitHub update checking (~5KB)
-#define FEATURE_RFID               // RFID reader support (~8KB)
-#define FEATURE_INTERVAL_MODE      // Interval on/off mode (~2KB)
-#define FEATURE_NIGHT_MODE         // Night mode brightness (~1KB)
-
-// ===========================================
 // Platform Detection
 // ===========================================
 #ifdef ESP8266

@@ -5,7 +5,7 @@
 #include "config.h"
 
 #ifdef PLATFORM_ESP8266
-    // Use minimal WS2812 driver for ESP8266 - saves ~10KB Flash, ~280 bytes RAM vs NeoPixelBus
+    // Use minimal WS2812 driver for ESP8266
     #include "ws2812_minimal.h"
 #else
     // Use FastLED for ESP32
