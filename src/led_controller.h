@@ -24,7 +24,6 @@ enum class LedMode {
 
 class LedController {
 public:
-    ~LedController();
     void begin();
     void loop();
 

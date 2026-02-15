@@ -51,10 +51,10 @@ private:
     unsigned long _lastReconnectAttempt = 0;
     uint8_t _reconnectAttempts = 0;
 #ifdef PLATFORM_ESP8266
-    // Use char arrays instead of String to reduce static RAM overhead
+    // Use char arrays instead of String to reduce heap fragmentation
     char _ssid[33];         // Max SSID 32 + null
-    char _password[48];     // Most passwords < 48
-    char _apName[24];       // Short AP names
+    char _password[64];     // Max WPA2 password 63 + null
+    char _apName[32];       // AP name
 #else
     String _ssid;
     String _password;

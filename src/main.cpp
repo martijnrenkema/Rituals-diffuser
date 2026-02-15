@@ -11,7 +11,6 @@
 #include "web_server.h"
 #include "fan_controller.h"
 #include "led_controller.h"
-#include "ota_handler.h"
 #include "logger.h"
 #include "update_checker.h"
 #include "button_handler.h"
@@ -154,8 +153,6 @@ void updateLedStatus() {
 // WiFi state change handler
 void onWiFiStateChange(WifiStatus state) {
     if (state == WifiStatus::CONNECTED) {
-        // Start OTA when connected
-        otaHandler.begin();
         // Setup NTP time sync
         setupTimeSync();
     }
@@ -175,20 +172,6 @@ void onFanStateChange(bool on, uint8_t speed) {
         storage.setFanSpeed(speed);
         lastSavedSpeed = speed;
     }
-}
-
-// OTA handlers
-void onOTAStart() {
-    otaInProgress = true;
-    updateLedStatus();
-    fanController.turnOff();
-    logger.info("OTA update started");
-}
-
-void onOTAEnd() {
-    otaInProgress = false;
-    updateLedStatus();
-    logger.info("OTA update completed");
 }
 
 // Button handlers for Rituals Genie
@@ -302,10 +285,6 @@ void setup() {
     updateChecker.begin();
 #endif
 
-    // Setup OTA callbacks
-    otaHandler.onStart(onOTAStart);
-    otaHandler.onEnd(onOTAEnd);
-
     // Initialize RFID (all platforms with RC522_ENABLED)
 #if defined(RC522_ENABLED)
     if (rfidInit()) {
@@ -345,7 +324,6 @@ void loop() {
     fanController.loop();
     ledController.loop();
 
-    otaHandler.loop();
     buttonHandler.loop();
     webServer.loop();  // Process pending web actions
     yield();

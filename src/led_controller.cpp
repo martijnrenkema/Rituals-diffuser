@@ -3,10 +3,6 @@
 
 LedController ledController;
 
-LedController::~LedController() {
-    // WS2812Minimal doesn't need cleanup - no dynamic allocation
-}
-
 void LedController::begin() {
 #ifdef PLATFORM_ESP8266
     // Minimal WS2812 driver - no dynamic allocation
