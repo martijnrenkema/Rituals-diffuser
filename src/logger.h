@@ -16,10 +16,10 @@ enum class LogLevel {
 };
 
 // ESP8266 has limited RAM (~80KB), minimize buffer sizes
-// 10 entries × 52 bytes = 520 bytes (was 15 × 56 = 840 bytes, saves 320 bytes)
+// 10 entries × 64 bytes = 640 bytes (was 20 × 64 = 1280 bytes, saves 640 bytes)
 #ifdef PLATFORM_ESP8266
     #define MAX_LOG_ENTRIES 10
-    #define LOG_MESSAGE_SIZE 36
+    #define LOG_MESSAGE_SIZE 48
 #else
     #define MAX_LOG_ENTRIES 100
     #define LOG_MESSAGE_SIZE 80

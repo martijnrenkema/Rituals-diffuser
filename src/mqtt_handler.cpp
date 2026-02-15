@@ -31,10 +31,10 @@ void MQTTHandler::begin() {
     _mqttClient.setCallback(mqttCallback);
     _mqttClient.setKeepAlive(MQTT_KEEPALIVE);
     _mqttClient.setSocketTimeout(3);  // 3 second socket timeout for PubSubClient operations
-    // ESP8266 has limited RAM, but fan discovery needs ~613 bytes + MQTT header (~27 bytes)
-    // Total MQTT packet: header + topic length + topic + payload = ~640 bytes
+    // ESP8266 has limited RAM, but fan discovery needs ~613 bytes + MQTT header (~27 bytes) + topic
+    // Total MQTT packet: header + topic length + topic + payload = ~700 bytes needed
     #ifdef PLATFORM_ESP8266
-    _mqttClient.setBufferSize(640);  // Optimized from 768, saves 128 bytes
+    _mqttClient.setBufferSize(720);  // Increased to accommodate fan discovery (613 bytes payload + overhead)
     #else
     _mqttClient.setBufferSize(1536);  // Larger buffer for discovery payloads
     #endif
