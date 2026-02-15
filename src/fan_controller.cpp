@@ -2,6 +2,9 @@
 #include "config.h"
 #include "storage.h"
 
+// External function from main.cpp for LED status updates
+extern void updateLedStatus();
+
 // Helper macro for LEDC write - new API uses pin, old API uses channel
 #if defined(PLATFORM_ESP32) && ESP_ARDUINO_VERSION_MAJOR >= 3
     #define FAN_LEDC_WRITE(duty) ledcWrite(FAN_PWM_PIN, duty)
@@ -67,8 +70,10 @@ void FanController::loop() {
 
         // RPM = (pulses per interval / pulses per revolution) * 60 * (1000/interval)
         // Simplified: RPM = count * 60000 / (pulses_per_rev * interval_ms)
-        if (rpmInterval > 0) {
-            _rpm = (count * 60000UL) / (TACHO_PULSES_PER_REV * rpmInterval);
+        // Use 64-bit intermediate to prevent overflow with high pulse counts
+        if (rpmInterval > 0 && TACHO_PULSES_PER_REV > 0) {
+            uint32_t divisor = TACHO_PULSES_PER_REV * rpmInterval;
+            _rpm = (uint16_t)((uint64_t)count * 60000UL / divisor);
         }
         _lastRpmCalc = now;
 
@@ -90,6 +95,7 @@ void FanController::loop() {
 #endif
             _currentPWM = 0;
             Serial.println("[FAN] Calibration timeout - aborted after 60s");
+            updateLedStatus();  // Update LED to reflect fan is now off
             return;
         }
 
@@ -115,6 +121,7 @@ void FanController::loop() {
                 _currentPWM = 0;
 
                 Serial.printf("[FAN] Calibration complete! minPWM = %d\n", _minPWM);
+                updateLedStatus();  // Update LED to reflect fan is now off
             } else if (_calibrationPWM < 250) {
                 // Increase PWM and try again
                 _calibrationPWM += 5;
@@ -135,6 +142,7 @@ void FanController::loop() {
 #endif
                 _currentPWM = 0;
                 Serial.println("[FAN] Calibration failed - no RPM detected");
+                updateLedStatus();  // Update LED to reflect fan is now off
             }
         }
         return;  // Skip normal fan logic during calibration

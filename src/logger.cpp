@@ -256,10 +256,10 @@ const char* Logger::levelToString(LogLevel level) {
 
 String Logger::toJson() {
     // Pre-allocate to avoid heap fragmentation from repeated concatenation
-    // Each entry: ~80 bytes JSON overhead + message (max 64 chars) + escaping = ~160 bytes max
+    // Each entry: ~80 bytes JSON overhead + message (max 64 chars, worst-case 2x with escaping) = ~210 bytes max
     // Reserve enough for all entries plus array brackets
     String json;
-    json.reserve(_count * 160 + 2);
+    json.reserve(_count * 220 + 2);
 
     json = "[";
 

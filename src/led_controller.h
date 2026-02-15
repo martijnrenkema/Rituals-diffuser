@@ -5,8 +5,8 @@
 #include "config.h"
 
 #ifdef PLATFORM_ESP8266
-    // Use NeoPixelBus for ESP8266 - more stable on GPIO15 with WiFi
-    #include <NeoPixelBus.h>
+    // Use minimal WS2812 driver for ESP8266
+    #include "ws2812_minimal.h"
 #else
     // Use FastLED for ESP32
     #include <FastLED.h>
@@ -63,8 +63,8 @@ private:
     bool _needsUpdate = true;  // Flag to force LED update
 
 #ifdef PLATFORM_ESP8266
-    // NeoPixelBus for ESP8266
-    NeoPixelBus<NeoGrbFeature, NeoEsp8266BitBang800KbpsMethod>* _strip = nullptr;
+    // Minimal WS2812 driver for ESP8266
+    WS2812Minimal _led;
 #else
     // FastLED for ESP32
     CRGB _leds[NUM_LEDS];

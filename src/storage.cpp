@@ -113,6 +113,8 @@ void Storage::save(const DiffuserSettings& settings) {
     prefs.putUChar(NVS_NIGHT_START, settings.nightModeStart);
     prefs.putUChar(NVS_NIGHT_END, settings.nightModeEnd);
     prefs.putUChar(NVS_NIGHT_BRIGHT, settings.nightModeBrightness);
+    // Runtime statistics
+    prefs.putULong(NVS_TOTAL_RUNTIME, settings.totalRuntimeMinutes);
 #endif
 
     Serial.println("[STORAGE] Settings saved");
@@ -295,6 +297,9 @@ bool Storage::isNightModeActive(uint8_t currentHour) {
 
     uint8_t start = _settings.nightModeStart;
     uint8_t end = _settings.nightModeEnd;
+
+    // Edge case: if start == end, night mode has zero duration, treat as disabled
+    if (start == end) return false;
 
     // Handle overnight range (e.g., 22:00 - 07:00)
     if (start > end) {

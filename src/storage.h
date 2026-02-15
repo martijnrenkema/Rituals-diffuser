@@ -8,9 +8,9 @@
 struct DiffuserSettings {
     uint32_t magic;  // Magic number to verify valid data
 
-    // WiFi
-    char wifiSsid[64];
-    char wifiPassword[64];
+    // WiFi (SSID max 32 chars, WPA2 password max 63 chars)
+    char wifiSsid[33];         // Max SSID + null
+    char wifiPassword[64];     // Max WPA2 password + null
 
     // MQTT
     char mqttHost[64];
