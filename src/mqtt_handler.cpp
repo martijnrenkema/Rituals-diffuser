@@ -50,6 +50,13 @@ void MQTTHandler::begin() {
 }
 
 void MQTTHandler::loop() {
+    // Update uptime counter every second
+    unsigned long now = millis();
+    if (now - _lastUptimeUpdate >= 1000) {
+        _uptimeSeconds += (now - _lastUptimeUpdate) / 1000;
+        _lastUptimeUpdate = now - (now - _lastUptimeUpdate) % 1000;
+    }
+
     if (!_mqttClient.connected()) {
         unsigned long now = millis();
         if (now - _lastReconnect >= MQTT_RECONNECT_INTERVAL) {
@@ -96,10 +103,14 @@ void MQTTHandler::loop() {
         processPublishStateMachine();
 
         // Handle state publish requests (interrupt-safe flag check)
-        if (_statePublishPending && _publishState == MqttPublishState::IDLE) {
-            noInterrupts();
+        // Check flag inside critical section to prevent race condition
+        noInterrupts();
+        bool shouldPublish = _statePublishPending && _publishState == MqttPublishState::IDLE;
+        if (shouldPublish) {
             _statePublishPending = false;
-            interrupts();
+        }
+        interrupts();
+        if (shouldPublish) {
             _publishState = MqttPublishState::STATE_FAN;
             _lastPublishStep = millis();
         }
@@ -195,6 +206,11 @@ void MQTTHandler::processPublishStateMachine() {
             #if defined(RC522_ENABLED)
             publishCartridgeBinarySensorDiscovery();
             #endif
+            _publishState = MqttPublishState::DISC_UPTIME;
+            break;
+
+        case MqttPublishState::DISC_UPTIME:
+            publishUptimeSensorDiscovery();
             _publishState = MqttPublishState::DISC_DONE;
             break;
 
@@ -286,6 +302,11 @@ void MQTTHandler::processPublishStateMachine() {
                 _mqttClient.publish((base + "/cartridge_present").c_str(), rfidIsCartridgePresent() ? "ON" : "OFF", true);
             }
             #endif
+            _publishState = MqttPublishState::STATE_UPTIME;
+            break;
+
+        case MqttPublishState::STATE_UPTIME:
+            _mqttClient.publish((base + "/uptime").c_str(), String(_uptimeSeconds).c_str(), true);
             _publishState = MqttPublishState::STATE_DONE;
             break;
 
@@ -355,11 +376,17 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
             fanController.turnOff();
         }
     } else if (t.endsWith("/fan/speed/set")) {
-        // Speed percentage
+        // Speed percentage - validate input is actually numeric
         int speed = p.toInt();
-        fanController.setSpeed(speed);
-        if (speed > 0 && !fanController.isOn()) {
-            fanController.turnOn();
+        // toInt() returns 0 for non-numeric strings, only accept if payload was "0" or valid number
+        bool isValidNumber = (speed > 0) || (p == "0");
+        if (isValidNumber) {
+            fanController.setSpeed(speed);
+            if (speed > 0 && !fanController.isOn()) {
+                fanController.turnOn();
+            }
+        } else {
+            Serial.printf("[MQTT] Invalid speed value: %s\n", p.c_str());
         }
     } else if (t.endsWith("/fan/preset/set")) {
         // Timer preset (short names to save MQTT buffer space)
@@ -381,17 +408,21 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         fanController.setIntervalMode(p == "ON");
         updateLedStatus();
     } else if (t.endsWith("/interval_on/set")) {
-        // Interval on time
+        // Interval on time - validate input
         int newOnTime = p.toInt();
-        fanController.setIntervalTimes(newOnTime, fanController.getIntervalOffTime());
-        // Persist to storage so settings survive reboot
-        storage.setIntervalMode(fanController.isIntervalMode(), newOnTime, fanController.getIntervalOffTime());
+        if (newOnTime > 0) {
+            fanController.setIntervalTimes(newOnTime, fanController.getIntervalOffTime());
+            // Persist to storage so settings survive reboot
+            storage.setIntervalMode(fanController.isIntervalMode(), newOnTime, fanController.getIntervalOffTime());
+        }
     } else if (t.endsWith("/interval_off/set")) {
-        // Interval off time
+        // Interval off time - validate input
         int newOffTime = p.toInt();
-        fanController.setIntervalTimes(fanController.getIntervalOnTime(), newOffTime);
-        // Persist to storage so settings survive reboot
-        storage.setIntervalMode(fanController.isIntervalMode(), fanController.getIntervalOnTime(), newOffTime);
+        if (newOffTime > 0) {
+            fanController.setIntervalTimes(fanController.getIntervalOnTime(), newOffTime);
+            // Persist to storage so settings survive reboot
+            storage.setIntervalMode(fanController.isIntervalMode(), fanController.getIntervalOnTime(), newOffTime);
+        }
     }
 
     // Request state publish (non-blocking)
@@ -475,7 +506,9 @@ void MQTTHandler::publishIntervalSwitchDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/switch/rd_" + _deviceId + "_int/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Interval switch discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishIntervalOnTimeDiscovery() {
@@ -492,7 +525,9 @@ void MQTTHandler::publishIntervalOnTimeDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/number/rd_" + _deviceId + "_ion/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Interval on time discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishIntervalOffTimeDiscovery() {
@@ -509,7 +544,9 @@ void MQTTHandler::publishIntervalOffTimeDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/number/rd_" + _deviceId + "_ioff/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Interval off time discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishRemainingTimeSensorDiscovery() {
@@ -524,7 +561,9 @@ void MQTTHandler::publishRemainingTimeSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_rem/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Remaining time sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishRPMSensorDiscovery() {
@@ -540,7 +579,9 @@ void MQTTHandler::publishRPMSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_rpm/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] RPM sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishWiFiSensorDiscovery() {
@@ -556,7 +597,9 @@ void MQTTHandler::publishWiFiSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_wifi/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] WiFi sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishTotalRuntimeSensorDiscovery() {
@@ -572,7 +615,9 @@ void MQTTHandler::publishTotalRuntimeSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_trun/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Total runtime sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishUpdateAvailableBinarySensorDiscovery() {
@@ -588,7 +633,9 @@ void MQTTHandler::publishUpdateAvailableBinarySensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/binary_sensor/rd_" + _deviceId + "_upd/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Update available sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishLatestVersionSensorDiscovery() {
@@ -604,7 +651,9 @@ void MQTTHandler::publishLatestVersionSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_latver/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Latest version sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishCurrentVersionSensorDiscovery() {
@@ -620,7 +669,9 @@ void MQTTHandler::publishCurrentVersionSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_curver/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Current version sensor discovery publish FAILED");
+    }
 }
 
 #if defined(RC522_ENABLED)
@@ -636,7 +687,9 @@ void MQTTHandler::publishScentSensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_scent/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Scent sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishCartridgeBinarySensorDiscovery() {
@@ -652,13 +705,35 @@ void MQTTHandler::publishCartridgeBinarySensorDiscovery() {
     p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
 
     String topic = String(MQTT_DISCOVERY_PREFIX) + "/binary_sensor/rd_" + _deviceId + "_cartridge/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Cartridge binary sensor discovery publish FAILED");
+    }
 }
 #else
 // Empty stubs for non-RFID builds
 void MQTTHandler::publishScentSensorDiscovery() {}
 void MQTTHandler::publishCartridgeBinarySensorDiscovery() {}
 #endif
+
+void MQTTHandler::publishUptimeSensorDiscovery() {
+    String b = getBaseTopic();
+    String devId = "rituals_" + _deviceId;
+
+    String p = "{\"name\":\"Uptime\",";
+    p += "\"uniq_id\":\"rd_" + _deviceId + "_uptime\",";
+    p += "\"stat_t\":\"" + b + "/uptime\",";
+    p += "\"avty_t\":\"" + b + "/availability\",";
+    p += "\"unit_of_meas\":\"s\",\"dev_cla\":\"duration\",";
+    p += "\"stat_cla\":\"total_increasing\",";
+    p += "\"ic\":\"mdi:clock-start\",";
+    p += "\"ent_cat\":\"diagnostic\",";
+    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+
+    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_uptime/config";
+    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+        Serial.println("[MQTT] Uptime sensor discovery publish FAILED");
+    }
+}
 
 void MQTTHandler::removeDiscovery() {
     String pre = String(MQTT_DISCOVERY_PREFIX);
@@ -674,6 +749,8 @@ void MQTTHandler::removeDiscovery() {
     // RFID entities
     _mqttClient.publish((pre + "/sensor/" + id + "_scent/config").c_str(), "", true);
     _mqttClient.publish((pre + "/binary_sensor/" + id + "_cartridge/config").c_str(), "", true);
+    // Uptime
+    _mqttClient.publish((pre + "/sensor/" + id + "_uptime/config").c_str(), "", true);
 
     _discoveryPublished = false;
     Serial.println("[MQTT] Discovery removed");

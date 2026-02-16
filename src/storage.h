@@ -8,9 +8,9 @@
 struct DiffuserSettings {
     uint32_t magic;  // Magic number to verify valid data
 
-    // WiFi
-    char wifiSsid[64];
-    char wifiPassword[64];
+    // WiFi (SSID max 32 chars, WPA2 password max 63 chars)
+    char wifiSsid[33];         // Max SSID + null
+    char wifiPassword[64];     // Max WPA2 password + null
 
     // MQTT
     char mqttHost[64];
@@ -56,7 +56,8 @@ struct DiffuserSettings {
 // v4 (0x04): Added night mode and runtime stats
 // v5 (0x05): Removed unused sessionStartTime field
 // v6 (0x06): Added update checker fields
-#define SETTINGS_MAGIC 0xD1FF0006
+// v7 (0x07): Memory optimizations for ESP8266
+#define SETTINGS_MAGIC 0xD1FF0007
 
 class Storage {
 public:

@@ -34,8 +34,8 @@ void stopAsyncWebServer() {
     #include <Updater.h>
     // Use LittleFS on ESP8266 (same as logger.cpp to avoid mounting two filesystems)
     #define FILESYSTEM LittleFS
-    // ESP8266 uses different method names
-    #define UPDATE_ERROR_STRING() Update.getErrorString()
+    // ESP8266 Arduino Core 3.x: getErrorString() returns a String
+    #define UPDATE_ERROR_STRING() Update.getErrorString().c_str()
     // Linker symbols for filesystem size
     extern "C" uint32_t _FS_start;
     extern "C" uint32_t _FS_end;
@@ -43,6 +43,7 @@ void stopAsyncWebServer() {
     #include <SPIFFS.h>
     #include <Update.h>
     #define FILESYSTEM SPIFFS
+    // ESP32: errorString() returns const char*
     #define UPDATE_ERROR_STRING() Update.errorString()
 #endif
 
@@ -95,16 +96,20 @@ void WebServer::loop() {
     // Wait for HTTP response to be sent (500ms is enough for TCP ACK)
     if (millis() - _pendingActionTime < 500) return;
 
+    // Process all pending actions, then clear the timestamp
+    // This prevents race condition where multiple actions are queued
+    bool actionProcessed = false;
+
     if (_pendingWifiConnect) {
         _pendingWifiConnect = false;
-        _pendingActionTime = 0;
+        actionProcessed = true;
         wifiManager.connect(_pendingWifiSsid, _pendingWifiPassword);
         if (_settingsCallback) _settingsCallback();
     }
 
     if (_pendingMqttConnect) {
         _pendingMqttConnect = false;
-        _pendingActionTime = 0;
+        actionProcessed = true;
         mqttHandler.disconnect();
         mqttHandler.connect(_pendingMqttHost, _pendingMqttPort,
                            _pendingMqttUser, _pendingMqttPassword);
@@ -113,30 +118,35 @@ void WebServer::loop() {
 
     if (_pendingReset) {
         _pendingReset = false;
-        _pendingActionTime = 0;
+        actionProcessed = true;
         storage.reset();
         ESP.restart();
     }
 
     if (_pendingRestart) {
         _pendingRestart = false;
-        _pendingActionTime = 0;
+        actionProcessed = true;
         ESP.restart();
     }
 
     if (_pendingUpdateCheck) {
         _pendingUpdateCheck = false;
-        _pendingActionTime = 0;
+        actionProcessed = true;
         updateChecker.checkForUpdates();
     }
 
     #ifndef PLATFORM_ESP8266
     if (_pendingOTAUpdate) {
         _pendingOTAUpdate = false;
-        _pendingActionTime = 0;
+        actionProcessed = true;
         updateChecker.startOTAUpdate();
     }
     #endif
+
+    // Only clear timestamp after all pending actions processed
+    if (actionProcessed) {
+        _pendingActionTime = 0;
+    }
 }
 
 void WebServer::onSettingsChanged(SettingsCallback callback) {

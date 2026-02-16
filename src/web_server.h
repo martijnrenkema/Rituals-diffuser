@@ -23,7 +23,7 @@ private:
     // Use char arrays instead of String to avoid heap fragmentation
     bool _pendingWifiConnect = false;
     char _pendingWifiSsid[33];      // Max SSID length + null
-    char _pendingWifiPassword[65];  // Max password length + null
+    char _pendingWifiPassword[64];  // Max WPA2 password + null
     bool _pendingMqttConnect = false;
     char _pendingMqttHost[65];      // Max hostname length + null
     uint16_t _pendingMqttPort = 1883;

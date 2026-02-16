@@ -5,12 +5,11 @@ LedController ledController;
 
 void LedController::begin() {
 #ifdef PLATFORM_ESP8266
-    // NeoPixelBus for ESP8266 - BitBang method is more compatible with GPIO15
-    _strip = new NeoPixelBus<NeoGrbFeature, NeoEsp8266BitBang800KbpsMethod>(NUM_LEDS, LED_DATA_PIN);
-    _strip->Begin();
-    _strip->SetPixelColor(0, RgbColor(0, 0, 0));
-    _strip->Show();
-    Serial.println("[LED] NeoPixelBus initialized on GPIO15 (BitBang method)");
+    // Minimal WS2812 driver - no dynamic allocation
+    _led.begin(LED_DATA_PIN);
+    _led.setColor(0, 0, 0);
+    _led.show();
+    Serial.println("[LED] WS2812 minimal driver initialized on GPIO15");
 #else
     // FastLED for ESP32 - brightness is handled in showLed() via RGB scaling
     FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(_leds, NUM_LEDS);
@@ -30,10 +29,8 @@ void LedController::showLed() {
     uint8_t b = ((uint16_t)_b * _brightness) / 255;
 
 #ifdef PLATFORM_ESP8266
-    if (_strip) {
-        _strip->SetPixelColor(0, RgbColor(r, g, b));
-        _strip->Show();
-    }
+    _led.setColor(r, g, b);
+    _led.show();
 #else
     _leds[0] = CRGB(r, g, b);
     FastLED.show();
@@ -116,10 +113,9 @@ void LedController::loop() {
                 _g = (((_currentColor >> 8) & 0xFF) * scaledPulse) / 255;
                 _b = ((_currentColor & 0xFF) * scaledPulse) / 255;
 #ifdef PLATFORM_ESP8266
-                if (_strip) {
-                    _strip->SetPixelColor(0, RgbColor(_r, _g, _b));
-                    _strip->Show();
-                }
+                // Direct driver call - brightness already applied above
+                _led.setColor(_r, _g, _b);
+                _led.show();
 #else
                 _leds[0] = CRGB(_r, _g, _b);
                 FastLED.show();
@@ -151,10 +147,9 @@ void LedController::loop() {
                 _g = (((_currentColor >> 8) & 0xFF) * scaledPulse) / 255;
                 _b = ((_currentColor & 0xFF) * scaledPulse) / 255;
 #ifdef PLATFORM_ESP8266
-                if (_strip) {
-                    _strip->SetPixelColor(0, RgbColor(_r, _g, _b));
-                    _strip->Show();
-                }
+                // Direct driver call - brightness already applied above
+                _led.setColor(_r, _g, _b);
+                _led.show();
 #else
                 _leds[0] = CRGB(_r, _g, _b);
                 FastLED.show();

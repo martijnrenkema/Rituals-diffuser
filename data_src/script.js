@@ -3,7 +3,17 @@ const circumference=2*Math.PI*54;
 let state={on:false,speed:50};
 let isESP8266=false; // Platform detection - update features disabled on ESP8266
 
-setInterval(fetchStatusLite,5000);  // Poll lite endpoint every 5 seconds for reduced memory usage
+// Polling interval management - pause when tab is hidden to save resources
+let pollInterval=setInterval(fetchStatusLite,5000);
+document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){
+        clearInterval(pollInterval);
+        pollInterval=null;
+    }else{
+        if(!pollInterval)pollInterval=setInterval(fetchStatusLite,5000);
+        fetchStatusLite();  // Immediate update when tab becomes visible
+    }
+});
 fetchStatus();  // Full status only at page load
 
 async function fetchStatus(){

@@ -50,14 +50,16 @@ private:
     unsigned long _connectStartTime = 0;
     unsigned long _lastReconnectAttempt = 0;
     uint8_t _reconnectAttempts = 0;
-    String _ssid;
-    String _password;
-    String _apName;
+    // Use char arrays instead of String to reduce heap fragmentation
+    char _ssid[33];         // Max SSID 32 + null
+    char _password[64];     // Max WPA2 password 63 + null
+    char _apName[32];       // AP name
     StateChangeCallback _callback = nullptr;
 
     static const uint8_t MAX_RECONNECT_ATTEMPTS = 3;
     static const unsigned long AP_RETRY_INTERVAL = 300000; // 5 min: retry WiFi while in AP mode
     unsigned long _lastAPRetry = 0;
+    unsigned long _apRetryConnectStart = 0;  // Separate timestamp for AP background retry
 
     // DNS server for captive portal
     DNSServer _dnsServer;
