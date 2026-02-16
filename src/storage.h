@@ -56,7 +56,8 @@ struct DiffuserSettings {
 // v4 (0x04): Added night mode and runtime stats
 // v5 (0x05): Removed unused sessionStartTime field
 // v6 (0x06): Added update checker fields
-#define SETTINGS_MAGIC 0xD1FF0006
+// v7 (0x07): Memory optimizations for ESP8266
+#define SETTINGS_MAGIC 0xD1FF0007
 
 class Storage {
 public:

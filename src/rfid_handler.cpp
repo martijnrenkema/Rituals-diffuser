@@ -532,8 +532,7 @@ ScentInfo rfidLookupScent(const String& hexData) {
     }
 #else
     for (int i = 0; scentTable[i].uid != nullptr; i++) {
-        // Table UIDs are already uppercase, use case-insensitive search
-        // strstr is case-sensitive, but we've already uppercased data
+        // Table UIDs are already uppercase, strstr is case-sensitive, but we've already uppercased data
         if (strstr(dataPtr, scentTable[i].uid) != nullptr) {
             info.name = String(scentTable[i].name);
             info.valid = true;
