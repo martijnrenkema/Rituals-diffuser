@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.4-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.5-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -16,7 +16,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
 
 > **Community tested!** Both ESP8266 (Rituals Genie V1/V2) and ESP32 versions are actively used by the community. Found an issue? [Report it here](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
-> **ESP8266 Stability Notice:** NFC scent detection (v1.9.0+) is **experimental** on ESP8266 due to memory constraints. If you experience instability, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as a stable fallback. ESP32/ESP32-C3 users have no limitations.
+> **ESP8266 Stability Notice:** v1.9.5 includes major heap fragmentation fixes for ESP8266. NFC scent detection should now be stable. If you still experience crashes, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as a fallback without NFC. ESP32/ESP32-C3 users have no limitations.
 
 ## Features
 
@@ -494,6 +494,7 @@ pio run -e esp8266 -t uploadfs
 
 - Based on research from the [Home Assistant Community](https://community.home-assistant.io/t/replace-the-software-of-the-rituals-genie-esp-with-esphome/762356)
 - Inspired by [Echnics/Perfume-Genie-ESPhome](https://github.com/Echnics/Perfume-Genie-ESPhome)
+- Thanks to [@FredericMa](https://github.com/FredericMa) for ESP8266 optimization contributions ([PR #9](https://github.com/martijnrenkema/Rituals-diffuser/pull/9))
 
 ## License
 
@@ -505,136 +506,70 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.9.5
+**ESP8266 Stability Overhaul** - Major heap fragmentation fixes addressing crash reports ([#8](https://github.com/martijnrenkema/Rituals-diffuser/issues/8), [#3](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)). Thanks to [@FredericMa](https://github.com/FredericMa) for [PR #9](https://github.com/martijnrenkema/Rituals-diffuser/pull/9).
+
+**MQTT Heap Fragmentation Fix (Critical):**
+- Replaced all Arduino `String` concatenation in MQTT handler with `snprintf` and static buffers
+- All 14 Home Assistant discovery entities now use shared `char[768]` buffer instead of heap-allocated Strings
+- State publishing, availability, and subscribe topics all converted to zero-allocation
+- Eliminates ~70+ temporary String allocations per MQTT publish cycle
+
+**NFC/RFID Improvements:**
+- Reduced `PCD_Init()` frequency: only re-initializes after 3 consecutive failures instead of every second
+- Converted scent lookup from String objects to `strstr` with char arrays (zero heap allocation)
+- Fixed duplicate scent hex code for "Cotton Blossom" / "Black Oudh"
+- Added null-check for MFRC522 allocation failure
+
+**Boot & Connectivity Fixes:**
+- Fixed OTA and NTP not initializing when WiFi auto-reconnects before callback registration
+- Enabled update checker on ESP8266 with heap guards (was disabled since v1.8.0)
+- Update checker now rejects oversized and chunked HTTP responses on ESP8266
+- Fixed GPIO16 `INPUT_PULLUP` on ESP8266 (GPIO16 only supports `INPUT`)
+
+**Other Fixes:**
+- Logger returns minimal JSON when heap < 6KB instead of allocating large buffer
+- LED controller handles NeoPixelBus allocation failure gracefully
+- WiFi manager converted from String to char arrays (from PR #9)
+- Fan RPM calculation overflow fix for 64-bit intermediate (from PR #9)
+- Web server action processing race condition fix (from PR #9)
+- Frontend `:has()` CSS selector wrapped in try-catch for older browsers
+
 ### v1.9.4
 **ESP8266 Memory Optimization:**
-- **Lite status endpoint**: New `/api/status/lite` endpoint for polling uses `StaticJsonDocument` on stack instead of heap allocation, eliminating heap fragmentation
-- **Gzip compression**: Web interface files are now gzip compressed (62KB → 15KB, 76% reduction)
-- **Logger optimization**: `toJson()` now pre-allocates memory with `reserve()` to prevent heap fragmentation from repeated string concatenation
-- **Diagnostic endpoint fix**: `handleDiagnostic()` now uses `StaticJsonDocument` on stack instead of heap
-- **PROGMEM strings**: Captive portal responses moved to flash memory, saving ~500 bytes RAM
-- **Fixed-size buffers**: Replaced String members with char arrays for pending WiFi/MQTT credentials
-
-**Bug Fixes:**
-- **Input validation**: WiFi/MQTT credential handlers now validate length limits and return proper error messages instead of silently truncating
-- **Fan control validation**: Numeric parameters (speed, timer, intervals) are now validated to prevent unexpected behavior from malformed input
-- **RFID memory leak**: Fixed potential memory leak if RFID is re-initialized (previous MFRC522 instance is now properly deleted)
-
-**Technical changes:**
-- `data/` folder now contains `.gz` files only (originals in `data_src/`)
-- Web UI polls `/api/status/lite` every 5 seconds, full `/api/status` only at page load
-- All frequently-called handlers now use stack-based JSON documents
-
-> 💡 **ESP8266 users**: This update significantly improves stability by reducing heap usage and fragmentation during normal operation. If you still experience crashes with NFC enabled, use [v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5) as a stable fallback.
+- New `/api/status/lite` polling endpoint (stack-based, no heap allocation)
+- Gzip compressed web interface (62KB → 15KB, 76% reduction)
+- Input validation for WiFi/MQTT credentials and fan control parameters
+- RFID memory leak fix on re-initialization
 
 ### v1.9.3
 **ESP8266 Stability Hotfix:**
-- **Heap protection**: Web server handlers now return HTTP 503 when free heap is below 8KB, preventing OOM crashes during response generation
-- **Reduced polling frequency**: Diagnostic button polling reduced from 500ms to 2000ms to reduce memory pressure
-- **Heap logging**: Added periodic heap monitoring (every 60s) to serial output for debugging memory issues
-
-> 💡 **For OOM issues**: If crashes persist, avoid keeping the Hardware Diagnostics section open for extended periods. The reduced polling helps but does not eliminate memory usage.
+- Heap protection: handlers return HTTP 503 when free heap < 8KB
+- Reduced diagnostic polling frequency (500ms → 2000ms)
 
 ### v1.9.2
 **Scent Recognition Fix:**
-- **Fix capitalized scent codes**: Rituals cartridges can use uppercase first letters (e.g., "Jin" instead of "jin"). Added uppercase hex variants for all scents to ensure proper recognition.
-- **Fixes issue #7**: Jing (`4A696E`) and Sakura (`53616B`) cartridges now correctly identified instead of showing "Unknown".
-
-**NFC Debugging Improvements:**
-- **Improved RC522 detection**: More robust initialization with hardware reset and multiple version register reads
-- **API debug info**: Added `rfid.version_reg` to `/api/status` endpoint for remote debugging (shows `0x91`/`0x92`/`0x88` if detected, `0x00`/`0xFF` if communication fails)
-- **Better serial logging**: Detailed output during RFID initialization to help diagnose connection issues
-
-> 💡 **Troubleshooting NFC**: If scent detection doesn't work, check `http://[device-ip]/api/status` and look at `rfid.version_reg`. Expected values: `0x91` (v1.0), `0x92` (v2.0), or `0x88` (clone).
+- Fix capitalized scent codes (e.g., "Jin" vs "jin") - fixes [#7](https://github.com/martijnrenkema/Rituals-diffuser/issues/7)
+- Improved RC522 detection with hardware reset and version register debugging
 
 ### v1.9.1
 **Critical Bug Fixes:**
-- **Fix ESP8266 button pins**: Front and rear buttons were mapped to wrong GPIOs (GPIO14/13 instead of GPIO16/3). Buttons now work correctly on original Rituals Genie board.
-- **Fix ESP32-C3 startup issues**: RC522 RST pin conflicted with front button (both on GPIO0). Moved RC522 RST to GPIO21.
-- **Fix ESP8266 RC522 RST conflict**: RC522 RST was on GPIO16 (same as front button). Moved to GPIO2.
+- Fix ESP8266 button pin mapping (GPIO14/13 → GPIO16/3)
+- Fix ESP32-C3 and ESP8266 RC522 RST pin conflicts
 
-**Documentation:**
-- Added ESP32-C3 wiring mapping for Rituals Genie board installation to CLAUDE.md
-- Improved pin configuration comments in config.h
+### v1.9.0
+> ⚠️ **Do not use**: Pin mapping bugs. Use v1.9.1+.
 
-> ⚠️ **ESP32-C3 Users**: If you connected RC522 RST to GPIO0, rewire to GPIO21.
-
-### v1.9.0 (Known Issues - Use v1.9.1)
-> ⚠️ **Do not use**: This version has critical pin mapping bugs. Use v1.9.1 instead.
-
-**NFC Scent Cartridge Detection:**
-- **Automatic scent detection**: Reads Rituals scent cartridges via the built-in RC522 NFC reader
-- **MQTT sensors**: New `scent` and `cartridge_present` sensors for Home Assistant
-- **Web interface**: Shows current scent name and cartridge status
-- **Multi-platform support**: Works on ESP8266, ESP32 DevKit, and ESP32-C3 SuperMini
-
-**Bug Fixes:**
-- **Fix empty latest_version in MQTT**: No longer publishes empty values when update check hasn't completed
+- NFC scent cartridge detection via RC522
+- MQTT sensors for scent and cartridge status
+- Multi-platform NFC support (ESP8266, ESP32, ESP32-C3)
 
 ### v1.8.5
-**ESP32-C3 Pinout Fix:**
-- **Fix fan PWM and tachometer issues on ESP32-C3**: Fan was running slowly and tachometer reported extremely high RPM values. Root cause: GPIO5 (ADC2) has WiFi interference, GPIO6 (JTAG MTCK) was picking up noise.
-- **New pinout**: Moved FAN_PWM to GPIO3 and FAN_TACHO to GPIO4 (both ADC1, no WiFi conflicts).
-- **Arduino-ESP32 v3.x compatibility**: Added LEDC API compatibility for newer ESP32 Arduino core.
-
-> ⚠️ **Soldering required**: If upgrading from v1.8.3/v1.8.4, re-solder blue wire to GPIO3 and yellow wire to GPIO4.
-
-### v1.8.4
-**Bug Fixes:**
-- **Fix auto-update selecting wrong firmware**: ESP32 DevKit was incorrectly downloading ESP32-C3 firmware because both filenames contain "esp32". Now correctly distinguishes between `firmware_esp32.bin` and `firmware_esp32c3.bin`.
-
-### v1.8.3
-**New Hardware Support:**
-- **ESP32-C3 SuperMini**: Added full support for the compact ESP32-C3 SuperMini development board. Uses safe GPIO pins (avoids strapping pins 2, 8, 9) and native USB serial.
-
-**Bug Fixes:**
-- **Fix fan whine/noise at lower speeds on ESP8266**: Increased PWM frequency from 1kHz to 25kHz. The old 1kHz frequency was in the audible range, causing a high-pitched whine when the fan was dimmed. Now matches ESP32 at 25kHz (above human hearing).
-
-### v1.8.2
-**Bug Fixes (Critical):**
-- **Fix millis() overflow after ~49 days**: Timer and interval mode used direct comparison (`now >= endTime`) which fails when millis() wraps around. Now uses subtraction-based comparison that handles overflow correctly.
-- **Fix night mode ignored by LED animations**: Pulse and breathing LED effects now respect the global brightness setting. Night mode dimming now works correctly for all LED states.
-- **Unified brightness handling**: LED brightness is now consistently applied via RGB scaling on both ESP8266 and ESP32 platforms.
-
-### v1.8.1
-**Bug Fixes:**
-- **Fix ESP32 LED not working**: LED was broken in v1.8.0 due to refactoring for NeoPixelBus on ESP8266. The `showLed()` function now correctly sets the LED color on ESP32.
-- **Fix interval mode auto-starting fan**: The fan no longer automatically turns on when interval mode is enabled. Interval mode now only activates when the user explicitly turns on the fan.
-- **Better startup logging**: Added logging of saved settings (speed, interval mode) at startup to help debug issues.
+- Fix ESP32-C3 fan PWM/tachometer pin conflicts (moved to ADC1 pins)
+- Arduino-ESP32 v3.x LEDC compatibility
 
 ### v1.8.0
-**Rituals Genie V1 (ESP8266) Now Fully Supported!**
-
-This release adds complete support for the original Rituals Perfume Genie V1 with its ESP8266 chip. All features now work reliably on this memory-constrained platform.
-
-**What's New:**
-- **Full V1 Support**: Rituals Genie V1 (ESP8266) now works alongside V2 and custom ESP32 boards
-- **Stable LED Status**: Fixed LED flickering issues on ESP8266 - status lights now work correctly
-- **Working Web OTA**: Web-based firmware updates now work reliably on ESP8266 via "Safe Update Mode"
-- **Improved Safe Update Mode UI**: Modern styling matching the main interface, with GitHub releases link
-- **Exit Safe Mode**: Added restart button to exit safe update mode without uploading
-- **Reduced Memory Usage**: Removed automatic update checking on ESP8266 (not enough RAM for HTTPS)
-
-**Supported Hardware:**
-| Device | Chip | Auto-Update | OTA Rollback |
-|--------|------|-------------|--------------|
-| Rituals Genie V1 | ESP8266 | Manual (GitHub link) | No |
-| Rituals Genie V2 | ESP8266 | Manual (GitHub link) | No |
-| Custom ESP32 board | ESP32 | Yes (automatic) | Yes (dual partition) |
-| ESP32-C3 SuperMini | ESP32-C3 | Yes (automatic) | Yes (dual partition) |
-
-**ESP32/ESP32-C3 Advantages:**
-- Automatic GitHub update checking
-- One-click firmware installation
-- Automatic rollback on failed updates (dual partition)
-
-### v1.7.6
-- **Fix web OTA crash on ESP8266**: Initial attempt at fixing AsyncWebServer OTA crashes
-
-### v1.7.0
-**Major Feature Release:**
-- Web-based firmware updates
-- Night mode with scheduled LED dimming
-- MQTT Home Assistant auto-discovery
-- Captive portal for easy WiFi setup
+- Full Rituals Genie V1 (ESP8266) support
+- Stable LED status, working web OTA via Safe Update Mode
 
 For older versions, see [GitHub Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases).
