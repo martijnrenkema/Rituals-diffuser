@@ -4,9 +4,26 @@
 ButtonHandler buttonHandler;
 
 void ButtonHandler::begin() {
-    // Both buttons use internal pullup (GPIO13 and GPIO14 support this on ESP32)
+#ifdef PLATFORM_ESP8266
+    // ESP8266 GPIO16 does not support INPUT_PULLUP (only INPUT_PULLDOWN_16)
+    // The Rituals Genie board has external pull-up resistors on button pins
+    #if BUTTON_FRONT_PIN == 16
+        pinMode(BUTTON_FRONT_PIN, INPUT);
+    #else
+        pinMode(BUTTON_FRONT_PIN, INPUT_PULLUP);
+    #endif
+    // GPIO3 (RX) works with INPUT_PULLUP
+    pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
+#else
+    // ESP32: All GPIOs support INPUT_PULLUP
     pinMode(BUTTON_FRONT_PIN, INPUT_PULLUP);
     pinMode(BUTTON_REAR_PIN, INPUT_PULLUP);
+#endif
+
+    // Initialize press times to prevent false long-press detection if button held during boot
+    _frontPressTime = millis();
+    _rearPressTime = millis();
+
     Serial.println("[BTN] Button handler initialized");
     Serial.printf("[BTN] Front (SW2): GPIO%d, Rear (SW1): GPIO%d\n", BUTTON_FRONT_PIN, BUTTON_REAR_PIN);
 }

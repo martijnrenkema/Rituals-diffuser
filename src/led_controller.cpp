@@ -7,6 +7,10 @@ void LedController::begin() {
 #ifdef PLATFORM_ESP8266
     // NeoPixelBus for ESP8266 - BitBang method is more compatible with GPIO15
     _strip = new NeoPixelBus<NeoGrbFeature, NeoEsp8266BitBang800KbpsMethod>(NUM_LEDS, LED_DATA_PIN);
+    if (_strip == nullptr) {
+        Serial.println("[LED] ERROR: Failed to allocate NeoPixelBus!");
+        return;
+    }
     _strip->Begin();
     _strip->SetPixelColor(0, RgbColor(0, 0, 0));
     _strip->Show();

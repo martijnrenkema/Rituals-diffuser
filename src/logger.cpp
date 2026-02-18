@@ -255,6 +255,15 @@ const char* Logger::levelToString(LogLevel level) {
 }
 
 String Logger::toJson() {
+#ifdef PLATFORM_ESP8266
+    // On ESP8266, check heap before allocating large buffer
+    // 20 entries * 120 bytes ~= 2.4KB + overhead
+    uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < 6000) {
+        return F("[{\"l\":\"WARN\",\"m\":\"Low memory, logs unavailable\",\"u\":0,\"e\":0}]");
+    }
+#endif
+
     // Pre-allocate to avoid heap fragmentation from repeated concatenation
     // Each entry: ~80 bytes JSON overhead + message (max 64 chars) + escaping = ~160 bytes max
     // Reserve enough for all entries plus array brackets

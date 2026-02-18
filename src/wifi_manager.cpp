@@ -8,6 +8,8 @@
 WiFiManager wifiManager;
 
 void WiFiManager::begin() {
+    _ssid[0] = '\0';
+    _password[0] = '\0';
     generateAPName();
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
@@ -32,9 +34,9 @@ void WiFiManager::loop() {
             if (WiFi.status() == WL_CONNECTED) {
                 _reconnectAttempts = 0;
                 setState(WifiStatus::CONNECTED);
-                Serial.printf("[WIFI] Connected to %s\n", _ssid.c_str());
+                Serial.printf("[WIFI] Connected to %s\n", _ssid);
                 Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
-                logger.infof("WiFi connected: %s (%s)", _ssid.c_str(), WiFi.localIP().toString().c_str());
+                logger.infof("WiFi connected: %s (%s)", _ssid, WiFi.localIP().toString().c_str());
             } else if (now - _connectStartTime >= WIFI_CONNECT_TIMEOUT) {
                 _reconnectAttempts++;
                 Serial.printf("[WIFI] Connection timeout (attempt %d/%d)\n", _reconnectAttempts, MAX_RECONNECT_ATTEMPTS);
@@ -62,9 +64,9 @@ void WiFiManager::loop() {
 
         case WifiStatus::DISCONNECTED:
             // Auto reconnect if we have credentials
-            if (_ssid.length() > 0 && now - _lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
+            if (_ssid[0] != '\0' && now - _lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
                 Serial.println("[WIFI] Attempting reconnect...");
-                connect(_ssid.c_str(), _password.c_str());
+                connect(_ssid, _password);
             }
             break;
 
@@ -80,13 +82,13 @@ void WiFiManager::loop() {
             _dnsServer.processNextRequest();
 
             // Periodically try to reconnect to saved WiFi while in AP mode
-            if (_ssid.length() > 0 && now - _lastAPRetry >= AP_RETRY_INTERVAL) {
+            if (_ssid[0] != '\0' && now - _lastAPRetry >= AP_RETRY_INTERVAL) {
                 _lastAPRetry = now;
                 Serial.println("[WIFI] AP mode: trying saved WiFi in background...");
                 // Switch to AP_STA mode to allow WiFi connection while keeping AP active
                 WiFi.mode(WIFI_AP_STA);
-                WiFi.begin(_ssid.c_str(), _password.c_str());
-                _connectStartTime = now;  // Track when we started trying
+                WiFi.begin(_ssid, _password);
+                _apRetryConnectStart = now;  // Use separate timestamp for AP retry
             }
 
             // Check if background reconnect succeeded or timed out
@@ -97,7 +99,7 @@ void WiFiManager::loop() {
                 _reconnectAttempts = 0;
                 stopAP();
                 setState(WifiStatus::CONNECTED);
-            } else if (WiFi.getMode() == WIFI_AP_STA && now - _connectStartTime >= 30000) {
+            } else if (WiFi.getMode() == WIFI_AP_STA && now - _apRetryConnectStart >= 30000) {
                 // Background reconnect timed out after 30s, switch back to pure AP mode
                 Serial.println("[WIFI] Background reconnect timeout, staying in AP mode");
                 WiFi.mode(WIFI_AP);
@@ -107,8 +109,10 @@ void WiFiManager::loop() {
 }
 
 void WiFiManager::connect(const char* ssid, const char* password) {
-    _ssid = ssid;
-    _password = password;
+    strncpy(_ssid, ssid, sizeof(_ssid) - 1);
+    _ssid[sizeof(_ssid) - 1] = '\0';
+    strncpy(_password, password, sizeof(_password) - 1);
+    _password[sizeof(_password) - 1] = '\0';
 
     // Stop AP if running
     if (_state == WifiStatus::AP_MODE) {
@@ -158,8 +162,8 @@ void WiFiManager::startAP() {
 
     const char* apPassword = storage.getAPPassword();
 
-    // Start the AP - on ESP8266, channel and hidden params help stability
-    bool apStarted = WiFi.softAP(_apName.c_str(), apPassword, 1, false, 4);
+    // Start the AP
+    bool apStarted = WiFi.softAP(_apName, apPassword, 1, false, 4);
 
     if (!apStarted) {
         Serial.println("[WIFI] ERROR: Failed to start AP!");
@@ -179,10 +183,10 @@ void WiFiManager::startAP() {
     }
 
     setState(WifiStatus::AP_MODE);
-    Serial.printf("[WIFI] AP started: %s\n", _apName.c_str());
+    Serial.printf("[WIFI] AP started: %s\n", _apName);
     Serial.printf("[WIFI] AP Password: %s\n", apPassword);
     Serial.printf("[WIFI] AP IP: %s\n", currentIP.toString().c_str());
-    logger.infof("AP mode started: %s", _apName.c_str());
+    logger.infof("AP mode started: %s", _apName);
 
     // DNS server will be started after webserver is ready (in main.cpp)
     // This prevents race condition where DNS redirects before webserver is listening
@@ -206,7 +210,7 @@ WifiStatus WiFiManager::getState() {
 
 String WiFiManager::getSSID() {
     if (_state == WifiStatus::AP_MODE) {
-        return _apName;
+        return String(_apName);
     }
     return WiFi.SSID();
 }
@@ -230,7 +234,7 @@ String WiFiManager::getMacAddress() {
 }
 
 String WiFiManager::getAPName() {
-    return _apName;
+    return String(_apName);
 }
 
 void WiFiManager::onStateChange(StateChangeCallback callback) {
@@ -251,5 +255,5 @@ void WiFiManager::generateAPName() {
     WiFi.macAddress(mac);
     char suffix[5];
     snprintf(suffix, sizeof(suffix), "%02X%02X", mac[4], mac[5]);
-    _apName = String(WIFI_AP_SSID_PREFIX) + suffix;
+    snprintf(_apName, sizeof(_apName), "%s%s", WIFI_AP_SSID_PREFIX, suffix);
 }

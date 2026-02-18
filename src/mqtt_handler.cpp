@@ -20,6 +20,12 @@ extern void updateLedStatus();
 MQTTHandler mqttHandler;
 MQTTHandler* MQTTHandler::_instance = nullptr;
 
+// Shared buffers for MQTT payload/topic construction (avoids heap fragmentation)
+// Only used in publish functions which are called sequentially via state machine
+// Fan discovery is largest payload (~614 bytes with 12-char MAC ID)
+static char _mqttBuf[768];
+static char _mqttTopic[96];
+
 void MQTTHandler::begin() {
     _instance = this;
 
@@ -58,8 +64,13 @@ void MQTTHandler::loop() {
                 Serial.println("[MQTT] Attempting connection...");
                 String clientId = "rituals-" + _deviceId;
 
+                // Build LWT topic
+                char base[48];
+                snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, _deviceId.c_str());
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/availability", base);
+
                 if (_mqttClient.connect(clientId.c_str(), _user.c_str(), _password.c_str(),
-                                        (getBaseTopic() + "/availability").c_str(), 0, true, "offline")) {
+                                        _mqttTopic, 0, true, "offline")) {
                     Serial.println("[MQTT] Connected");
                     logger.infof("MQTT connected to %s:%d", _host.c_str(), _port);
 
@@ -76,13 +87,15 @@ void MQTTHandler::loop() {
                         _lastPublishStep = millis();
                     }
 
-                    // Subscribe to command topics
-                    _mqttClient.subscribe((getBaseTopic() + "/fan/set").c_str());
-                    _mqttClient.subscribe((getBaseTopic() + "/fan/speed/set").c_str());
-                    _mqttClient.subscribe((getBaseTopic() + "/fan/preset/set").c_str());
-                    _mqttClient.subscribe((getBaseTopic() + "/interval/set").c_str());
-                    _mqttClient.subscribe((getBaseTopic() + "/interval_on/set").c_str());
-                    _mqttClient.subscribe((getBaseTopic() + "/interval_off/set").c_str());
+                    // Subscribe to command topics using shared buffer
+                    const char* subSuffixes[] = {
+                        "/fan/set", "/fan/speed/set", "/fan/preset/set",
+                        "/interval/set", "/interval_on/set", "/interval_off/set"
+                    };
+                    for (size_t i = 0; i < sizeof(subSuffixes) / sizeof(subSuffixes[0]); i++) {
+                        snprintf(_mqttTopic, sizeof(_mqttTopic), "%s%s", base, subSuffixes[i]);
+                        _mqttClient.subscribe(_mqttTopic);
+                    }
                 } else {
                     Serial.printf("[MQTT] Connection failed, rc=%d\n", _mqttClient.state());
                     logger.errorf("MQTT connection failed (rc=%d)", _mqttClient.state());
@@ -96,10 +109,14 @@ void MQTTHandler::loop() {
         processPublishStateMachine();
 
         // Handle state publish requests (interrupt-safe flag check)
-        if (_statePublishPending && _publishState == MqttPublishState::IDLE) {
-            noInterrupts();
+        // Check flag inside critical section to prevent race condition
+        noInterrupts();
+        bool shouldPublish = _statePublishPending && _publishState == MqttPublishState::IDLE;
+        if (shouldPublish) {
             _statePublishPending = false;
-            interrupts();
+        }
+        interrupts();
+        if (shouldPublish) {
             _publishState = MqttPublishState::STATE_FAN;
             _lastPublishStep = millis();
         }
@@ -125,7 +142,10 @@ void MQTTHandler::processPublishStateMachine() {
     if (now - _lastPublishStep < PUBLISH_STEP_DELAY) return;
 
     _lastPublishStep = now;
-    String base = getBaseTopic();
+
+    // Build base topic into stack buffer (avoids String allocation every step)
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, _deviceId.c_str());
 
     switch (_publishState) {
         // Discovery states
@@ -205,20 +225,26 @@ void MQTTHandler::processPublishStateMachine() {
             _publishState = MqttPublishState::STATE_FAN;
             break;
 
-        // State publish states
+        // State publish states - use snprintf to avoid String heap allocations
         case MqttPublishState::STATE_FAN:
-            _mqttClient.publish((base + "/fan/state").c_str(), fanController.isOn() ? "ON" : "OFF", true);
+            snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/fan/state", base);
+            _mqttClient.publish(_mqttTopic, fanController.isOn() ? "ON" : "OFF", true);
             _publishState = MqttPublishState::STATE_SPEED;
             break;
 
         case MqttPublishState::STATE_SPEED:
-            _mqttClient.publish((base + "/fan/speed").c_str(), String(fanController.getSpeed()).c_str(), true);
+            {
+                char val[8];
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/fan/speed", base);
+                snprintf(val, sizeof(val), "%d", fanController.getSpeed());
+                _mqttClient.publish(_mqttTopic, val, true);
+            }
             _publishState = MqttPublishState::STATE_PRESET;
             break;
 
         case MqttPublishState::STATE_PRESET:
             {
-                String preset = "Cont";
+                const char* preset = "Cont";
                 if (fanController.isTimerActive()) {
                     uint16_t remaining = fanController.getRemainingMinutes();
                     if (remaining <= 30) preset = "30m";
@@ -226,53 +252,78 @@ void MQTTHandler::processPublishStateMachine() {
                     else if (remaining <= 90) preset = "90m";
                     else preset = "120m";
                 }
-                _mqttClient.publish((base + "/fan/preset").c_str(), preset.c_str(), true);
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/fan/preset", base);
+                _mqttClient.publish(_mqttTopic, preset, true);
             }
             _publishState = MqttPublishState::STATE_INTERVAL;
             break;
 
         case MqttPublishState::STATE_INTERVAL:
-            _mqttClient.publish((base + "/interval/state").c_str(), fanController.isIntervalMode() ? "ON" : "OFF", true);
+            snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/interval/state", base);
+            _mqttClient.publish(_mqttTopic, fanController.isIntervalMode() ? "ON" : "OFF", true);
             _publishState = MqttPublishState::STATE_INTERVAL_TIMES;
             break;
 
         case MqttPublishState::STATE_INTERVAL_TIMES:
-            _mqttClient.publish((base + "/interval_on/state").c_str(), String(fanController.getIntervalOnTime()).c_str(), true);
-            _mqttClient.publish((base + "/interval_off/state").c_str(), String(fanController.getIntervalOffTime()).c_str(), true);
+            {
+                char val[8];
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/interval_on/state", base);
+                snprintf(val, sizeof(val), "%d", fanController.getIntervalOnTime());
+                _mqttClient.publish(_mqttTopic, val, true);
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/interval_off/state", base);
+                snprintf(val, sizeof(val), "%d", fanController.getIntervalOffTime());
+                _mqttClient.publish(_mqttTopic, val, true);
+            }
             _publishState = MqttPublishState::STATE_REMAINING;
             break;
 
         case MqttPublishState::STATE_REMAINING:
-            _mqttClient.publish((base + "/remaining_time").c_str(), String(fanController.getRemainingMinutes()).c_str(), true);
+            {
+                char val[8];
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/remaining_time", base);
+                snprintf(val, sizeof(val), "%u", fanController.getRemainingMinutes());
+                _mqttClient.publish(_mqttTopic, val, true);
+            }
             _publishState = MqttPublishState::STATE_RPM_WIFI;
             break;
 
         case MqttPublishState::STATE_RPM_WIFI:
-            _mqttClient.publish((base + "/rpm").c_str(), String(fanController.getRPM()).c_str(), true);
-            _mqttClient.publish((base + "/wifi_signal").c_str(), String(wifiManager.getRSSI()).c_str(), true);
+            {
+                char val[8];
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/rpm", base);
+                snprintf(val, sizeof(val), "%u", fanController.getRPM());
+                _mqttClient.publish(_mqttTopic, val, true);
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/wifi_signal", base);
+                snprintf(val, sizeof(val), "%d", wifiManager.getRSSI());
+                _mqttClient.publish(_mqttTopic, val, true);
+            }
             _publishState = MqttPublishState::STATE_RUNTIME;
             break;
 
         case MqttPublishState::STATE_RUNTIME:
             {
                 float totalHours = fanController.getTotalRuntimeMinutes() / 60.0;
-                char buf[10];
-                snprintf(buf, sizeof(buf), "%.1f", totalHours);
-                _mqttClient.publish((base + "/total_runtime").c_str(), buf, true);
+                char val[10];
+                snprintf(val, sizeof(val), "%.1f", totalHours);
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/total_runtime", base);
+                _mqttClient.publish(_mqttTopic, val, true);
             }
             _publishState = MqttPublishState::STATE_UPDATE;
             break;
 
         case MqttPublishState::STATE_UPDATE:
-            _mqttClient.publish((base + "/update_available").c_str(), updateChecker.isUpdateAvailable() ? "ON" : "OFF", true);
+            snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/update_available", base);
+            _mqttClient.publish(_mqttTopic, updateChecker.isUpdateAvailable() ? "ON" : "OFF", true);
             // Only publish latest_version if we have a valid value (not empty)
             {
                 const char* latestVer = updateChecker.getLatestVersion();
                 if (latestVer && latestVer[0] != '\0') {
-                    _mqttClient.publish((base + "/latest_version").c_str(), latestVer, true);
+                    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/latest_version", base);
+                    _mqttClient.publish(_mqttTopic, latestVer, true);
                 }
             }
-            _mqttClient.publish((base + "/current_version").c_str(), updateChecker.getCurrentVersion(), true);
+            snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/current_version", base);
+            _mqttClient.publish(_mqttTopic, updateChecker.getCurrentVersion(), true);
             _publishState = MqttPublishState::STATE_SCENT;
             break;
 
@@ -281,9 +332,11 @@ void MQTTHandler::processPublishStateMachine() {
             {
                 // Publish scent name
                 String scent = rfidIsCartridgePresent() ? rfidGetLastScent() : "No cartridge";
-                _mqttClient.publish((base + "/scent").c_str(), scent.c_str(), true);
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/scent", base);
+                _mqttClient.publish(_mqttTopic, scent.c_str(), true);
                 // Publish cartridge present state
-                _mqttClient.publish((base + "/cartridge_present").c_str(), rfidIsCartridgePresent() ? "ON" : "OFF", true);
+                snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/cartridge_present", base);
+                _mqttClient.publish(_mqttTopic, rfidIsCartridgePresent() ? "ON" : "OFF", true);
             }
             #endif
             _publishState = MqttPublishState::STATE_DONE;
@@ -355,11 +408,17 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
             fanController.turnOff();
         }
     } else if (t.endsWith("/fan/speed/set")) {
-        // Speed percentage
+        // Speed percentage - validate input is actually numeric
         int speed = p.toInt();
-        fanController.setSpeed(speed);
-        if (speed > 0 && !fanController.isOn()) {
-            fanController.turnOn();
+        // toInt() returns 0 for non-numeric strings, only accept if payload was "0" or valid number
+        bool isValidNumber = (speed > 0) || (p == "0");
+        if (isValidNumber) {
+            fanController.setSpeed(speed);
+            if (speed > 0 && !fanController.isOn()) {
+                fanController.turnOn();
+            }
+        } else {
+            Serial.printf("[MQTT] Invalid speed value: %s\n", p.c_str());
         }
     } else if (t.endsWith("/fan/preset/set")) {
         // Timer preset (short names to save MQTT buffer space)
@@ -381,17 +440,21 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         fanController.setIntervalMode(p == "ON");
         updateLedStatus();
     } else if (t.endsWith("/interval_on/set")) {
-        // Interval on time
+        // Interval on time - validate input
         int newOnTime = p.toInt();
-        fanController.setIntervalTimes(newOnTime, fanController.getIntervalOffTime());
-        // Persist to storage so settings survive reboot
-        storage.setIntervalMode(fanController.isIntervalMode(), newOnTime, fanController.getIntervalOffTime());
+        if (newOnTime > 0) {
+            fanController.setIntervalTimes(newOnTime, fanController.getIntervalOffTime());
+            // Persist to storage so settings survive reboot
+            storage.setIntervalMode(fanController.isIntervalMode(), newOnTime, fanController.getIntervalOffTime());
+        }
     } else if (t.endsWith("/interval_off/set")) {
-        // Interval off time
+        // Interval off time - validate input
         int newOffTime = p.toInt();
-        fanController.setIntervalTimes(fanController.getIntervalOnTime(), newOffTime);
-        // Persist to storage so settings survive reboot
-        storage.setIntervalMode(fanController.isIntervalMode(), fanController.getIntervalOnTime(), newOffTime);
+        if (newOffTime > 0) {
+            fanController.setIntervalTimes(fanController.getIntervalOnTime(), newOffTime);
+            // Persist to storage so settings survive reboot
+            storage.setIntervalMode(fanController.isIntervalMode(), fanController.getIntervalOnTime(), newOffTime);
+        }
     }
 
     // Request state publish (non-blocking)
@@ -435,224 +498,297 @@ void MQTTHandler::publishDiscovery() {
 }
 
 void MQTTHandler::publishFanDiscovery() {
-    String b = getBaseTopic();
-    String id = "rd_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    // Compact JSON payload - keep under 640 bytes for ESP8266
-    // Using shorter preset names to save ~30 bytes
-    String p = "{\"name\":\"Diffuser\",";
-    p += "\"uniq_id\":\"" + id + "\",";
-    p += "\"stat_t\":\"" + b + "/fan/state\",";
-    p += "\"cmd_t\":\"" + b + "/fan/set\",";
-    p += "\"pct_stat_t\":\"" + b + "/fan/speed\",";
-    p += "\"pct_cmd_t\":\"" + b + "/fan/speed/set\",";
-    p += "\"pr_mode_stat_t\":\"" + b + "/fan/preset\",";
-    p += "\"pr_mode_cmd_t\":\"" + b + "/fan/preset/set\",";
-    p += "\"pr_modes\":[\"30m\",\"60m\",\"90m\",\"120m\",\"Cont\"],";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"spd_rng_min\":1,\"spd_rng_max\":100,";
-    p += "\"dev\":{\"ids\":[\"rituals_" + _deviceId + "\"],";
-    p += "\"name\":\"Rituals Diffuser\",\"mf\":\"Rituals\",\"mdl\":\"Genie 2.0\"}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/fan/rd_%s/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/fan/rd_" + _deviceId + "/config";
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Diffuser\","
+        "\"uniq_id\":\"rd_%s\","
+        "\"stat_t\":\"%s/fan/state\","
+        "\"cmd_t\":\"%s/fan/set\","
+        "\"pct_stat_t\":\"%s/fan/speed\","
+        "\"pct_cmd_t\":\"%s/fan/speed/set\","
+        "\"pr_mode_stat_t\":\"%s/fan/preset\","
+        "\"pr_mode_cmd_t\":\"%s/fan/preset/set\","
+        "\"pr_modes\":[\"30m\",\"60m\",\"90m\",\"120m\",\"Cont\"],"
+        "\"avty_t\":\"%s/availability\","
+        "\"spd_rng_min\":1,\"spd_rng_max\":100,"
+        "\"dev\":{\"ids\":[\"rituals_%s\"],"
+        "\"name\":\"Rituals Diffuser\",\"mf\":\"Rituals\",\"mdl\":\"Genie 2.0\"}}",
+        id, base, base, base, base, base, base, base, id);
 
-    Serial.printf("[MQTT] Fan discovery: %d bytes\n", p.length());
-    if (!_mqttClient.publish(topic.c_str(), p.c_str(), true)) {
+    Serial.printf("[MQTT] Fan discovery: %d bytes\n", (int)strlen(_mqttBuf));
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
         Serial.println("[MQTT] Fan discovery publish FAILED - buffer too small?");
     }
 }
 
 void MQTTHandler::publishIntervalSwitchDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Interval Mode\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_int\",";
-    p += "\"stat_t\":\"" + b + "/interval/state\",";
-    p += "\"cmd_t\":\"" + b + "/interval/set\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"ic\":\"mdi:timer-sand\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/switch/rd_%s_int/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/switch/rd_" + _deviceId + "_int/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Interval Mode\","
+        "\"uniq_id\":\"rd_%s_int\","
+        "\"stat_t\":\"%s/interval/state\","
+        "\"cmd_t\":\"%s/interval/set\","
+        "\"avty_t\":\"%s/availability\","
+        "\"ic\":\"mdi:timer-sand\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Interval switch discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishIntervalOnTimeDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Interval On\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_ion\",";
-    p += "\"stat_t\":\"" + b + "/interval_on/state\",";
-    p += "\"cmd_t\":\"" + b + "/interval_on/set\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"min\":10,\"max\":120,\"step\":5,";
-    p += "\"unit_of_meas\":\"s\",\"ic\":\"mdi:timer\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/number/rd_%s_ion/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/number/rd_" + _deviceId + "_ion/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Interval On\","
+        "\"uniq_id\":\"rd_%s_ion\","
+        "\"stat_t\":\"%s/interval_on/state\","
+        "\"cmd_t\":\"%s/interval_on/set\","
+        "\"avty_t\":\"%s/availability\","
+        "\"min\":10,\"max\":120,\"step\":5,"
+        "\"unit_of_meas\":\"s\",\"ic\":\"mdi:timer\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Interval on time discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishIntervalOffTimeDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Interval Off\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_ioff\",";
-    p += "\"stat_t\":\"" + b + "/interval_off/state\",";
-    p += "\"cmd_t\":\"" + b + "/interval_off/set\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"min\":10,\"max\":120,\"step\":5,";
-    p += "\"unit_of_meas\":\"s\",\"ic\":\"mdi:timer-off\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/number/rd_%s_ioff/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/number/rd_" + _deviceId + "_ioff/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Interval Off\","
+        "\"uniq_id\":\"rd_%s_ioff\","
+        "\"stat_t\":\"%s/interval_off/state\","
+        "\"cmd_t\":\"%s/interval_off/set\","
+        "\"avty_t\":\"%s/availability\","
+        "\"min\":10,\"max\":120,\"step\":5,"
+        "\"unit_of_meas\":\"s\",\"ic\":\"mdi:timer-off\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Interval off time discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishRemainingTimeSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Time Left\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_rem\",";
-    p += "\"stat_t\":\"" + b + "/remaining_time\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"unit_of_meas\":\"min\",\"ic\":\"mdi:clock-outline\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/sensor/rd_%s_rem/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_rem/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Time Left\","
+        "\"uniq_id\":\"rd_%s_rem\","
+        "\"stat_t\":\"%s/remaining_time\","
+        "\"avty_t\":\"%s/availability\","
+        "\"unit_of_meas\":\"min\",\"ic\":\"mdi:clock-outline\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Remaining time sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishRPMSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Fan RPM\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_rpm\",";
-    p += "\"stat_t\":\"" + b + "/rpm\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"unit_of_meas\":\"RPM\",\"ic\":\"mdi:fan\",";
-    p += "\"ent_cat\":\"diagnostic\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/sensor/rd_%s_rpm/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_rpm/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Fan RPM\","
+        "\"uniq_id\":\"rd_%s_rpm\","
+        "\"stat_t\":\"%s/rpm\","
+        "\"avty_t\":\"%s/availability\","
+        "\"unit_of_meas\":\"RPM\",\"ic\":\"mdi:fan\","
+        "\"ent_cat\":\"diagnostic\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] RPM sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishWiFiSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"WiFi Signal\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_wifi\",";
-    p += "\"stat_t\":\"" + b + "/wifi_signal\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"unit_of_meas\":\"dBm\",\"dev_cla\":\"signal_strength\",";
-    p += "\"ent_cat\":\"diagnostic\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/sensor/rd_%s_wifi/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_wifi/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"WiFi Signal\","
+        "\"uniq_id\":\"rd_%s_wifi\","
+        "\"stat_t\":\"%s/wifi_signal\","
+        "\"avty_t\":\"%s/availability\","
+        "\"unit_of_meas\":\"dBm\",\"dev_cla\":\"signal_strength\","
+        "\"ent_cat\":\"diagnostic\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] WiFi sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishTotalRuntimeSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Total Runtime\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_trun\",";
-    p += "\"stat_t\":\"" + b + "/total_runtime\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"unit_of_meas\":\"h\",\"ic\":\"mdi:clock-check\",";
-    p += "\"ent_cat\":\"diagnostic\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/sensor/rd_%s_trun/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_trun/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Total Runtime\","
+        "\"uniq_id\":\"rd_%s_trun\","
+        "\"stat_t\":\"%s/total_runtime\","
+        "\"avty_t\":\"%s/availability\","
+        "\"unit_of_meas\":\"h\",\"ic\":\"mdi:clock-check\","
+        "\"ent_cat\":\"diagnostic\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Total runtime sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishUpdateAvailableBinarySensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Update Available\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_upd\",";
-    p += "\"stat_t\":\"" + b + "/update_available\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"dev_cla\":\"update\",";
-    p += "\"ent_cat\":\"diagnostic\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/binary_sensor/rd_%s_upd/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/binary_sensor/rd_" + _deviceId + "_upd/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Update Available\","
+        "\"uniq_id\":\"rd_%s_upd\","
+        "\"stat_t\":\"%s/update_available\","
+        "\"avty_t\":\"%s/availability\","
+        "\"dev_cla\":\"update\","
+        "\"ent_cat\":\"diagnostic\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Update available sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishLatestVersionSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Latest Version\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_latver\",";
-    p += "\"stat_t\":\"" + b + "/latest_version\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"ic\":\"mdi:package-up\",";
-    p += "\"ent_cat\":\"diagnostic\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/sensor/rd_%s_latver/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_latver/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Latest Version\","
+        "\"uniq_id\":\"rd_%s_latver\","
+        "\"stat_t\":\"%s/latest_version\","
+        "\"avty_t\":\"%s/availability\","
+        "\"ic\":\"mdi:package-up\","
+        "\"ent_cat\":\"diagnostic\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Latest version sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishCurrentVersionSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Firmware Version\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_curver\",";
-    p += "\"stat_t\":\"" + b + "/current_version\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"ic\":\"mdi:chip\",";
-    p += "\"ent_cat\":\"diagnostic\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/sensor/rd_%s_curver/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_curver/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Firmware Version\","
+        "\"uniq_id\":\"rd_%s_curver\","
+        "\"stat_t\":\"%s/current_version\","
+        "\"avty_t\":\"%s/availability\","
+        "\"ic\":\"mdi:chip\","
+        "\"ent_cat\":\"diagnostic\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Current version sensor discovery publish FAILED");
+    }
 }
 
 #if defined(RC522_ENABLED)
 void MQTTHandler::publishScentSensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Scent Cartridge\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_scent\",";
-    p += "\"stat_t\":\"" + b + "/scent\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"ic\":\"mdi:spray\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/sensor/rd_%s_scent/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/sensor/rd_" + _deviceId + "_scent/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Scent Cartridge\","
+        "\"uniq_id\":\"rd_%s_scent\","
+        "\"stat_t\":\"%s/scent\","
+        "\"avty_t\":\"%s/availability\","
+        "\"ic\":\"mdi:spray\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Scent sensor discovery publish FAILED");
+    }
 }
 
 void MQTTHandler::publishCartridgeBinarySensorDiscovery() {
-    String b = getBaseTopic();
-    String devId = "rituals_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    char base[48];
+    snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, id);
 
-    String p = "{\"name\":\"Cartridge Present\",";
-    p += "\"uniq_id\":\"rd_" + _deviceId + "_cartridge\",";
-    p += "\"stat_t\":\"" + b + "/cartridge_present\",";
-    p += "\"avty_t\":\"" + b + "/availability\",";
-    p += "\"dev_cla\":\"presence\",";
-    p += "\"ic\":\"mdi:tag-outline\",";
-    p += "\"dev\":{\"ids\":[\"" + devId + "\"]}}";
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/binary_sensor/rd_%s_cartridge/config", MQTT_DISCOVERY_PREFIX, id);
 
-    String topic = String(MQTT_DISCOVERY_PREFIX) + "/binary_sensor/rd_" + _deviceId + "_cartridge/config";
-    _mqttClient.publish(topic.c_str(), p.c_str(), true);
+    snprintf(_mqttBuf, sizeof(_mqttBuf),
+        "{\"name\":\"Cartridge Present\","
+        "\"uniq_id\":\"rd_%s_cartridge\","
+        "\"stat_t\":\"%s/cartridge_present\","
+        "\"avty_t\":\"%s/availability\","
+        "\"dev_cla\":\"presence\","
+        "\"ic\":\"mdi:tag-outline\","
+        "\"dev\":{\"ids\":[\"rituals_%s\"]}}",
+        id, base, base, id);
+
+    if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {
+        Serial.println("[MQTT] Cartridge binary sensor discovery publish FAILED");
+    }
 }
 #else
 // Empty stubs for non-RFID builds
@@ -661,19 +797,28 @@ void MQTTHandler::publishCartridgeBinarySensorDiscovery() {}
 #endif
 
 void MQTTHandler::removeDiscovery() {
-    String pre = String(MQTT_DISCOVERY_PREFIX);
-    String id = "rd_" + _deviceId;
+    const char* id = _deviceId.c_str();
+    const char* pre = MQTT_DISCOVERY_PREFIX;
 
-    _mqttClient.publish((pre + "/fan/" + id + "/config").c_str(), "", true);
-    _mqttClient.publish((pre + "/switch/" + id + "_int/config").c_str(), "", true);
-    _mqttClient.publish((pre + "/number/" + id + "_ion/config").c_str(), "", true);
-    _mqttClient.publish((pre + "/number/" + id + "_ioff/config").c_str(), "", true);
-    _mqttClient.publish((pre + "/sensor/" + id + "_rem/config").c_str(), "", true);
-    _mqttClient.publish((pre + "/sensor/" + id + "_rpm/config").c_str(), "", true);
-    _mqttClient.publish((pre + "/sensor/" + id + "_wifi/config").c_str(), "", true);
-    // RFID entities
-    _mqttClient.publish((pre + "/sensor/" + id + "_scent/config").c_str(), "", true);
-    _mqttClient.publish((pre + "/binary_sensor/" + id + "_cartridge/config").c_str(), "", true);
+    // Remove all discovery configs by publishing empty payload
+    const char* suffixes[] = {
+        "fan/rd_%s/config",
+        "switch/rd_%s_int/config",
+        "number/rd_%s_ion/config",
+        "number/rd_%s_ioff/config",
+        "sensor/rd_%s_rem/config",
+        "sensor/rd_%s_rpm/config",
+        "sensor/rd_%s_wifi/config",
+        "sensor/rd_%s_scent/config",
+        "binary_sensor/rd_%s_cartridge/config"
+    };
+
+    for (size_t i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
+        char suffix[64];
+        snprintf(suffix, sizeof(suffix), suffixes[i], id);
+        snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/%s", pre, suffix);
+        _mqttClient.publish(_mqttTopic, "", true);
+    }
 
     _discoveryPublished = false;
     Serial.println("[MQTT] Discovery removed");
@@ -688,5 +833,6 @@ void MQTTHandler::publishState() {
 }
 
 void MQTTHandler::publishAvailability(bool online) {
-    _mqttClient.publish((getBaseTopic() + "/availability").c_str(), online ? "online" : "offline", true);
+    snprintf(_mqttTopic, sizeof(_mqttTopic), "%s_%s/availability", MQTT_TOPIC_PREFIX, _deviceId.c_str());
+    _mqttClient.publish(_mqttTopic, online ? "online" : "offline", true);
 }

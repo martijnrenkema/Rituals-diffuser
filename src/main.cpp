@@ -75,8 +75,11 @@ void checkNightMode() {
 
     bool isNight = storage.isNightModeActive(hour);
     static bool wasNight = false;
+    static bool initialized = false;
 
-    if (isNight != wasNight) {
+    // On first call after NTP sync, always apply the correct brightness
+    if (!initialized || isNight != wasNight) {
+        initialized = true;
         if (isNight) {
             ledController.setBrightness(storage.getNightModeBrightness());
             Serial.printf("[MAIN] Night mode activated (hour=%d)\n", hour);
@@ -294,10 +297,10 @@ void setup() {
     // Initialize web server
     webServer.begin();
 
-    // Initialize update checker (ESP32 only - ESP8266 can't handle this due to RAM)
-#ifndef PLATFORM_ESP8266
+    // Initialize update checker
+    // ESP8266: auto-checks once 15s after boot (when heap is still available)
+    // ESP32: auto-checks 2min after boot, then every 24h
     updateChecker.begin();
-#endif
 
     // Setup OTA callbacks
     otaHandler.onStart(onOTAStart);
@@ -312,8 +315,16 @@ void setup() {
     }
 #endif
 
+    // Handle case where WiFi was already connected via SDK auto-reconnect
+    // (e.g., after OTA update or restart). The callback wasn't registered yet
+    // during wifiManager.begin(), so OTA and NTP would never be initialized.
+    if (wifiManager.isConnected()) {
+        Serial.println("[MAIN] WiFi already connected, initializing OTA and NTP");
+        otaHandler.begin();
+        setupTimeSync();
+    }
+
     // Ensure LED shows correct status after all initialization
-    // This handles the case where WiFi was already connected via SDK auto-reconnect
     updateLedStatus();
 
     Serial.println("[MAIN] Setup complete");
@@ -347,9 +358,7 @@ void loop() {
     webServer.loop();  // Process pending web actions
     yield();
 
-#ifndef PLATFORM_ESP8266
-    updateChecker.loop();  // Check for firmware updates (ESP32 only)
-#endif
+    updateChecker.loop();  // Check for firmware updates (heap-guarded on ESP8266)
 
     // Run MQTT loop with extra yield time
     mqttHandler.loop();

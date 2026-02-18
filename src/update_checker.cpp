@@ -186,6 +186,21 @@ bool UpdateChecker::fetchGitHubRelease() {
         return false;
     }
 
+    // Check response size before loading into memory
+    int contentLength = http.getSize();
+
+#ifdef PLATFORM_ESP8266
+    // ESP8266: Limit response to 4KB to prevent OOM
+    // GitHub API responses are typically 5-15KB, but with JSON filter we only need a fraction
+    // contentLength is -1 for chunked transfer (unknown size) - also reject to be safe
+    if (contentLength < 0 || contentLength > 4096) {
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage),
+                 contentLength < 0 ? "Unknown response size (chunked)" : "Response too large: %d", contentLength);
+        http.end();
+        return false;
+    }
+#endif
+
     // Get response
     String payload = http.getString();
     http.end();

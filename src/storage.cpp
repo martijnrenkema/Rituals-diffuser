@@ -296,6 +296,9 @@ bool Storage::isNightModeActive(uint8_t currentHour) {
     uint8_t start = _settings.nightModeStart;
     uint8_t end = _settings.nightModeEnd;
 
+    // Edge case: if start == end, night mode has zero duration, treat as disabled
+    if (start == end) return false;
+
     // Handle overnight range (e.g., 22:00 - 07:00)
     if (start > end) {
         return (currentHour >= start || currentHour < end);
