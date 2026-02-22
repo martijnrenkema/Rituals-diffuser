@@ -148,7 +148,7 @@ bool UpdateChecker::fetchGitHubRelease() {
     #ifdef PLATFORM_ESP8266
     // ESP8266 has limited RAM (~80KB) - reduce BearSSL buffers from default 16KB
     // This prevents OOM when making HTTPS requests
-    client.setBufferSizes(512, 512);
+    client.setBufferSizes(1024, 512);
     client.setInsecure();  // Skip certificate verification
     client.setTimeout(UPDATE_CHECK_TIMEOUT);
     logger.infof("Free heap: %d bytes", ESP.getFreeHeap());
@@ -160,6 +160,7 @@ bool UpdateChecker::fetchGitHubRelease() {
     HTTPClient http;
     http.setTimeout(UPDATE_CHECK_TIMEOUT);
     http.setUserAgent("ESP-Rituals-Diffuser/" FIRMWARE_VERSION);
+    http.useHTTP10(true);  // Force Content-Length (no chunked), enables stream parsing
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
     if (!http.begin(client, GITHUB_API_URL)) {
@@ -186,46 +187,18 @@ bool UpdateChecker::fetchGitHubRelease() {
         return false;
     }
 
-    // Check response size before loading into memory
-    int contentLength = http.getSize();
-
-#ifdef PLATFORM_ESP8266
-    // ESP8266: Limit response to 4KB to prevent OOM
-    // GitHub API responses are typically 5-15KB, but with JSON filter we only need a fraction
-    // contentLength is -1 for chunked transfer (unknown size) - also reject to be safe
-    if (contentLength < 0 || contentLength > 4096) {
-        snprintf(_info.errorMessage, sizeof(_info.errorMessage),
-                 contentLength < 0 ? "Unknown response size (chunked)" : "Response too large: %d", contentLength);
-        http.end();
-        return false;
-    }
-#endif
-
-    // Get response
-    String payload = http.getString();
-    http.end();
-
-    if (payload.length() == 0) {
-        strlcpy(_info.errorMessage, "Empty response", sizeof(_info.errorMessage));
-        return false;
-    }
-
-    return parseReleaseJson(payload.c_str(), payload.length());
-}
-
-bool UpdateChecker::parseReleaseJson(const char* json, size_t length) {
-    // Use a filter to only parse the fields we need (reduces memory usage significantly)
-    // GitHub API response is ~10KB but we only need a few fields
+    // Parse JSON directly from HTTP stream
+    // Avoids allocating full response (~10KB) as String - critical for ESP8266
     StaticJsonDocument<200> filter;
     filter["tag_name"] = true;
     filter["html_url"] = true;
     filter["assets"][0]["name"] = true;
     filter["assets"][0]["browser_download_url"] = true;
 
-    // Parse JSON response with filter - this drastically reduces memory needed
-    // Reduced from 2048 to 1536 bytes for better ESP8266 memory usage
     DynamicJsonDocument doc(1536);
-    DeserializationError err = deserializeJson(doc, json, length, DeserializationOption::Filter(filter));
+    WiFiClient* stream = http.getStreamPtr();
+    DeserializationError err = deserializeJson(doc, *stream, DeserializationOption::Filter(filter));
+    http.end();
 
     if (err) {
         snprintf(_info.errorMessage, sizeof(_info.errorMessage), "JSON error: %s", err.c_str());

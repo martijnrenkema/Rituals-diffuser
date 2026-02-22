@@ -35,7 +35,7 @@ extern WebServer webServer;
 // GitHub releases URL for manual checking
 #define GITHUB_RELEASES_URL "https://github.com/" UPDATE_GITHUB_REPO "/releases"
 
-// Generate OTA page with styling matching main update page
+// Generate OTA page with XHR-based uploads and progress bars
 String generateOTAPage() {
     String p = F("<!DOCTYPE html><html><head><meta charset='UTF-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -43,91 +43,75 @@ String generateOTAPage() {
         "*{box-sizing:border-box;margin:0;padding:0}"
         "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
         "background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);min-height:100vh;color:#fff;padding:20px}"
-        ".container{max-width:500px;margin:0 auto}"
+        ".ct{max-width:500px;margin:0 auto}"
         "h1{text-align:center;margin-bottom:8px;font-size:1.5em}"
-        ".subtitle{text-align:center;color:#888;margin-bottom:24px;font-size:.9em}"
-        ".card{background:rgba(255,255,255,.05);border-radius:16px;padding:20px;margin-bottom:16px;"
+        ".sub{text-align:center;color:#888;margin-bottom:24px;font-size:.9em}"
+        ".cd{background:rgba(255,255,255,.05);border-radius:16px;padding:20px;margin-bottom:16px;"
         "border:1px solid rgba(255,255,255,.1)}"
-        ".card h2{font-size:1em;margin-bottom:12px}"
-        ".version{color:#888;font-size:.85em;margin-bottom:12px}"
+        ".cd h2{font-size:1em;margin-bottom:12px}"
+        ".ver{color:#888;font-size:.85em;margin-bottom:12px}"
         ".ok{color:#22c55e}.err{color:#ef4444}"
         "input[type=file]{width:100%;padding:12px;margin:8px 0;background:rgba(255,255,255,.1);"
         "border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#fff}"
         "button{width:100%;padding:14px;border:none;border-radius:10px;font-size:1em;font-weight:600;"
         "cursor:pointer;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;margin-top:8px}"
-        "button:hover{opacity:.9}"
-        ".link{display:inline-block;padding:14px 20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);"
+        "button:hover{opacity:.9}button:disabled{opacity:.5;cursor:not-allowed}"
+        ".pb{width:100%;height:20px;background:rgba(255,255,255,.1);border-radius:10px;margin-top:8px;overflow:hidden;display:none}"
+        ".pf{height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:10px;width:0%;transition:width .3s}"
+        ".st{margin-top:8px;font-size:.85em;min-height:1.2em}"
+        ".warn{color:#f59e0b;font-weight:600;margin-top:8px;display:none}"
+        ".lk{display:inline-block;padding:14px 20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);"
         "color:#fff;text-decoration:none;border-radius:10px;font-weight:600;text-align:center;width:100%;margin-top:8px}"
-        ".link:hover{opacity:.9}"
-        "</style></head><body><div class='container'>"
+        ".lk:hover{opacity:.9}"
+        "</style></head><body><div class='ct'>"
         "<h1>Firmware Update</h1>"
-        "<p class='subtitle'>ESP8266 Safe Update Mode</p>"
-        "<div class='card'><h2>Version Info</h2>"
-        "<p class='version'>Current version: <b>");
+        "<p class='sub'>ESP8266 Safe Update Mode</p>"
+        "<div class='cd'><h2>Version Info</h2>"
+        "<p class='ver'>Current version: <b>");
     p += FIRMWARE_VERSION;
     p += F("</b></p>"
-        "<a class='link' href='" GITHUB_RELEASES_URL "' target='_blank'>View Releases on GitHub</a></div>"
-        "<div class='card'><h2>Upload Firmware</h2>"
-        "<form method='POST' action='/update' enctype='multipart/form-data'>"
-        "<input type='file' name='firmware' accept='.bin' required>"
-        "<button type='submit'>Upload Firmware</button></form></div>"
-        "<div class='card'><h2>Upload Web Interface</h2>"
-        "<form method='POST' action='/update-fs' enctype='multipart/form-data'>"
-        "<input type='file' name='filesystem' accept='.bin' required>"
-        "<button type='submit'>Upload Filesystem</button></form></div>"
-        "<a class='link' href='/restart' style='background:#374151;margin-top:8px'>Exit Safe Mode & Restart</a>"
-        "</div></body></html>");
+        "<a class='lk' href='" GITHUB_RELEASES_URL "' target='_blank'>View Releases on GitHub</a></div>"
+        "<div class='cd'><h2>Upload Firmware</h2>"
+        "<input type='file' id='fw-file' accept='.bin'>"
+        "<button id='fw-btn' onclick='upload(\"fw\")'>Upload Firmware</button>"
+        "<div class='pb' id='fw-pb'><div class='pf' id='fw-pf'></div></div>"
+        "<div class='st' id='fw-st'></div>"
+        "<div class='warn' id='fw-warn'>Do not interrupt!</div></div>"
+        "<div class='cd'><h2>Upload Web Interface</h2>"
+        "<input type='file' id='fs-file' accept='.bin'>"
+        "<button id='fs-btn' onclick='upload(\"fs\")'>Upload Filesystem</button>"
+        "<div class='pb' id='fs-pb'><div class='pf' id='fs-pf'></div></div>"
+        "<div class='st' id='fs-st'></div>"
+        "<div class='warn' id='fs-warn'>Do not interrupt!</div></div>"
+        "<a class='lk' href='/restart' style='background:#374151;margin-top:8px'>Exit Safe Mode & Restart</a>"
+        "</div><script>"
+        "function upload(t){"
+        "var f=document.getElementById(t+'-file').files[0];"
+        "if(!f){alert('Select a .bin file first');return;}"
+        "var url=t==='fw'?'/update':'/update-fs';"
+        "var btn=document.getElementById(t+'-btn');"
+        "var pb=document.getElementById(t+'-pb');"
+        "var pf=document.getElementById(t+'-pf');"
+        "var st=document.getElementById(t+'-st');"
+        "var wn=document.getElementById(t+'-warn');"
+        "btn.disabled=true;pb.style.display='block';wn.style.display='block';"
+        "st.textContent='Uploading...';st.className='st';"
+        "var fd=new FormData();fd.append('file',f,f.name);"
+        "var xhr=new XMLHttpRequest();"
+        "xhr.upload.onprogress=function(e){"
+        "if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);"
+        "pf.style.width=p+'%';st.textContent='Uploading: '+p+'%';}};"
+        "xhr.onload=function(){"
+        "wn.style.display='none';"
+        "if(xhr.status===200){st.textContent='Success! Restarting...';st.className='st ok';"
+        "pf.style.width='100%';setTimeout(function(){location.href='/';},10000);}"
+        "else{st.textContent='Failed: '+xhr.responseText;st.className='st err';btn.disabled=false;}};"
+        "xhr.onerror=function(){wn.style.display='none';"
+        "st.textContent='Connection error';st.className='st err';btn.disabled=false;};"
+        "xhr.open('POST',url);xhr.send(fd);}"
+        "</script></body></html>");
     return p;
 }
-
-const char SYNC_OTA_SUCCESS[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Update Success</title>
-    <style>
-        body{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;color:#fff;display:flex;align-items:center;justify-content:center}
-        .msg{text-align:center;padding:40px}
-        h1{color:#22c55e;margin-bottom:20px}
-    </style>
-</head>
-<body>
-    <div class="msg">
-        <h1>Update Successful!</h1>
-        <p>Device is restarting...</p>
-        <p style="color:#888;margin-top:20px">You will be redirected in 10 seconds.</p>
-    </div>
-    <script>setTimeout(()=>location.href='/',10000);</script>
-</body>
-</html>
-)rawliteral";
-
-// Minimal error page - no template replacement needed to save RAM
-const char SYNC_OTA_FAIL[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Update Failed</title>
-    <style>
-        body{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;color:#fff;display:flex;align-items:center;justify-content:center}
-        .msg{text-align:center;padding:40px}
-        h1{color:#ef4444;margin-bottom:20px}
-        a{color:#6366f1}
-    </style>
-</head>
-<body>
-    <div class="msg">
-        <h1>Update Failed</h1>
-        <p>Check serial monitor for details</p>
-        <p style="margin-top:20px"><a href="/">Try again</a></p>
-    </div>
-</body>
-</html>
-)rawliteral";
 
 // Run the synchronous OTA server (blocking - takes over from main loop)
 void runSyncOTAServer() {
@@ -177,9 +161,9 @@ void runSyncOTAServer() {
     syncServer.on("/update", HTTP_POST, [&syncServer]() {
         if (Update.hasError()) {
             Serial.printf("[OTA-SYNC] Firmware update error: %s\n", Update.getErrorString().c_str());
-            syncServer.send_P(200, "text/html", SYNC_OTA_FAIL);  // Send from PROGMEM, no RAM copy
+            syncServer.send(500, "text/plain", Update.getErrorString());
         } else {
-            syncServer.send_P(200, "text/html", SYNC_OTA_SUCCESS);
+            syncServer.send(200, "text/plain", F("OK"));
             delay(1000);
             ESP.restart();
         }
@@ -210,9 +194,9 @@ void runSyncOTAServer() {
     syncServer.on("/update-fs", HTTP_POST, [&syncServer]() {
         if (Update.hasError()) {
             Serial.printf("[OTA-SYNC] Filesystem update error: %s\n", Update.getErrorString().c_str());
-            syncServer.send_P(200, "text/html", SYNC_OTA_FAIL);  // Send from PROGMEM, no RAM copy
+            syncServer.send(500, "text/plain", Update.getErrorString());
         } else {
-            syncServer.send_P(200, "text/html", SYNC_OTA_SUCCESS);
+            syncServer.send(200, "text/plain", F("OK"));
             delay(1000);
             ESP.restart();
         }

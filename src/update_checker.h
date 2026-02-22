@@ -66,7 +66,6 @@ private:
     // Actual HTTP check (blocking, called from loop)
     void performCheck();
     bool fetchGitHubRelease();
-    bool parseReleaseJson(const char* json, size_t length);
     int compareVersions(const char* v1, const char* v2);
 
     #ifndef PLATFORM_ESP8266

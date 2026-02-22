@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.5-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.6-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -16,7 +16,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
 
 > **Community tested!** Both ESP8266 (Rituals Genie V1/V2) and ESP32 versions are actively used by the community. Found an issue? [Report it here](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
-> **ESP8266 Stability Notice:** v1.9.5 includes major heap fragmentation fixes for ESP8266. NFC scent detection should now be stable. If you still experience crashes, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as a fallback without NFC. ESP32/ESP32-C3 users have no limitations.
+> **ESP8266 Update Fix:** v1.9.6 fixes firmware version not appearing in Home Assistant on ESP8266 ([#7](https://github.com/martijnrenkema/Rituals-diffuser/issues/7), [#8](https://github.com/martijnrenkema/Rituals-diffuser/issues/8)). Update checker now uses stream parsing instead of loading the full GitHub API response into memory. If you still experience crashes, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as a fallback without NFC.
 
 ## Features
 
@@ -506,34 +506,29 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.9.6
+**ESP8266 Update Checker & OTA Improvements** - Firmware version now reliably appears in Home Assistant on ESP8266. Update UI enabled on all platforms. OTA upload page shows real-time progress.
+
+**Stream-based Update Checker:**
+- Replaced `getString()` with direct JSON stream parsing (`deserializeJson` from HTTP stream)
+- Avoids allocating ~10KB GitHub API response as String - critical for ESP8266 low-heap situations
+- Increased BearSSL rx buffer from 512 to 1024 bytes for more reliable TLS
+- Added `HTTP/1.0` mode to force Content-Length headers (no chunked transfer)
+
+**Update UI on ESP8266:**
+- Update section now visible on ESP8266 web interface (was hidden)
+- Added extra polling timeouts (10s, 15s) for slower BearSSL HTTPS checks
+- Dynamic release URL from API response
+- Added `release_url` and `error` fields to main `/api/status` endpoint
+
+**OTA Upload Progress:**
+- Sync OTA page now uses XHR-based uploads with real-time progress bars
+- Button disables during upload with "Do not interrupt!" warning
+- Success/failure shown inline (no page reload)
+- Removed PROGMEM success/fail HTML pages (saves flash)
+
 ### v1.9.5
 **ESP8266 Stability Overhaul** - Major heap fragmentation fixes addressing crash reports ([#8](https://github.com/martijnrenkema/Rituals-diffuser/issues/8), [#3](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)). Thanks to [@FredericMa](https://github.com/FredericMa) for [PR #9](https://github.com/martijnrenkema/Rituals-diffuser/pull/9).
-
-**MQTT Heap Fragmentation Fix (Critical):**
-- Replaced all Arduino `String` concatenation in MQTT handler with `snprintf` and static buffers
-- All 14 Home Assistant discovery entities now use shared `char[768]` buffer instead of heap-allocated Strings
-- State publishing, availability, and subscribe topics all converted to zero-allocation
-- Eliminates ~70+ temporary String allocations per MQTT publish cycle
-
-**NFC/RFID Improvements:**
-- Reduced `PCD_Init()` frequency: only re-initializes after 3 consecutive failures instead of every second
-- Converted scent lookup from String objects to `strstr` with char arrays (zero heap allocation)
-- Fixed duplicate scent hex code for "Cotton Blossom" / "Black Oudh"
-- Added null-check for MFRC522 allocation failure
-
-**Boot & Connectivity Fixes:**
-- Fixed OTA and NTP not initializing when WiFi auto-reconnects before callback registration
-- Enabled update checker on ESP8266 with heap guards (was disabled since v1.8.0)
-- Update checker now rejects oversized and chunked HTTP responses on ESP8266
-- Fixed GPIO16 `INPUT_PULLUP` on ESP8266 (GPIO16 only supports `INPUT`)
-
-**Other Fixes:**
-- Logger returns minimal JSON when heap < 6KB instead of allocating large buffer
-- LED controller handles NeoPixelBus allocation failure gracefully
-- WiFi manager converted from String to char arrays (from PR #9)
-- Fan RPM calculation overflow fix for 64-bit intermediate (from PR #9)
-- Web server action processing race condition fix (from PR #9)
-- Frontend `:has()` CSS selector wrapped in try-catch for older browsers
 
 ### v1.9.4
 **ESP8266 Memory Optimization:**
@@ -566,10 +561,5 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ### v1.8.5
 - Fix ESP32-C3 fan PWM/tachometer pin conflicts (moved to ADC1 pins)
-- Arduino-ESP32 v3.x LEDC compatibility
-
-### v1.8.0
-- Full Rituals Genie V1 (ESP8266) support
-- Stable LED status, working web OTA via Safe Update Mode
 
 For older versions, see [GitHub Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases).
