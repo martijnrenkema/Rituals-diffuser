@@ -88,6 +88,7 @@ public:
 
     // Usage statistics
     void addRuntimeMinutes(uint32_t minutes);
+    void flushRuntime();  // Force save pending runtime (call on fan off)
     uint32_t getTotalRuntimeMinutes();
 
     // Night mode
@@ -108,6 +109,7 @@ public:
 private:
     DiffuserSettings _settings;
     bool _loaded = false;
+    uint32_t _pendingRuntimeMinutes = 0;
 
     void ensureDefaults(DiffuserSettings& settings);
     void commit();

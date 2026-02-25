@@ -244,6 +244,8 @@ void FanController::turnOff() {
             _sessionRuntime += minutesSinceLastSave;
         }
     }
+    // Flush any pending runtime to flash (ensures no data loss on ESP8266)
+    storage.flushRuntime();
 
     _isOn = false;
     applyPWM(0);

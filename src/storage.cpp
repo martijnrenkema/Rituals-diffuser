@@ -262,13 +262,33 @@ void Storage::ensureDefaults(DiffuserSettings& settings) {
 // Usage Statistics
 void Storage::addRuntimeMinutes(uint32_t minutes) {
     _settings.totalRuntimeMinutes += minutes;
+    _pendingRuntimeMinutes += minutes;
+
+#ifdef PLATFORM_ESP8266
+    // ESP8266: Batch writes to reduce flash wear (~100K cycle limit)
+    // Only commit to EEPROM every 6 hours or when flushRuntime() is called (fan off)
+    if (_pendingRuntimeMinutes >= 360) {
+        commit();
+        _pendingRuntimeMinutes = 0;
+        Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", _settings.totalRuntimeMinutes);
+    }
+#else
+    // ESP32: NVS has wear leveling, safe to write more often
+    prefs.putULong(NVS_TOTAL_RUNTIME, _settings.totalRuntimeMinutes);
+    _pendingRuntimeMinutes = 0;
+    Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", _settings.totalRuntimeMinutes);
+#endif
+}
+
+void Storage::flushRuntime() {
+    if (_pendingRuntimeMinutes == 0) return;
 #ifdef PLATFORM_ESP8266
     commit();
 #else
-    // ESP32: Save directly to NVS
     prefs.putULong(NVS_TOTAL_RUNTIME, _settings.totalRuntimeMinutes);
 #endif
-    Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", _settings.totalRuntimeMinutes);
+    Serial.printf("[STORAGE] Runtime flushed: %lu minutes\n", _settings.totalRuntimeMinutes);
+    _pendingRuntimeMinutes = 0;
 }
 
 uint32_t Storage::getTotalRuntimeMinutes() {
