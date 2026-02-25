@@ -2,25 +2,29 @@
 #include "config.h"
 #include "storage.h"
 
-#ifdef PLATFORM_ESP8266
-    #include <ArduinoOTA.h>
-#else
-    #include <ArduinoOTA.h>
-#endif
-
 OTAHandler otaHandler;
+
+#ifdef PLATFORM_ESP8266
+
+// ESP8266: ArduinoOTA disabled to save RAM (~1KB+)
+// Use web-based Safe Update mode instead (sync_ota.cpp)
+void OTAHandler::begin() {}
+void OTAHandler::loop() {}
+void OTAHandler::onProgress(OTACallback callback) { _progressCallback = callback; }
+void OTAHandler::onStart(void (*callback)()) { _startCallback = callback; }
+void OTAHandler::onEnd(void (*callback)()) { _endCallback = callback; }
+
+#else
+
+#include <ArduinoOTA.h>
 
 void OTAHandler::begin() {
     ArduinoOTA.setHostname(OTA_HOSTNAME);
-    ArduinoOTA.setPassword(storage.getOTAPassword());  // Use stored or default password
+    ArduinoOTA.setPassword(storage.getOTAPassword());
 
     ArduinoOTA.onStart([this]() {
         String type;
-#ifdef PLATFORM_ESP8266
         if (ArduinoOTA.getCommand() == U_FLASH) {
-#else
-        if (ArduinoOTA.getCommand() == U_FLASH) {
-#endif
             type = "firmware";
         } else {
             type = "filesystem";
@@ -77,3 +81,5 @@ void OTAHandler::onStart(void (*callback)()) {
 void OTAHandler::onEnd(void (*callback)()) {
     _endCallback = callback;
 }
+
+#endif

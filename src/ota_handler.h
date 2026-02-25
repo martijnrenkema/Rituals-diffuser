@@ -2,6 +2,7 @@
 #define OTA_HANDLER_H
 
 #include <Arduino.h>
+#include "config.h"
 
 class OTAHandler {
 public:
