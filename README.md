@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.6-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.7-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -16,7 +16,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
 
 > **Community tested!** Both ESP8266 (Rituals Genie V1/V2) and ESP32 versions are actively used by the community. Found an issue? [Report it here](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
-> **ESP8266 Update Fix:** v1.9.6 fixes firmware version not appearing in Home Assistant on ESP8266 ([#7](https://github.com/martijnrenkema/Rituals-diffuser/issues/7), [#8](https://github.com/martijnrenkema/Rituals-diffuser/issues/8)). Update checker now uses stream parsing instead of loading the full GitHub API response into memory. If you still experience crashes, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as a fallback without NFC.
+> **ESP8266 Note:** Versions v1.9.x include experimental features like NFC scent detection and various memory optimizations. If you experience stability issues on ESP8266, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as the recommended stable version.
 
 ## Features
 
@@ -505,6 +505,11 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.9.7
+**ESP8266 RAM Optimization:**
+- Disabled ArduinoOTA background service on ESP8266 to free RAM - use web-based Safe Update mode instead
+- ESP32 and ESP32-C3 retain ArduinoOTA (plenty of RAM available)
 
 ### v1.9.6
 **ESP8266 Update Checker & OTA Improvements** - Firmware version now reliably appears in Home Assistant on ESP8266. Update UI enabled on all platforms. OTA upload page shows real-time progress.
