@@ -14,6 +14,14 @@ void WiFiManager::begin() {
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
 
+#if defined(ESP32)
+    // Maximize WiFi range: set TX power to maximum (20.5 dBm)
+    WiFi.setTxPower(WIFI_POWER_20_5dBm);
+    // Disable WiFi power saving for more stable connection
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    Serial.println("[WIFI] TX power set to max, power saving disabled");
+#endif
+
     // Check if WiFi is already connected (can happen after OTA update/restart
     // when SDK auto-reconnects faster than our state machine)
     if (WiFi.status() == WL_CONNECTED) {

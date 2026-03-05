@@ -9,6 +9,7 @@
     #include <ESP8266WiFi.h>
 #else
     #include <WiFi.h>
+    #include <esp_wifi.h>
 #endif
 
 enum class WifiStatus {
