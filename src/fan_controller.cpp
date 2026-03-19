@@ -196,6 +196,12 @@ void FanController::setSpeed(uint8_t percent) {
     // Cancel soft start if active - direct speed change
     _softStartTime = 0;
 
+    // Speed 0 on a running fan = turn off
+    if (percent == 0 && _isOn) {
+        turnOff();
+        return;  // turnOff() calls notifyStateChange()
+    }
+
     if (_isOn) {
         if (_intervalMode && !_intervalCurrentlyOn) {
             // In interval off phase, don't apply yet

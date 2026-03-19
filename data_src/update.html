@@ -309,9 +309,7 @@
                 isESP8266 = d.device?.platform === 'ESP8266';
 
                 if (isESP8266) {
-                    // ESP8266: Direct naar sync OTA mode - geen dubbele pagina's
-                    prepareOTAMode();
-                    return;
+                    document.getElementById('esp8266-info').style.display = 'block';
                 }
             })
             .catch(() => {

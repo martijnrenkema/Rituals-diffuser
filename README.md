@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.7-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.8-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -505,6 +505,16 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.9.8
+**Audit Fixes:**
+- Fix MQTT speed/interval persistence: changes via Home Assistant now survive reboot
+- Fix fan speed=0 invalid state: setting speed to 0 now correctly turns off the fan instead of leaving it "on" at 0%
+- Fix update checker error state: error messages now stay visible until next check instead of being instantly cleared
+- Fix OTA auto-prepare on page load: visiting /update.html no longer triggers safe mode automatically on ESP8266
+- Remove broken `esp32c3_rfid_scan` build environment (referenced non-existent source file)
+- Remove unused FastLED dependency from ESP8266 environments (ESP8266 uses NeoPixelBus)
+- Fix ESP32 build error: invalid WiFi TX power constant (WIFI_POWER_20_5dBm → WIFI_POWER_19_5dBm)
 
 ### v1.9.7
 **ESP8266 RAM Optimization:**

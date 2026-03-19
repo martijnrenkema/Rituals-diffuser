@@ -414,6 +414,7 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         bool isValidNumber = (speed > 0) || (p == "0");
         if (isValidNumber) {
             fanController.setSpeed(speed);
+            storage.setFanSpeed(speed);
             if (speed > 0 && !fanController.isOn()) {
                 fanController.turnOn();
             }
@@ -437,7 +438,9 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         updateLedStatus();
     } else if (t.endsWith("/interval/set")) {
         // Interval mode switch
-        fanController.setIntervalMode(p == "ON");
+        bool interval = (p == "ON");
+        fanController.setIntervalMode(interval);
+        storage.setIntervalMode(interval, fanController.getIntervalOnTime(), fanController.getIntervalOffTime());
         updateLedStatus();
     } else if (t.endsWith("/interval_on/set")) {
         // Interval on time - validate input

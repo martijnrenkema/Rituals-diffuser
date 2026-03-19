@@ -25,6 +25,7 @@ Firmware version now reliably appears in Home Assistant on ESP8266. Update UI en
 |----------|-----|-------|
 | ESP8266 | 78.5% | 74.3% |
 | ESP32 | 21.6% | 71.5% |
+| ESP32-C3 | 19.2% | 68.1% |
 
 ## Binaries
 | File | Platform | Flash Address |
@@ -33,3 +34,5 @@ Firmware version now reliably appears in Home Assistant on ESP8266. Update UI en
 | `littlefs_esp8266.bin` | ESP8266 | `0x1E0000` |
 | `firmware_esp32.bin` | ESP32 | `0x10000` |
 | `spiffs_esp32.bin` | ESP32 | `0x3D0000` |
+| `firmware_esp32c3.bin` | ESP32-C3 SuperMini | `0x10000` |
+| `spiffs_esp32c3.bin` | ESP32-C3 SuperMini | `0x3D0000` |

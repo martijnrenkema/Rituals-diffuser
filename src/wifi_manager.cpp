@@ -15,8 +15,8 @@ void WiFiManager::begin() {
     WiFi.setAutoReconnect(true);
 
 #if defined(ESP32)
-    // Maximize WiFi range: set TX power to maximum (20.5 dBm)
-    WiFi.setTxPower(WIFI_POWER_20_5dBm);
+    // Maximize WiFi range: set TX power to maximum (19.5 dBm)
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
     // Disable WiFi power saving for more stable connection
     esp_wifi_set_ps(WIFI_PS_NONE);
     Serial.println("[WIFI] TX power set to max, power saving disabled");

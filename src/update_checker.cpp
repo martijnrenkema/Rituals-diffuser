@@ -87,9 +87,12 @@ void UpdateChecker::loop() {
 }
 
 void UpdateChecker::checkForUpdates() {
-    if (_state != UpdateCheckState::IDLE) {
+    if (_state == UpdateCheckState::CHECKING || _state == UpdateCheckState::DOWNLOADING) {
         logger.warn("Update check already in progress");
         return;
+    }
+    if (_state == UpdateCheckState::ERROR) {
+        _state = UpdateCheckState::IDLE;
     }
     _checkRequested = true;
 }
@@ -99,7 +102,6 @@ void UpdateChecker::performCheck() {
         strlcpy(_info.errorMessage, "WiFi not connected", sizeof(_info.errorMessage));
         _state = UpdateCheckState::ERROR;
         if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
         return;
     }
 
@@ -114,7 +116,6 @@ void UpdateChecker::performCheck() {
         logger.warnf("Update check skipped: only %lu bytes free", freeHeap);
         _state = UpdateCheckState::ERROR;
         if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
         return;
     }
 #endif
@@ -132,14 +133,14 @@ void UpdateChecker::performCheck() {
         } else {
             logger.info("Firmware is up to date");
         }
+        _state = UpdateCheckState::IDLE;
+        if (_stateCallback) _stateCallback();
     } else {
         logger.warnf("Update check failed: %s", _info.errorMessage);
         _state = UpdateCheckState::ERROR;
         if (_stateCallback) _stateCallback();
+        // Stay in ERROR until next manual check
     }
-
-    _state = UpdateCheckState::IDLE;
-    if (_stateCallback) _stateCallback();
 }
 
 bool UpdateChecker::fetchGitHubRelease() {
