@@ -16,6 +16,7 @@ Bug fixes identified during firmware audit. Improves MQTT persistence, fan state
 |----------|-----|-------|
 | ESP8266 | 77.8% | 71.8% |
 | ESP32 | 21.6% | 71.6% |
+| ESP32-C3 | 19.2% | 68.1% |
 
 ## Binaries
 
@@ -25,3 +26,5 @@ Bug fixes identified during firmware audit. Improves MQTT persistence, fan state
 | `littlefs_esp8266.bin` | ESP8266 | `0x1E0000` |
 | `firmware_esp32.bin` | ESP32 | `0x10000` |
 | `spiffs_esp32.bin` | ESP32 | `0x3D0000` |
+| `firmware_esp32c3.bin` | ESP32-C3 SuperMini | `0x10000` |
+| `spiffs_esp32c3.bin` | ESP32-C3 SuperMini | `0x3D0000` |
