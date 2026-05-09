@@ -191,7 +191,6 @@ void FanController::loop() {
 void FanController::setSpeed(uint8_t percent) {
     if (percent > 100) percent = 100;
     _speed = percent;
-    _targetSpeed = percent;
 
     // Cancel soft start if active - direct speed change
     _softStartTime = 0;

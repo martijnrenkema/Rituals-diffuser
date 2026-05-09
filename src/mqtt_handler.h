@@ -116,7 +116,6 @@ private:
     void publishCartridgeBinarySensorDiscovery();
 
     String getBaseTopic();
-    String getDeviceJson();
 };
 
 extern MQTTHandler mqttHandler;

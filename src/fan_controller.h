@@ -42,7 +42,6 @@ public:
 
 private:
     uint8_t _speed = 0;
-    uint8_t _targetSpeed = 0;
     bool _isOn = false;
 
     // Timer (using start+duration for millis() overflow safety)

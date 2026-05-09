@@ -80,7 +80,7 @@ private:
     void addEntry(LogLevel level, const char* message);
     const char* levelToString(LogLevel level);
     void loadFromFile();
-    void saveToFile();
+    bool saveToFile();
 };
 
 // Global instance

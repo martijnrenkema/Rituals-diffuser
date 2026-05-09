@@ -5,7 +5,6 @@
 #include "storage.h"
 #include "logger.h"
 #include "update_checker.h"
-#include <ArduinoJson.h>
 
 // RFID support for all platforms with RC522_ENABLED
 #if defined(RC522_ENABLED)
@@ -481,19 +480,6 @@ void MQTTHandler::onCommand(CommandCallback callback) {
 String MQTTHandler::getBaseTopic() {
     // Include device ID for unique topics when multiple diffusers are present
     return String(MQTT_TOPIC_PREFIX) + "_" + _deviceId;
-}
-
-String MQTTHandler::getDeviceJson() {
-    StaticJsonDocument<512> device;
-    device["identifiers"][0] = "rituals_diffuser_" + _deviceId;
-    device["name"] = "Rituals Diffuser";
-    device["model"] = "Perfume Genie 2.0";
-    device["manufacturer"] = "Rituals (Custom FW)";
-    device["sw_version"] = FIRMWARE_VERSION;
-
-    String output;
-    serializeJson(device, output);
-    return output;
 }
 
 void MQTTHandler::publishDiscovery() {

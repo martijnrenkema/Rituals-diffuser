@@ -68,7 +68,6 @@ private:
 #else
     // FastLED for ESP32
     CRGB _leds[NUM_LEDS];
-    CRGB _lastShownColor = CRGB::Black;
 #endif
 
     void updateLed();

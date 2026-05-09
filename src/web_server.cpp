@@ -46,10 +46,6 @@ void stopAsyncWebServer() {
     #define UPDATE_ERROR_STRING() Update.errorString()
 #endif
 
-// Track upload progress
-static size_t updateContentLength = 0;
-static bool updateIsFS = false;
-
 WebServer webServer;
 
 void WebServer::begin() {
@@ -296,7 +292,6 @@ void WebServer::setupRoutes() {
                 Serial.printf("[OTA] Firmware update start: %s\n", filename.c_str());
                 otaInProgress = true;
                 updateLedStatus();
-                updateContentLength = request->contentLength();
 
                 // Stop non-essential services to free memory
                 mqttHandler.disconnect();

@@ -102,11 +102,11 @@ void Logger::loadFromFile() {
     Serial.printf("[LOGGER] Loaded %d logs from file\n", loaded);
 }
 
-void Logger::saveToFile() {
+bool Logger::saveToFile() {
     File file = FILESYSTEM.open(LOG_FILE_PATH, "w");
     if (!file) {
         Serial.println("[LOGGER] Failed to open log file for writing");
-        return;
+        return false;
     }
 
     // Write header
@@ -129,13 +129,18 @@ void Logger::saveToFile() {
     _lastSave = millis();
 
     Serial.printf("[LOGGER] Saved %d logs to file\n", _count);
+    return true;
 }
 
 void Logger::save() {
-    // Save if urgent, or if dirty and enough time has passed
+    // Save if urgent, or if dirty and enough time has passed.
+    // Only clear the urgent flag when the write actually succeeded - otherwise
+    // a transient FS failure would silently downgrade an ERROR/WARN log to
+    // "wait for the next 60s tick" and could lose it entirely.
     if (_dirty && (_urgentSave || (millis() - _lastSave >= LOG_SAVE_INTERVAL_MS))) {
-        saveToFile();
-        _urgentSave = false;
+        if (saveToFile()) {
+            _urgentSave = false;
+        }
     }
 }
 
