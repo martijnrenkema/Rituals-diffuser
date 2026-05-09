@@ -54,10 +54,17 @@ void UpdateChecker::loop() {
         bool shouldAutoCheck = false;
 
 #ifdef PLATFORM_ESP8266
-        // ESP8266: Only check ONCE, 15 seconds after boot
-        // This runs before MQTT is fully connected, when more heap is available
-        // Skip periodic checks - not enough RAM for BearSSL TLS after everything starts
+        // ESP8266: First check 15 seconds after boot, when more heap is available
+        // (before MQTT/web fully started). On failure, retry once per hour - we cannot
+        // afford a tight retry loop because BearSSL needs ~15KB free heap for TLS.
+        // Skip periodic checks once successful: not enough RAM for repeated TLS handshakes.
+        const unsigned long ESP8266_RETRY_INTERVAL = 3600000UL;  // 1 hour
         if (_lastAutoCheck == 0 && (now - _bootTime >= 15000)) {
+            shouldAutoCheck = true;
+        } else if (_lastAutoCheck > 0 &&
+                   _info.lastCheckTime == 0 &&
+                   (now - _lastAutoCheck >= ESP8266_RETRY_INTERVAL)) {
+            // Previous attempt failed (no successful check recorded) - retry
             shouldAutoCheck = true;
         }
 #else

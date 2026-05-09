@@ -69,7 +69,12 @@ void MQTTHandler::loop() {
                 snprintf(base, sizeof(base), "%s_%s", MQTT_TOPIC_PREFIX, _deviceId.c_str());
                 snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/availability", base);
 
-                if (_mqttClient.connect(clientId.c_str(), _user.c_str(), _password.c_str(),
+                // Pass nullptr for empty credentials so PubSubClient omits the
+                // username/password flags entirely (required by brokers that enforce
+                // anonymous-only access).
+                const char* user = _user.length() > 0 ? _user.c_str() : nullptr;
+                const char* pass = _password.length() > 0 ? _password.c_str() : nullptr;
+                if (_mqttClient.connect(clientId.c_str(), user, pass,
                                         _mqttTopic, 0, true, "offline")) {
                     Serial.println("[MQTT] Connected");
                     logger.infof("MQTT connected to %s:%d", _host.c_str(), _port);
@@ -804,6 +809,7 @@ void MQTTHandler::removeDiscovery() {
     const char* pre = MQTT_DISCOVERY_PREFIX;
 
     // Remove all discovery configs by publishing empty payload
+    // Must mirror every entity published in processPublishStateMachine() DISC_* states
     const char* suffixes[] = {
         "fan/rd_%s/config",
         "switch/rd_%s_int/config",
@@ -812,6 +818,10 @@ void MQTTHandler::removeDiscovery() {
         "sensor/rd_%s_rem/config",
         "sensor/rd_%s_rpm/config",
         "sensor/rd_%s_wifi/config",
+        "sensor/rd_%s_trun/config",
+        "binary_sensor/rd_%s_upd/config",
+        "sensor/rd_%s_latver/config",
+        "sensor/rd_%s_curver/config",
         "sensor/rd_%s_scent/config",
         "binary_sensor/rd_%s_cartridge/config"
     };
