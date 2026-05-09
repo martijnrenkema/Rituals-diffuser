@@ -254,52 +254,34 @@ const char* Logger::levelToString(LogLevel level) {
     }
 }
 
-String Logger::toJson() {
-#ifdef PLATFORM_ESP8266
-    // On ESP8266, check heap before allocating large buffer
-    // 20 entries * 120 bytes ~= 2.4KB + overhead
-    uint32_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < 6000) {
-        return F("[{\"l\":\"WARN\",\"m\":\"Low memory, logs unavailable\",\"u\":0,\"e\":0}]");
-    }
-#endif
-
-    // Pre-allocate to avoid heap fragmentation from repeated concatenation
-    // Each entry: ~80 bytes JSON overhead + message (max 64 chars) + escaping = ~160 bytes max
-    // Reserve enough for all entries plus array brackets
-    String json;
-    json.reserve(_count * 160 + 2);
-
-    json = "[";
+void Logger::streamJson(Print& out) {
+    out.print('[');
 
     for (uint16_t i = 0; i < _count; i++) {
         const LogEntry* entry = getEntry(i);
         if (!entry) continue;
 
-        if (i > 0) json += ',';
+        if (i > 0) out.print(',');
 
-        // Build entry JSON - use char for single characters to avoid String temporaries
-        json += "{\"u\":";
-        json += String(entry->uptimeMs);
-        json += ",\"e\":";
-        json += String((unsigned long)entry->epochTime);
-        json += ",\"l\":\"";
-        json += levelToString(entry->level);
-        json += "\",\"m\":\"";
+        // printf-style write avoids the temporary String allocations the old
+        // toJson() did per entry. AsyncResponseStream chunks this out as it goes.
+        out.printf("{\"u\":%lu,\"e\":%lu,\"l\":\"%s\",\"m\":\"",
+                   entry->uptimeMs,
+                   (unsigned long)entry->epochTime,
+                   levelToString(entry->level));
 
-        // Escape quotes and backslashes in message
+        // Escape quotes, backslashes, and newlines in the message
         for (const char* p = entry->message; *p; p++) {
             char c = *p;
-            if (c == '"') json += "\\\"";
-            else if (c == '\\') json += "\\\\";
-            else if (c == '\n') json += "\\n";
-            else if (c == '\r') json += "\\r";
-            else json += c;  // Single char, not string
+            if (c == '"')       out.print("\\\"");
+            else if (c == '\\') out.print("\\\\");
+            else if (c == '\n') out.print("\\n");
+            else if (c == '\r') out.print("\\r");
+            else                out.write(c);
         }
 
-        json += "\"}";
+        out.print("\"}");
     }
 
-    json += ']';
-    return json;
+    out.print(']');
 }

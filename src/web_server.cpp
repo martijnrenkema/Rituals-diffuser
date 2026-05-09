@@ -198,9 +198,12 @@ void WebServer::setupRoutes() {
         handleSaveNightMode(request);
     });
 
-    // System logs
+    // System logs - stream JSON directly into the response so we never hold the
+    // full payload in heap (critical on ESP8266 with limited RAM).
     _server->on("/api/logs", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "application/json", logger.toJson());
+        AsyncResponseStream* response = request->beginResponseStream("application/json");
+        logger.streamJson(*response);
+        request->send(response);
     });
 
     _server->on("/api/logs", HTTP_DELETE, [](AsyncWebServerRequest* request) {
@@ -299,7 +302,12 @@ void WebServer::setupRoutes() {
                 mqttHandler.disconnect();
 
                 #ifdef PLATFORM_ESP8266
-                if (!Update.begin(updateContentLength, U_FLASH)) {
+                // request->contentLength() includes multipart overhead and may not equal
+                // the actual firmware size. Use the maximum sketch space (matches the
+                // sync OTA path in sync_ota.cpp) so Update.begin() always sees a valid
+                // upper bound regardless of the multipart envelope.
+                uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+                if (!Update.begin(maxSketchSpace, U_FLASH)) {
                 #else
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
                 #endif

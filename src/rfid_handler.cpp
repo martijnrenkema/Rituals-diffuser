@@ -502,14 +502,20 @@ ScentInfo rfidLookupScent(const String& hexData) {
         if (*p >= 'a' && *p <= 'f') *p -= 32;
     }
 
-    // Search for hex codes in the tag data
+    // Search for hex codes in the tag data. Continue searching after the first
+    // hit so we can warn when a tag matches multiple table entries with
+    // *different* scent names (would indicate an ambiguous/incorrect entry).
     for (int i = 0; scentTable[i].uid != nullptr; i++) {
-        // Table entries are already uppercase, direct strstr comparison
         if (strstr(data, scentTable[i].uid) != nullptr) {
-            info.name = String(scentTable[i].name);
-            info.valid = true;
-            Serial.printf("[RFID] Found hex pattern: %s\n", scentTable[i].uid);
-            break;
+            if (!info.valid) {
+                info.name = String(scentTable[i].name);
+                info.valid = true;
+                Serial.printf("[RFID] Found hex pattern: %s -> %s\n",
+                              scentTable[i].uid, scentTable[i].name);
+            } else if (strcmp(info.name.c_str(), scentTable[i].name) != 0) {
+                Serial.printf("[RFID] WARNING: ambiguous match - %s also matches %s\n",
+                              scentTable[i].uid, scentTable[i].name);
+            }
         }
     }
 

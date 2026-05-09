@@ -57,8 +57,11 @@ public:
     // Clear all logs
     void clear();
 
-    // Get JSON representation of all logs
-    String toJson();
+    // Stream JSON representation of all logs to an arbitrary Print sink.
+    // Preferred over building the entire JSON in heap on ESP8266: an
+    // AsyncResponseStream can be passed here directly so the response is
+    // chunked out without ever holding the full payload in RAM.
+    void streamJson(Print& out);
 
     // Save logs to SPIFFS (called periodically)
     void save();
