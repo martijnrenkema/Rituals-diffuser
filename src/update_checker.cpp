@@ -58,13 +58,15 @@ void UpdateChecker::loop() {
         // (before MQTT/web fully started). On failure, retry once per hour - we cannot
         // afford a tight retry loop because BearSSL needs ~15KB free heap for TLS.
         // Skip periodic checks once successful: not enough RAM for repeated TLS handshakes.
+        // Note: we use _hasSucceededOnce instead of comparing _info.lastCheckTime to 0,
+        // because millis() can wrap around to 0 after ~49.7 days of uptime.
         const unsigned long ESP8266_RETRY_INTERVAL = 3600000UL;  // 1 hour
         if (_lastAutoCheck == 0 && (now - _bootTime >= 15000)) {
             shouldAutoCheck = true;
         } else if (_lastAutoCheck > 0 &&
-                   _info.lastCheckTime == 0 &&
+                   !_hasSucceededOnce &&
                    (now - _lastAutoCheck >= ESP8266_RETRY_INTERVAL)) {
-            // Previous attempt failed (no successful check recorded) - retry
+            // Previous attempt failed - retry
             shouldAutoCheck = true;
         }
 #else
@@ -135,6 +137,7 @@ void UpdateChecker::performCheck() {
 
     if (fetchGitHubRelease()) {
         _info.lastCheckTime = millis();
+        _hasSucceededOnce = true;
         if (_info.available) {
             logger.infof("Update available: v%s", _info.latestVersion);
         } else {

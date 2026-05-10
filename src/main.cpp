@@ -66,26 +66,37 @@ uint8_t getCurrentHour() {
     return timeinfo->tm_hour;
 }
 
-// Check and apply night mode
-void checkNightMode() {
-    if (!storage.isNightModeEnabled()) return;
+// Check and apply night mode.
+// Set force=true after settings are saved so brightness changes take effect
+// immediately even when the day/night state itself hasn't transitioned.
+void checkNightMode(bool force) {
+    static bool wasNight = false;
+    static bool initialized = false;
+
+    if (!storage.isNightModeEnabled()) {
+        // Disabled: restore full brightness if we were previously dimming
+        if (force || (initialized && wasNight)) {
+            ledController.setBrightness(100);
+            wasNight = false;
+            initialized = true;
+        }
+        return;
+    }
 
     uint8_t hour = getCurrentHour();
     if (hour == 255) return;  // Time not available
 
     bool isNight = storage.isNightModeActive(hour);
-    static bool wasNight = false;
-    static bool initialized = false;
 
-    // On first call after NTP sync, always apply the correct brightness
-    if (!initialized || isNight != wasNight) {
+    if (force || !initialized || isNight != wasNight) {
         initialized = true;
         if (isNight) {
             ledController.setBrightness(storage.getNightModeBrightness());
-            Serial.printf("[MAIN] Night mode activated (hour=%d)\n", hour);
+            Serial.printf("[MAIN] Night mode brightness applied (hour=%d, %d%%)\n",
+                          hour, storage.getNightModeBrightness());
         } else {
             ledController.setBrightness(100);
-            Serial.printf("[MAIN] Night mode deactivated (hour=%d)\n", hour);
+            Serial.printf("[MAIN] Night mode inactive, full brightness (hour=%d)\n", hour);
         }
         wasNight = isNight;
     }
@@ -377,7 +388,7 @@ void loop() {
     // Periodic tasks every minute
     unsigned long now = millis();
     if (now - lastNightModeCheck >= 60000) {
-        checkNightMode();
+        checkNightMode(false);
         lastNightModeCheck = now;
 
         // Save logs periodically (only writes if dirty)

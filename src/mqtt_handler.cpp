@@ -451,16 +451,19 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         int newOnTime = p.toInt();
         if (newOnTime > 0) {
             fanController.setIntervalTimes(newOnTime, fanController.getIntervalOffTime());
-            // Persist to storage so settings survive reboot
-            storage.setIntervalMode(fanController.isIntervalMode(), newOnTime, fanController.getIntervalOffTime());
+            // Persist clamped values (raw int would silently wrap when cast to uint8_t)
+            storage.setIntervalMode(fanController.isIntervalMode(),
+                                    fanController.getIntervalOnTime(),
+                                    fanController.getIntervalOffTime());
         }
     } else if (t.endsWith("/interval_off/set")) {
         // Interval off time - validate input
         int newOffTime = p.toInt();
         if (newOffTime > 0) {
             fanController.setIntervalTimes(fanController.getIntervalOnTime(), newOffTime);
-            // Persist to storage so settings survive reboot
-            storage.setIntervalMode(fanController.isIntervalMode(), fanController.getIntervalOnTime(), newOffTime);
+            storage.setIntervalMode(fanController.isIntervalMode(),
+                                    fanController.getIntervalOnTime(),
+                                    fanController.getIntervalOffTime());
         }
     }
 

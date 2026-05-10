@@ -133,14 +133,25 @@ bool Logger::saveToFile() {
 }
 
 void Logger::save() {
-    // Save if urgent, or if dirty and enough time has passed.
-    // Only clear the urgent flag when the write actually succeeded - otherwise
-    // a transient FS failure would silently downgrade an ERROR/WARN log to
-    // "wait for the next 60s tick" and could lose it entirely.
-    if (_dirty && (_urgentSave || (millis() - _lastSave >= LOG_SAVE_INTERVAL_MS))) {
-        if (saveToFile()) {
-            _urgentSave = false;
-        }
+    if (!_dirty) return;
+
+    unsigned long now = millis();
+    bool dueByUrgent = _urgentSave;
+    bool dueByTime = (now - _lastSave) >= LOG_SAVE_INTERVAL_MS;
+    if (!dueByUrgent && !dueByTime) return;
+
+    // If the previous attempt failed, back off for a full save interval before
+    // hammering the filesystem again. Without this an urgent flag combined with
+    // a stuck FS would call saveToFile() on every loop iteration.
+    if (_lastFailureTime != 0 && (now - _lastFailureTime) < LOG_SAVE_INTERVAL_MS) {
+        return;
+    }
+
+    if (saveToFile()) {
+        _urgentSave = false;
+        _lastFailureTime = 0;
+    } else {
+        _lastFailureTime = now;
     }
 }
 

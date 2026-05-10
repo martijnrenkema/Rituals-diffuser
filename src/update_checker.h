@@ -62,6 +62,7 @@ private:
     unsigned long _lastAutoCheck = 0;
     unsigned long _bootTime = 0;  // Stored at begin() for overflow-safe timing
     bool _checkRequested = false;
+    bool _hasSucceededOnce = false; // Prevents ESP8266 retry once we got a real result
 
     // Actual HTTP check (blocking, called from loop)
     void performCheck();

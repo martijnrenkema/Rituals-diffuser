@@ -17,6 +17,7 @@
 
 // External function and flag from main.cpp for LED priority system
 extern void updateLedStatus();
+extern void checkNightMode(bool force);
 extern bool otaInProgress;
 
 #ifdef PLATFORM_ESP8266
@@ -767,9 +768,13 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
         if (validOn && validOff) {
             int onTime = onStr.toInt();
             int offTime = offStr.toInt();
-            // FanController::setIntervalTimes already constrains to INTERVAL_MIN/MAX
+            // FanController::setIntervalTimes already constrains to INTERVAL_MIN/MAX.
+            // Read the clamped values back so out-of-range input doesn't get truncated
+            // to garbage by the implicit int -> uint8_t cast on Storage::setIntervalMode.
             fanController.setIntervalTimes(onTime, offTime);
-            storage.setIntervalMode(fanController.isIntervalMode(), onTime, offTime);
+            storage.setIntervalMode(fanController.isIntervalMode(),
+                                    fanController.getIntervalOnTime(),
+                                    fanController.getIntervalOffTime());
         }
     }
 
@@ -885,6 +890,11 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
     }
 
     storage.setNightMode(enabled, start, end, brightness);
+
+    // Apply the change immediately. Without this, a brightness tweak made
+    // *during* an active night-mode period would not take effect until the
+    // next day/night transition (checkNightMode() is edge-triggered).
+    checkNightMode(true);
 
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Night mode settings saved\"}");
 }

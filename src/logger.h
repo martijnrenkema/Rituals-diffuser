@@ -76,6 +76,7 @@ private:
     bool _dirty = false;     // True if logs changed since last save
     bool _urgentSave = false; // True if ERROR/WARN needs immediate save
     unsigned long _lastSave = 0;
+    unsigned long _lastFailureTime = 0; // Throttles retries when the FS write keeps failing
 
     void addEntry(LogLevel level, const char* message);
     const char* levelToString(LogLevel level);
