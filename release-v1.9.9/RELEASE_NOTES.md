@@ -1,45 +1,20 @@
 # v1.9.9 - Stability & Cleanup
 
-Multi-pass code review fixes. Focus on MQTT correctness, heap stability on ESP8266, fan safety during calibration, and clearer status reporting. No new features.
+Bug fixes and cleanup pass over v1.9.8. No new features.
 
 ## Changes
 
-### MQTT
-- **`removeDiscovery()` complete**: now publishes empty payloads for all 13 entities (was missing `total_runtime`, `update_available`, `latest_version`, `current_version`). Home Assistant no longer keeps orphan entities after factory reset.
-- **Anonymous broker support**: passes `nullptr` for empty user/password instead of empty strings. Brokers that enforce anonymous access (e.g. `allow_anonymous true` with ACLs) now connect.
-- **Scent publish heap-allocation removed**: added `rfidGetLastScentCStr()` so the periodic STATE_SCENT publish no longer creates a temporary String every 30 s.
-- **Interval times clamped before storage**: out-of-range MQTT input like `interval_on/set = 5000` no longer wraps to a garbage `uint8_t` value in NVS/EEPROM.
-
-### Logger
-- **`/api/logs` streams JSON** instead of building a ~3 KB String in heap first. Stream buffer pre-allocates 4 KB on ESP8266 to avoid mid-response reallocs.
-- **Failed save retries are throttled** to one attempt per save interval. Previously a stuck filesystem with an urgent flag would call `saveToFile()` every loop iteration.
-- **Urgent flag survives a failed save**: a transient FS error no longer silently downgrades an ERROR/WARN entry.
-
-### Update checker
-- **ESP8266 retries once per hour** after a failed first check. Previously `_lastAutoCheck` was set before the check, so a failed first attempt blocked all subsequent auto-checks until reboot.
-- **Wraparound-proof success flag**: `_hasSucceededOnce` boolean replaces the `_info.lastCheckTime == 0` check, which could false-positive after ~49.7 days of uptime when `millis()` wraps.
-- **Low-heap floor raised to 18 KB** to account for BearSSL (~12-15 KB) plus the 1.5 KB JSON doc and HTTP buffers (~2 KB). Was 15 KB - the bare minimum for BearSSL alone.
-
-### Web server
-- **ESP8266 firmware OTA uses `maxSketchSpace`** instead of `request->contentLength()`, matching the sync OTA path. Multipart-aware contentLength could exceed the actual firmware size and cause Update.begin to fail.
-- **`/api/status` document bumped to 1536 bytes on ESP32**. Long `releaseUrl` + `errorMessage` + scent name combined could push past 1408 and yield an empty 500 response.
-
-### Fan controller
-- **Calibration fencing**: `setSpeed()`, `turnOn()`, and `turnOff()` are now ignored while auto-calibration is in progress. A concurrent UI/MQTT command no longer races the calibration ramp.
-
-### RFID
-- **Unknown cartridges report "Unknown cartridge"** instead of leaking the raw page-4 ASCII interpretation (which was usually mostly dots, e.g. `Unknown: ..6`). Hex/ASCII dump kept in serial log for debugging.
-- **Ambiguous hex matches logged**: the scent lookup now warns when a tag matches multiple table entries with different scent names, helping surface accidental collisions.
-
-### Main / LED
-- **Night mode brightness change applies immediately**: UI tweaks during an active night-mode period no longer have to wait for the next day/night transition. `checkNightMode()` accepts a force flag.
-- **Fan state-change callback uses `requestStatePublish()`** instead of `publishState()` directly, going through the same MQTT synchronisation entry point as the rest of the code.
-- **LedController guards against re-init leak**: deletes the existing NeoPixelBus instance before allocating a new one.
-
-### Cleanup
-- Dead fields removed: `_targetSpeed`, `_lastShownColor`, `updateContentLength`, `updateIsFS`.
-- Unused `getDeviceJson()` and its ArduinoJson include removed from `mqtt_handler.cpp`.
-- `Logger::saveToFile()` now returns bool.
+- **MQTT discovery cleanup:** `removeDiscovery()` now wipes all 13 entities. Home Assistant no longer keeps orphaned entries (`total_runtime`, `update_available`, `latest_version`, `current_version` were missing before).
+- **Anonymous MQTT brokers:** passes `nullptr` for empty user/password so brokers that enforce anonymous-only access can connect.
+- **Update checker retries on ESP8266:** if the first check fails, retries once per hour instead of staying stuck until reboot. Low-heap floor raised to 18 KB.
+- **ESP8266 OTA upload size fix:** uses `maxSketchSpace` instead of multipart `contentLength`, so `Update.begin` no longer fails on slightly oversized requests.
+- **Logger streams to /api/logs** instead of building the full JSON in heap first. Saves ~3 KB on ESP8266.
+- **Logger save retry throttled** to one save-interval after a failed write. A stuck filesystem no longer hammers `saveToFile()` on every loop.
+- **Fan calibration race fix:** speed/on/off commands during auto-calibration are now ignored.
+- **Interval times clamped before storage:** out-of-range MQTT input (e.g. `interval_on/set = 5000`) no longer wraps to a garbage value in NVS.
+- **Night mode brightness applies immediately:** changing brightness during an active night-mode period no longer waits for the next day/night transition.
+- **RFID:** unknown cartridges show "Unknown cartridge" instead of leaking raw page-4 bytes. Ambiguous hex matches logged with a warning.
+- **Cleanup:** removed dead fields, unused OTA upload-tracking variables, and the unused `getDeviceJson()` helper.
 
 ## Resource Usage
 
@@ -48,8 +23,6 @@ Multi-pass code review fixes. Focus on MQTT correctness, heap stability on ESP82
 | ESP8266 | ~77% | ~71% |
 | ESP32 | ~22% | ~71% |
 | ESP32-C3 | ~19% | ~68% |
-
-(Approximate - confirm after building locally.)
 
 ## Binaries
 
@@ -61,3 +34,5 @@ Multi-pass code review fixes. Focus on MQTT correctness, heap stability on ESP82
 | `spiffs_esp32.bin` | ESP32 | `0x3D0000` |
 | `firmware_esp32c3.bin` | ESP32-C3 SuperMini | `0x10000` |
 | `spiffs_esp32c3.bin` | ESP32-C3 SuperMini | `0x3D0000` |
+
+> **You must flash TWO files:** firmware + filesystem. See [Installation guide](https://github.com/martijnrenkema/Rituals-diffuser#installation) for details.

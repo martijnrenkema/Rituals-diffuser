@@ -507,15 +507,14 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 ## Changelog
 
 ### v1.9.9
-**Stability & cleanup pass:**
-- MQTT: `removeDiscovery()` now covers all 13 entities (Home Assistant no longer leaves orphans). Anonymous brokers work again (nullptr instead of empty user/pass). Scent publish no longer allocates a String per call.
-- Logger: `toJson()` replaced by streaming `streamJson()` for `/api/logs` (no more ~3 KB heap spike on ESP8266). Save retries throttled to one save-interval after a write failure, and urgent flag survives a failed save.
-- Update checker: ESP8266 retries once per hour after a failed first check (no more "stuck error" until reboot). Low-heap floor raised to 18 KB. Wraparound-proof success flag.
-- Web server: ESP8266 OTA upload uses `maxSketchSpace` (matches sync path) so multipart-aware contentLength no longer trips Update.begin. /api/logs response pre-allocates 4096-byte stream. ESP32 status doc bumped to 1536.
-- Fan: refuses speed/on/off commands while auto-calibration is in progress. Interval times now clamped before they hit storage (no more uint8 wrap).
-- RFID: unknown cartridges report "Unknown cartridge" (was leaking raw page-4 ASCII like `..6`). Ambiguous hex matches logged with warning.
-- Night mode: brightness change in UI is applied immediately, no longer waits for next day/night transition.
-- Misc: dead variables removed (`_targetSpeed`, `_lastShownColor`, `updateContentLength`, `getDeviceJson()`). LedController guards against re-init leak.
+**Stability & Cleanup:**
+- MQTT: `removeDiscovery()` now wipes all 13 entities (no more orphans in Home Assistant). Anonymous brokers work again (nullptr instead of empty user/pass).
+- Logger: streams JSON to `/api/logs` instead of buffering (saves ~3 KB heap on ESP8266). Save retries throttled after a failed write.
+- Update checker: ESP8266 retries once per hour after a failed first check. Low-heap floor raised to 18 KB.
+- ESP8266 OTA upload uses `maxSketchSpace` so Update.begin no longer fails on slightly oversized multipart requests.
+- Fan: rejects speed/on/off commands during auto-calibration. Interval times clamped before storage (no more uint8 wrap).
+- RFID: unknown cartridges show "Unknown cartridge" instead of raw bytes. Ambiguous hex matches logged.
+- Night mode brightness changes apply immediately, no longer wait for the next day/night transition.
 
 ### v1.9.8
 **Audit Fixes:**
@@ -555,37 +554,5 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ### v1.9.5
 **ESP8266 Stability Overhaul** - Major heap fragmentation fixes addressing crash reports ([#8](https://github.com/martijnrenkema/Rituals-diffuser/issues/8), [#3](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)). Thanks to [@FredericMa](https://github.com/FredericMa) for [PR #9](https://github.com/martijnrenkema/Rituals-diffuser/pull/9).
-
-### v1.9.4
-**ESP8266 Memory Optimization:**
-- New `/api/status/lite` polling endpoint (stack-based, no heap allocation)
-- Gzip compressed web interface (62KB → 15KB, 76% reduction)
-- Input validation for WiFi/MQTT credentials and fan control parameters
-- RFID memory leak fix on re-initialization
-
-### v1.9.3
-**ESP8266 Stability Hotfix:**
-- Heap protection: handlers return HTTP 503 when free heap < 8KB
-- Reduced diagnostic polling frequency (500ms → 2000ms)
-
-### v1.9.2
-**Scent Recognition Fix:**
-- Fix capitalized scent codes (e.g., "Jin" vs "jin") - fixes [#7](https://github.com/martijnrenkema/Rituals-diffuser/issues/7)
-- Improved RC522 detection with hardware reset and version register debugging
-
-### v1.9.1
-**Critical Bug Fixes:**
-- Fix ESP8266 button pin mapping (GPIO14/13 → GPIO16/3)
-- Fix ESP32-C3 and ESP8266 RC522 RST pin conflicts
-
-### v1.9.0
-> ⚠️ **Do not use**: Pin mapping bugs. Use v1.9.1+.
-
-- NFC scent cartridge detection via RC522
-- MQTT sensors for scent and cartridge status
-- Multi-platform NFC support (ESP8266, ESP32, ESP32-C3)
-
-### v1.8.5
-- Fix ESP32-C3 fan PWM/tachometer pin conflicts (moved to ADC1 pins)
 
 For older versions, see [GitHub Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases).
