@@ -6,7 +6,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
   <img src="docs/images/web-interface.png" alt="Web Interface" width="250"/>
 </p>
 
-![Version](https://img.shields.io/badge/Version-1.9.8-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.9.9-brightgreen)
 ![ESP32](https://img.shields.io/badge/ESP32-Tested-blue)
 ![ESP32-C3](https://img.shields.io/badge/ESP32--C3-Supported-blue)
 ![ESP8266](https://img.shields.io/badge/ESP8266-Tested-blue)
@@ -505,6 +505,17 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v1.9.9
+**Stability & cleanup pass:**
+- MQTT: `removeDiscovery()` now covers all 13 entities (Home Assistant no longer leaves orphans). Anonymous brokers work again (nullptr instead of empty user/pass). Scent publish no longer allocates a String per call.
+- Logger: `toJson()` replaced by streaming `streamJson()` for `/api/logs` (no more ~3 KB heap spike on ESP8266). Save retries throttled to one save-interval after a write failure, and urgent flag survives a failed save.
+- Update checker: ESP8266 retries once per hour after a failed first check (no more "stuck error" until reboot). Low-heap floor raised to 18 KB. Wraparound-proof success flag.
+- Web server: ESP8266 OTA upload uses `maxSketchSpace` (matches sync path) so multipart-aware contentLength no longer trips Update.begin. /api/logs response pre-allocates 4096-byte stream. ESP32 status doc bumped to 1536.
+- Fan: refuses speed/on/off commands while auto-calibration is in progress. Interval times now clamped before they hit storage (no more uint8 wrap).
+- RFID: unknown cartridges report "Unknown cartridge" (was leaking raw page-4 ASCII like `..6`). Ambiguous hex matches logged with warning.
+- Night mode: brightness change in UI is applied immediately, no longer waits for next day/night transition.
+- Misc: dead variables removed (`_targetSpeed`, `_lastShownColor`, `updateContentLength`, `getDeviceJson()`). LedController guards against re-init leak.
 
 ### v1.9.8
 **Audit Fixes:**
