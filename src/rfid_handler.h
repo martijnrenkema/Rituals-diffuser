@@ -29,6 +29,10 @@ String rfidGetLastScent();
 // (no heap allocation). Use this in hot paths like the MQTT state publisher.
 const char* rfidGetLastScentCStr();
 
+// Raw page-4 hex of the last scanned cartridge (8 hex chars). Useful to identify
+// unknown cartridges so a new entry can be added to the scent table.
+const char* rfidGetLastScentCode();
+
 // Is er recent een tag gedetecteerd?
 bool rfidHasTag();
 

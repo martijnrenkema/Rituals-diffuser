@@ -127,6 +127,11 @@ static const ScentEntry scentTable[] = {
     {"546561", "Private Collection Royal Tea"},           // "Tea" ASCII uppercase
     {"047275", "Private Collection Royal Tea"},           // Officieel
 
+    // ============ YOZAKURA ============
+    {"796F7A", "The Ritual of Yozakura"},        // "yoz" ASCII lowercase (speculative)
+    {"596F7A", "The Ritual of Yozakura"},        // "Yoz" ASCII uppercase (speculative)
+    {"02D63620", "The Ritual of Yozakura"},      // Page-4 hex observed on real cartridge
+
     // ============ JING NIGHT ============
     {"6E6967", "The Ritual of Jing Night"},      // "nig" ASCII lowercase
     {"4E6967", "The Ritual of Jing Night"},      // "Nig" ASCII uppercase
@@ -477,6 +482,10 @@ String rfidGetLastScent() {
 
 const char* rfidGetLastScentCStr() {
     return lastScent;
+}
+
+const char* rfidGetLastScentCode() {
+    return lastScentCode;
 }
 
 bool rfidHasTag() {

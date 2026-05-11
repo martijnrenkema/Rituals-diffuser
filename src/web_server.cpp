@@ -558,6 +558,9 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["rfid"]["cartridge_present"] = rfidIsCartridgePresent();  // Is cartridge NOW present?
     doc["rfid"]["last_uid"] = rfidGetLastUID();
     doc["rfid"]["last_scent"] = rfidGetLastScent();
+    #ifndef PLATFORM_ESP8266
+    doc["rfid"]["last_scent_code"] = rfidGetLastScentCode();
+    #endif
     doc["rfid"]["time_since_tag"] = rfidTimeSinceLastTag();
     // Debug info: version register (0x91/0x92/0x88 = valid, 0x00/0xFF = no communication)
     char versionHex[5];
