@@ -189,6 +189,14 @@ void FanController::loop() {
 }
 
 void FanController::setSpeed(uint8_t percent) {
+    // Block external speed changes while auto-calibration owns the PWM output -
+    // otherwise the loop's calibration ramp races against applyPWM() here and
+    // leaves _isOn/_currentPWM in inconsistent state.
+    if (_calibrating) {
+        Serial.println("[FAN] setSpeed ignored: calibration in progress");
+        return;
+    }
+
     if (percent > 100) percent = 100;
     _speed = percent;
 
@@ -216,6 +224,10 @@ uint8_t FanController::getSpeed() {
 }
 
 void FanController::turnOn() {
+    if (_calibrating) {
+        Serial.println("[FAN] turnOn ignored: calibration in progress");
+        return;
+    }
     if (!_isOn || _speed == 0) {
         _isOn = true;
         if (_speed == 0) _speed = 50; // Default to 50% if not set
@@ -241,6 +253,11 @@ void FanController::turnOn() {
 }
 
 void FanController::turnOff() {
+    if (_calibrating) {
+        Serial.println("[FAN] turnOff ignored: calibration in progress");
+        return;
+    }
+
     // Save remaining runtime since last periodic save (avoid double counting)
     if (_isOn && _lastRuntimeSave > 0) {
         uint32_t minutesSinceLastSave = (millis() - _lastRuntimeSave) / 60000;

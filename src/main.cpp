@@ -177,8 +177,11 @@ void onWiFiStateChange(WifiStatus state) {
 void onFanStateChange(bool on, uint8_t speed) {
     updateLedStatus();
 
-    // Publish state to MQTT
-    mqttHandler.publishState();
+    // Request a state publish instead of calling publishState() directly.
+    // The callback can fire from AsyncTCP (HTTP route) on ESP32, and
+    // requestStatePublish() is the synchronisation entry point used by every
+    // other caller.
+    mqttHandler.requestStatePublish();
 
     // Only save speed if it actually changed (avoid flash wear)
     static uint8_t lastSavedSpeed = 0;

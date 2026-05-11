@@ -25,6 +25,10 @@ String rfidGetLastUID();
 // Haal de laatst gedetecteerde geur op
 String rfidGetLastScent();
 
+// Same as rfidGetLastScent() but returns a const char* into the static buffer
+// (no heap allocation). Use this in hot paths like the MQTT state publisher.
+const char* rfidGetLastScentCStr();
+
 // Is er recent een tag gedetecteerd?
 bool rfidHasTag();
 

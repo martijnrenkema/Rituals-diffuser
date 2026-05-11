@@ -197,8 +197,10 @@ void WebServer::setupRoutes() {
 
     // System logs - stream JSON directly into the response so we never hold the
     // full payload in heap (critical on ESP8266 with limited RAM).
+    // Pre-size the stream buffer to one alloc instead of growing under
+    // backpressure (default ~1460 bytes; full log JSON can reach ~2.4 KB).
     _server->on("/api/logs", HTTP_GET, [](AsyncWebServerRequest* request) {
-        AsyncResponseStream* response = request->beginResponseStream("application/json");
+        AsyncResponseStream* response = request->beginResponseStream("application/json", 4096);
         logger.streamJson(*response);
         request->send(response);
     });
@@ -483,9 +485,15 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
 
     const DiffuserSettings& settings = storage.getSettings();  // Use cache, no NVS read
 
-    // Use DynamicJsonDocument to avoid stack overflow on ESP8266 (limited 4KB stack)
-    // Size increased to 1408 to include RFID data + update release_url/error
-    DynamicJsonDocument doc(1408);  // Heap allocation, includes update + RFID info
+    // Use DynamicJsonDocument to avoid stack overflow on ESP8266 (limited 4KB stack).
+    // ESP32 gets a larger doc because long releaseUrl + errorMessage + lastScent
+    // can occasionally push past 1408; ESP8266 keeps the smaller budget with the
+    // low-heap 503 guard above as a safety net.
+#ifdef PLATFORM_ESP8266
+    DynamicJsonDocument doc(1408);
+#else
+    DynamicJsonDocument doc(1536);
+#endif
 
     // WiFi status
     doc["wifi"]["connected"] = wifiManager.isConnected();

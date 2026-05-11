@@ -119,8 +119,9 @@ void UpdateChecker::performCheck() {
     uint32_t freeHeap = ESP.getFreeHeap();
     logger.infof("Free heap for update check: %lu bytes", freeHeap);
 
-    // Need ~15KB minimum for BearSSL
-    if (freeHeap < 15000) {
+    // BearSSL needs ~12-15KB, plus the 1.5KB JSON doc and HTTP buffers (~2KB),
+    // so 18KB is a more realistic floor than 15KB.
+    if (freeHeap < 18000) {
         snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Low memory (%lu bytes)", freeHeap);
         logger.warnf("Update check skipped: only %lu bytes free", freeHeap);
         _state = UpdateCheckState::ERROR;

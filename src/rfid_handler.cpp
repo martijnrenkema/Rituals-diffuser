@@ -475,6 +475,10 @@ String rfidGetLastScent() {
     return String(lastScent);
 }
 
+const char* rfidGetLastScentCStr() {
+    return lastScent;
+}
+
 bool rfidHasTag() {
     // Retourneert true als er OOIT een tag was
     return hasValidTag;

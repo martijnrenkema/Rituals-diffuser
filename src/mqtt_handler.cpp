@@ -334,13 +334,15 @@ void MQTTHandler::processPublishStateMachine() {
         case MqttPublishState::STATE_SCENT:
             #if defined(RC522_ENABLED)
             {
-                // Publish scent name
-                String scent = rfidIsCartridgePresent() ? rfidGetLastScent() : "No cartridge";
+                // Publish scent name. Avoid String alloc by using the cstr getter -
+                // this state runs every 30s plus on every requestStatePublish(),
+                // so the heap churn was visible on ESP8266.
+                bool hasCartridge = rfidIsCartridgePresent();
+                const char* scent = hasCartridge ? rfidGetLastScentCStr() : "No cartridge";
                 snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/scent", base);
-                _mqttClient.publish(_mqttTopic, scent.c_str(), true);
-                // Publish cartridge present state
+                _mqttClient.publish(_mqttTopic, scent, true);
                 snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/cartridge_present", base);
-                _mqttClient.publish(_mqttTopic, rfidIsCartridgePresent() ? "ON" : "OFF", true);
+                _mqttClient.publish(_mqttTopic, hasCartridge ? "ON" : "OFF", true);
             }
             #endif
             _publishState = MqttPublishState::STATE_DONE;
