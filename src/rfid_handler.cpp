@@ -361,8 +361,12 @@ void rfidLoop() {
             lastScent[sizeof(lastScent) - 1] = '\0';
             Serial.printf("[RFID] Matched scent: %s\n", lastScent);
         } else {
-            snprintf(lastScent, sizeof(lastScent), "Unknown: %s", page4Ascii);
-            Serial.printf("[RFID] Unknown scent\n");
+            // Don't leak the raw byte interpretation into the UI/MQTT - the
+            // page4 ASCII is usually mostly dots (non-printable) and reads like
+            // garbage. Keep the hex/ASCII in the serial log for debugging only.
+            strncpy(lastScent, "Unknown cartridge", sizeof(lastScent) - 1);
+            lastScent[sizeof(lastScent) - 1] = '\0';
+            Serial.printf("[RFID] Unknown scent - hex: %s, ASCII: %s\n", page4Hex, page4Ascii);
         }
     } else {
         Serial.printf("[RFID] Read failed: %d\n", status);
@@ -446,9 +450,12 @@ void rfidLoop() {
         lastScent[sizeof(lastScent) - 1] = '\0';
         Serial.printf("[RFID] Matched scent: %s\n", lastScent);
     } else {
-        // Show ASCII interpretation if no match
-        snprintf(lastScent, sizeof(lastScent), "Unknown: %s", page4Ascii.c_str());
-        Serial.printf("[RFID] Unknown scent - hex: %s, ascii: %s\n", page4Hex.c_str(), page4Ascii.c_str());
+        // Don't leak the raw byte interpretation - page 4 ASCII is usually
+        // dots (non-printable) and reads like garbage in the UI/MQTT.
+        strncpy(lastScent, "Unknown cartridge", sizeof(lastScent) - 1);
+        lastScent[sizeof(lastScent) - 1] = '\0';
+        Serial.printf("[RFID] Unknown scent - hex: %s, ascii: %s\n",
+                      page4Hex.c_str(), page4Ascii.c_str());
     }
 #endif
 
