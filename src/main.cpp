@@ -25,9 +25,6 @@
 #include "rfid_handler.h"
 #endif
 
-// Global settings
-DiffuserSettings settings;
-
 // Time sync
 bool timeConfigured = false;
 unsigned long lastNightModeCheck = 0;
@@ -261,7 +258,8 @@ void setup() {
 
     // Initialize components
     storage.begin();  // Loads settings internally
-    settings = storage.getSettings();  // Get cached settings (no double load)
+    // Reference the cached settings instead of a global copy (saves ~470B RAM)
+    const DiffuserSettings& settings = storage.getSettings();
 
     ledController.begin();
     ledController.showError();  // Red during startup

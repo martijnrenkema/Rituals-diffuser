@@ -84,6 +84,10 @@ private:
     String _deviceId;
 
     unsigned long _lastReconnect = 0;
+    // Backoff for failed broker connects: starts at MQTT_RECONNECT_INTERVAL,
+    // doubles per failure up to 60s. connect() blocks ~3s per attempt, so
+    // retrying every 5s forever would stall the main loop 60% of the time.
+    unsigned long _reconnectInterval = 5000;
     unsigned long _lastStatePublish = 0;
     unsigned long _lastPublishStep = 0;
     bool _discoveryPublished = false;

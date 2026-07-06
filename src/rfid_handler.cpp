@@ -26,15 +26,18 @@ static bool cartridgePresent = false;
 // Scan interval: check elke 1000ms of cartridge nog aanwezig is
 #define SCAN_INTERVAL_MS 1000
 
+#if ENABLE_SCENT
 // Geurtabel - officieel gedeeld
+// Stored in PROGMEM: fixed-size entries so the whole table (incl. strings)
+// lives in flash instead of DRAM (~2KB saved on ESP8266).
 struct ScentEntry {
-    const char* uid;      // UID prefix (eerste 4 bytes als hex)
-    const char* name;
+    char uid[9];       // UID prefix als hex (max 8 chars + null)
+    char name[38];     // Geurnaam (langste is 35 chars + null)
 };
 
 // Geurtabel met hex codes - zowel 3-letter ASCII als officiële codes
 // Elke geur heeft lowercase, uppercase (capitalized) en officiële hex varianten
-static const ScentEntry scentTable[] = {
+static const ScentEntry scentTable[] PROGMEM = {
     // ============ KARMA ============
     {"6B6172", "The Ritual of Karma"},           // "kar" ASCII lowercase
     {"4B6172", "The Ritual of Karma"},           // "Kar" ASCII uppercase
@@ -139,9 +142,9 @@ static const ScentEntry scentTable[] = {
 
     // ============ INVALID ============
     {"013A0C", "Cartridge tag invalid"},         // Officieel
-
-    {nullptr, nullptr}  // End marker
 };
+#define SCENT_TABLE_COUNT (sizeof(scentTable) / sizeof(scentTable[0]))
+#endif // ENABLE_SCENT
 
 bool rfidInit() {
     Serial.println("[RFID] Initializing RC522...");
@@ -522,22 +525,27 @@ ScentInfo rfidLookupScent(const String& hexData) {
         if (*p >= 'a' && *p <= 'f') *p -= 32;
     }
 
+#if ENABLE_SCENT
     // Search for hex codes in the tag data. Continue searching after the first
     // hit so we can warn when a tag matches multiple table entries with
     // *different* scent names (would indicate an ambiguous/incorrect entry).
-    for (int i = 0; scentTable[i].uid != nullptr; i++) {
-        if (strstr(data, scentTable[i].uid) != nullptr) {
+    // Table lives in PROGMEM - copy each entry to stack before comparing.
+    for (size_t i = 0; i < SCENT_TABLE_COUNT; i++) {
+        ScentEntry entry;
+        memcpy_P(&entry, &scentTable[i], sizeof(entry));
+        if (strstr(data, entry.uid) != nullptr) {
             if (!info.valid) {
-                info.name = String(scentTable[i].name);
+                info.name = String(entry.name);
                 info.valid = true;
                 Serial.printf("[RFID] Found hex pattern: %s -> %s\n",
-                              scentTable[i].uid, scentTable[i].name);
-            } else if (strcmp(info.name.c_str(), scentTable[i].name) != 0) {
+                              entry.uid, entry.name);
+            } else if (strcmp(info.name.c_str(), entry.name) != 0) {
                 Serial.printf("[RFID] WARNING: ambiguous match - %s also matches %s\n",
-                              scentTable[i].uid, scentTable[i].name);
+                              entry.uid, entry.name);
             }
         }
     }
+#endif // ENABLE_SCENT
 
     return info;
 }

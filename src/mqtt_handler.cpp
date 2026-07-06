@@ -57,7 +57,7 @@ void MQTTHandler::begin() {
 void MQTTHandler::loop() {
     if (!_mqttClient.connected()) {
         unsigned long now = millis();
-        if (now - _lastReconnect >= MQTT_RECONNECT_INTERVAL) {
+        if (now - _lastReconnect >= _reconnectInterval) {
             _lastReconnect = now;
             if (_host.length() > 0 && wifiManager.isConnected()) {
                 Serial.println("[MQTT] Attempting connection...");
@@ -75,6 +75,7 @@ void MQTTHandler::loop() {
                 const char* pass = _password.length() > 0 ? _password.c_str() : nullptr;
                 if (_mqttClient.connect(clientId.c_str(), user, pass,
                                         _mqttTopic, 0, true, "offline")) {
+                    _reconnectInterval = MQTT_RECONNECT_INTERVAL;
                     Serial.println("[MQTT] Connected");
                     logger.infof("MQTT connected to %s:%d", _host.c_str(), _port);
 
@@ -103,6 +104,8 @@ void MQTTHandler::loop() {
                 } else {
                     Serial.printf("[MQTT] Connection failed, rc=%d\n", _mqttClient.state());
                     logger.errorf("MQTT connection failed (rc=%d)", _mqttClient.state());
+                    // Back off so a dead broker doesn't stall the loop every 5s
+                    if (_reconnectInterval < 60000UL) _reconnectInterval *= 2;
                 }
             }
         }
@@ -370,6 +373,7 @@ void MQTTHandler::connect(const char* host, uint16_t port, const char* user, con
     _mqttClient.setServer(host, port);
     _discoveryPublished = false;
     _lastReconnect = 0; // Force immediate connection attempt
+    _reconnectInterval = MQTT_RECONNECT_INTERVAL; // Reset backoff on new config
 
     Serial.printf("[MQTT] Configured: %s:%d\n", host, port);
 }

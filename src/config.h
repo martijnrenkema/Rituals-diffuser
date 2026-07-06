@@ -11,6 +11,27 @@
 #endif
 
 // ===========================================
+// Feature Flags (override via build_flags)
+// ESP8266_LITE=1 disables NFC + scent lookup to free RAM on ESP8266.
+// ENABLE_NFC=0 disables the RC522 RFID reader entirely.
+// ENABLE_SCENT=0 keeps cartridge detection but drops the scent name table.
+// ===========================================
+#if defined(ESP8266_LITE) && ESP8266_LITE
+    #ifndef ENABLE_NFC
+        #define ENABLE_NFC 0
+    #endif
+    #ifndef ENABLE_SCENT
+        #define ENABLE_SCENT 0
+    #endif
+#endif
+#ifndef ENABLE_NFC
+    #define ENABLE_NFC 1
+#endif
+#ifndef ENABLE_SCENT
+    #define ENABLE_SCENT 1
+#endif
+
+// ===========================================
 // Pin Definitions - Rituals Perfume Genie 2.0
 // ===========================================
 #ifdef PLATFORM_ESP8266
@@ -25,7 +46,9 @@
     // RC522 RFID Reader - Native on Rituals Genie board (HSPI)
     // Verified: ESP32-C3 SuperMini uses same PCB traces and works correctly
     // Standard ESP8266 HSPI pinout is correct
-    #define RC522_ENABLED       1
+    #if ENABLE_NFC
+        #define RC522_ENABLED   1
+    #endif
     #define RC522_SCK_PIN       14      // GPIO14 - HSPI_CLK (standard)
     #define RC522_MOSI_PIN      13      // GPIO13 - HSPI_MOSI (standard)
     #define RC522_MISO_PIN      12      // GPIO12 - HSPI_MISO (standard)
@@ -43,7 +66,9 @@
     #define NUM_LEDS            1       // Single WS2812 LED
 
     // RC522 RFID Reader - using original Rituals board HSPI traces
-    #define RC522_ENABLED       1
+    #if ENABLE_NFC
+        #define RC522_ENABLED   1
+    #endif
     #define RC522_SCK_PIN       6       // GPIO6 → ESP8266 GPIO14 pad (HSPI_CLK)
     #define RC522_MOSI_PIN      7       // GPIO7 → ESP8266 GPIO13 pad (HSPI_MOSI)
     #define RC522_MISO_PIN      20      // GPIO20 → ESP8266 GPIO12 pad (HSPI_MISO)
@@ -60,7 +85,9 @@
     #define NUM_LEDS            1       // Single WS2812 LED
 
     // RC522 RFID Reader - VSPI on ESP32 DevKit
-    #define RC522_ENABLED       1
+    #if ENABLE_NFC
+        #define RC522_ENABLED   1
+    #endif
     #define RC522_SCK_PIN       18      // GPIO18 - VSPI_CLK
     #define RC522_MOSI_PIN      23      // GPIO23 - VSPI_MOSI
     #define RC522_MISO_PIN      19      // GPIO19 - VSPI_MISO
@@ -189,7 +216,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.9.9"
+#define FIRMWARE_VERSION        "1.9.10"
 
 // ===========================================
 // Update Checker Settings

@@ -506,6 +506,13 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.9.10
+**ESP8266 RAM & Stability:**
+- Scent table moved to PROGMEM and duplicate settings copy removed: ~2 KB more free RAM on ESP8266 (static RAM 78.2% → 75.7%)
+- New build flags for low-RAM ESP8266 builds: `-DESP8266_LITE=1` (disables NFC + scent lookup, ~4 KB RAM saved), or individually `-DENABLE_NFC=0` / `-DENABLE_SCENT=0`
+- MQTT reconnect backoff: failed broker connects retry at 5s → doubling up to 60s, so an offline broker no longer stalls the main loop (~3s block) every 5 seconds
+- Fix `esp32c3_ota` build environment: missing MFRC522 dependency
+
 ### v1.9.9
 **Stability & Cleanup:**
 - MQTT: `removeDiscovery()` now wipes all 13 entities (no more orphans in Home Assistant). Anonymous brokers work again (nullptr instead of empty user/pass).
