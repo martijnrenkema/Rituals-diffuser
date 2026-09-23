@@ -7,7 +7,10 @@ Bug fixes from a full code review, a safer factory reset on the rear button, and
 - **AP mode via front button stayed open for only a few seconds:** the background WiFi retry fired immediately after a long press and closed the AP again. The retry now waits 5 minutes.
 - **Total runtime double-counted in Home Assistant:** runtime saved every 30 minutes was added a second time. Web UI and MQTT now report the same value.
 - **Wrong handler for `/api/status/lite` and `/api/diagnostic/buttons`:** the web server's prefix matching sent them to `/api/status` and `/api/diagnostic`. Status polling now really uses the light endpoint, and the diagnostics button test works again.
-- **Stuck OTA state:** a failed or interrupted web upload left the LED blinking purple until reboot. Failed uploads are now aborted and cleaned up, and stalled uploads time out after 30 seconds.
+- **Stuck OTA state:** a failed or interrupted web upload left the LED blinking purple until reboot. Failed uploads are now aborted and cleaned up, a dropped connection is detected, and stalled uploads time out after 30 seconds.
+- **ESP32: web upload during another update:** a web upload started while ArduinoOTA or the GitHub updater was running could abort that update from another task. Such uploads are now rejected (409).
+- **ESP8266: crash on direct upload:** `/api/update/firmware` and `/api/update/filesystem` crashed the device when called directly (the updater can't run in the async network context). They now return 400. The web UI already used Safe Update mode, so nothing changes there.
+- **ESP8266 Safe Update mode after an interrupted upload:** every retry failed until the device was power-cycled. The updater is now reset when an upload is aborted.
 - **Filesystem corruption risk during upload:** the filesystem is unmounted and log writes are paused while a filesystem image is uploaded through the web UI.
 - **Night mode brightness 0%:** the LED turned back on at 50% on the next status change. 0% now keeps the LED off at night.
 - **Inconsistent daytime brightness:** the LED ran at 50% without night mode and 100% with night mode enabled. It is now 100% in both cases.
@@ -45,4 +48,8 @@ Bug fixes from a full code review, a safer factory reset on the rear button, and
 | `firmware_esp32c3.bin` | ESP32-C3 SuperMini | `0x10000` |
 | `spiffs_esp32c3.bin` | ESP32-C3 SuperMini | `0x3D0000` |
 
-> Updating the filesystem is optional for this release (only the speed slider debounce changed), but recommended.
+## Notes
+
+- **ESP32 / ESP32-C3 with ArduinoOTA:** if you never set your own OTA password and use `espota.py` or `pio run -t upload` over the network, the password is now `diffuser-ota` (was `ota-` + last 6 hex digits of the MAC address).
+- **Reverse proxy:** if you access the web UI through a reverse proxy that rewrites the `Host` header, settings changes are rejected (403) by the new cross-site check. Direct access by IP or `rituals-diffuser.local` is not affected.
+- Updating the filesystem is optional for this release (only the speed slider debounce changed), but recommended.

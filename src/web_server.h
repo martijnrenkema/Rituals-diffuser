@@ -32,19 +32,24 @@ private:
     #endif
     unsigned long _pendingActionTime = 0;
 
-    // Web OTA upload state (one upload at a time). Written from the upload
-    // handler, acted upon in loop() so MQTT/fan/LED are only touched there.
+    #ifndef PLATFORM_ESP8266
+    // Web OTA upload state (ESP32 only, one upload at a time). Written from
+    // the upload handler, acted upon in loop() so shared state is only
+    // touched there.
     volatile bool _uploadActive = false;
     volatile bool _uploadFailed = false;
+    volatile bool _updateBegun = false;         // Our Update.begin() succeeded and isn't finished
     AsyncWebServerRequest* volatile _uploadRequest = nullptr;  // Request owning the active upload
     volatile bool _uploadIsFilesystem = false;
     volatile bool _uploadStartPending = false;
+    volatile bool _uploadAbortPending = false;
     volatile unsigned long _lastUploadActivity = 0;
 
     void handleUploadChunk(AsyncWebServerRequest* request, bool filesystem, size_t index,
                            uint8_t* data, size_t len, bool final);
     void handleUploadDone(AsyncWebServerRequest* request);
     void abortUpload();
+    #endif
 
     void setupRoutes();
     void handleStatus(AsyncWebServerRequest* request);

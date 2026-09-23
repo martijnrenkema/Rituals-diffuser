@@ -206,6 +206,9 @@ void runSyncOTAServer() {
                 Serial.println("[OTA-SYNC] Upload rejected: cross-site request");
                 return;
             }
+            if (Update.isRunning()) {
+                Update.end();  // Reset leftovers from an earlier failed upload
+            }
             Serial.printf("[OTA-SYNC] Firmware upload start: %s\n", upload.filename.c_str());
             uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
             if (!Update.begin(maxSketchSpace, U_FLASH)) {
@@ -213,6 +216,11 @@ void runSyncOTAServer() {
                 return;
             }
             uploadOk = true;
+        } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            // Browser closed / connection lost: reset the updater so a retry works
+            Serial.println("[OTA-SYNC] Upload aborted");
+            Update.end();
+            uploadOk = false;
         } else if (!uploadOk) {
             return;
         } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -252,6 +260,9 @@ void runSyncOTAServer() {
                 Serial.println("[OTA-SYNC] Upload rejected: cross-site request");
                 return;
             }
+            if (Update.isRunning()) {
+                Update.end();  // Reset leftovers from an earlier failed upload
+            }
             Serial.printf("[OTA-SYNC] Filesystem upload start: %s\n", upload.filename.c_str());
             size_t fsSize = ((size_t)&_FS_end - (size_t)&_FS_start);
             LittleFS.end();  // Unmount filesystem before update
@@ -260,6 +271,11 @@ void runSyncOTAServer() {
                 return;
             }
             uploadOk = true;
+        } else if (upload.status == UPLOAD_FILE_ABORTED) {
+            // Browser closed / connection lost: reset the updater so a retry works
+            Serial.println("[OTA-SYNC] Upload aborted");
+            Update.end();
+            uploadOk = false;
         } else if (!uploadOk) {
             return;
         } else if (upload.status == UPLOAD_FILE_WRITE) {

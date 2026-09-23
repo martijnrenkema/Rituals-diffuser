@@ -516,10 +516,12 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 - Front button AP mode no longer disappears after a few seconds (the background WiFi retry fired immediately and closed the AP)
 - Total runtime no longer double-counted in Home Assistant (web UI and MQTT now show the same value)
 - `/api/status/lite` and `/api/diagnostic/buttons` were answered by the wrong handler (route prefix matching); the diagnostics button test works again and status polling uses the light endpoint
-- Failed or stalled web OTA uploads no longer leave the device stuck in OTA mode (purple LED); uploads time out after 30s of inactivity
+- Failed, interrupted or stalled web OTA uploads no longer leave the device stuck in OTA mode (purple LED), and can no longer interfere with an ArduinoOTA or GitHub update that is already running (ESP32)
+- ESP8266: `/api/update/firmware` and `/api/update/filesystem` crashed the device when called directly (Update can't run in the async context). They now return 400; uploads go through Safe Update mode as before
+- ESP8266 Safe Update mode recovers from an interrupted upload instead of rejecting every retry until power-cycle
 - Filesystem is unmounted and log writes are paused during a web OTA upload, preventing a corrupted filesystem image
 - Night mode brightness 0% now really keeps the LED off, and daytime brightness is the same (100%) whether night mode is enabled or not
-- Default OTA password is `diffuser-ota` again, as documented (was derived from the MAC address)
+- Default OTA password is `diffuser-ota` again, as documented (was derived from the MAC address). ESP32 users who used the old `ota-xxxxxx` default with espota/PlatformIO must switch to `diffuser-ota` (or set their own in the web UI)
 - LED reconnect status updates immediately when WiFi comes back on its own
 - MQTT host/user/password length validation matches the storage size (no silent truncation)
 - "Web interface files missing" page names the correct filesystem image

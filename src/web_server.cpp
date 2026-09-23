@@ -34,15 +34,10 @@ void stopAsyncWebServer() {
 
 #ifdef PLATFORM_ESP8266
     #include <LittleFS.h>
-    #include <Updater.h>
     // Use LittleFS on ESP8266 (same as logger.cpp to avoid mounting two filesystems)
     #define FILESYSTEM LittleFS
-    // ESP8266 Arduino Core 3.x: getErrorString() returns a String
-    #define UPDATE_ERROR_STRING() Update.getErrorString().c_str()
     #define FS_IMAGE_NAME "littlefs_esp8266.bin"
-    // Linker symbols for filesystem size
-    extern "C" uint32_t _FS_start;
-    extern "C" uint32_t _FS_end;
+    // Firmware/filesystem uploads: see sync_ota.cpp (Safe Update mode)
 #else
     #include <SPIFFS.h>
     #include <Update.h>
@@ -127,8 +122,9 @@ void WebServer::loop() {
     // Process deferred actions from async callbacks
     // This prevents blocking the network stack in callbacks
 
+#ifndef PLATFORM_ESP8266
     // Web OTA upload started: free resources and stop the fan (done here
-    // instead of in the upload handler, which runs in the network context)
+    // instead of in the upload handler, which runs in the network task)
     if (_uploadStartPending) {
         _uploadStartPending = false;
         mqttHandler.disconnect();
@@ -137,13 +133,16 @@ void WebServer::loop() {
         logger.info("Web OTA upload started");
     }
 
-    // Upload stalled (client gone, network drop): abort so the device
-    // doesn't stay in OTA state forever
-    if (_uploadActive && millis() - _lastUploadActivity > WEB_UPLOAD_TIMEOUT_MS) {
-        Serial.println("[OTA] Upload timed out - aborting");
+    // Upload failed, client disconnected, or stalled (no data for 30s):
+    // abort so the device doesn't stay in OTA state forever
+    if (_uploadActive && (_uploadAbortPending ||
+                          millis() - _lastUploadActivity > WEB_UPLOAD_TIMEOUT_MS)) {
+        Serial.println("[OTA] Web upload aborted");
+        _uploadAbortPending = false;
         abortUpload();
-        logger.warn("Web OTA upload timed out");
+        logger.warn("Web OTA upload failed or aborted");
     }
+#endif
 
     if (_pendingActionTime == 0) return;
 
@@ -202,20 +201,27 @@ void WebServer::loop() {
     }
 }
 
-// Abort a web OTA upload and restore normal operation
+#ifndef PLATFORM_ESP8266
+// ---------------------------------------------------------------------------
+// Web OTA upload (ESP32/ESP32-C3 only).
+// ESP8266 cannot run Update from the async (SYS) context - Updater yields and
+// panics - so it uses the synchronous Safe Update mode in sync_ota.cpp.
+//
+// The upload handler runs in the AsyncTCP task. It only sets flags; anything
+// that touches shared state (abort, remount, LED, MQTT, fan) runs in loop().
+// ---------------------------------------------------------------------------
+
+// Abort a web OTA upload and restore normal operation. Main loop only.
 void WebServer::abortUpload() {
-#ifdef PLATFORM_ESP8266
-    Update.end();    // Resets the updater when the image is incomplete
-#else
-    Update.abort();
-#endif
+    // Only abort an update we started ourselves - never one owned by
+    // ArduinoOTA or the GitHub updater (would free their buffer mid-write)
+    if (_updateBegun) {
+        Update.abort();
+        _updateBegun = false;
+    }
     if (_uploadIsFilesystem) {
         // Remount without formatting - a half-written image must not be wiped
-#ifdef PLATFORM_ESP8266
-        FILESYSTEM.begin();
-#else
         FILESYSTEM.begin(false);
-#endif
     }
     _uploadActive = false;
     _uploadRequest = nullptr;
@@ -223,52 +229,55 @@ void WebServer::abortUpload() {
     updateLedStatus();
 }
 
-// Upload data handler for firmware and filesystem images
+// Upload data handler for firmware and filesystem images (AsyncTCP task)
 void WebServer::handleUploadChunk(AsyncWebServerRequest* request, bool filesystem, size_t index,
                                   uint8_t* data, size_t len, bool final) {
     if (!index) {
-        // CSRF protection (see isSameOrigin). A second concurrent upload would
-        // corrupt the first one. Rejected requests never become _uploadRequest,
-        // so all their chunks are ignored.
-        if (!isSameOrigin(request) || _uploadActive) {
+        // Reject: cross-site request (see isSameOrigin), another web upload,
+        // or an update already running (ArduinoOTA / GitHub updater).
+        // Rejected requests never become _uploadRequest, so all their chunks
+        // are ignored and handleUploadDone() answers 409.
+        if (!isSameOrigin(request) || _uploadActive || Update.isRunning()) {
             return;
+        }
+
+        // Stop log writes before the filesystem may be unmounted. The lock
+        // guarantees the main loop isn't inside logger.save() right now.
+        {
+            StateLock lock(LOCK_TIMEOUT_MS);
+            if (!lock.locked()) {
+                return;  // Busy - reject rather than race with the main loop
+            }
+            otaInProgress = true;
+            _uploadActive = true;
         }
 
         Serial.printf("[OTA] %s update start\n", filesystem ? "Filesystem" : "Firmware");
         _uploadRequest = request;
         _uploadFailed = false;
+        _updateBegun = false;
         _uploadIsFilesystem = filesystem;
         _lastUploadActivity = millis();
-        {
-            StateLock lock(LOCK_TIMEOUT_MS);
-            otaInProgress = true;     // Also stops log writes to the filesystem
-            _uploadActive = true;
-        }
         _uploadStartPending = true;   // loop(): MQTT off, fan off, LED
 
-        bool began;
+        // Client gone mid-upload: forget the request pointer immediately (the
+        // object is freed, and a new request could get the same address) and
+        // let loop() clean up.
+        request->onDisconnect([this, request]() {
+            if (_uploadRequest == request) {
+                _uploadRequest = nullptr;
+                _uploadAbortPending = true;
+            }
+        });
+
         if (filesystem) {
             // Unmount so nothing writes into the partition being replaced
             FILESYSTEM.end();
-#ifdef PLATFORM_ESP8266
-            size_t fsSize = ((size_t)&_FS_end - (size_t)&_FS_start);
-            began = Update.begin(fsSize, U_FS);
-#else
-            began = Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS);
-#endif
+            _updateBegun = Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS);
         } else {
-#ifdef PLATFORM_ESP8266
-            // request->contentLength() includes multipart overhead and may not equal
-            // the actual firmware size. Use the maximum sketch space (matches the
-            // sync OTA path in sync_ota.cpp) so Update.begin() always sees a valid
-            // upper bound regardless of the multipart envelope.
-            uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-            began = Update.begin(maxSketchSpace, U_FLASH);
-#else
-            began = Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
-#endif
+            _updateBegun = Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
         }
-        if (!began) {
+        if (!_updateBegun) {
             Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
             Update.printError(Serial);
             _uploadFailed = true;
@@ -278,29 +287,22 @@ void WebServer::handleUploadChunk(AsyncWebServerRequest* request, bool filesyste
     }
 
     if (request != _uploadRequest || !_uploadActive) {
-        return;  // Rejected or aborted by timeout
+        return;  // Rejected or aborted
     }
     _lastUploadActivity = millis();
     if (_uploadFailed) {
         return;  // Drain the rest of the body; handleUploadDone() reports the error
     }
 
-    if (len) {
-        if (Update.write(data, len) != len) {
-            Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
-            _uploadFailed = true;
-            return;
-        }
-        // Feed watchdog to prevent timeout on large uploads
-        // NOTE: Do NOT call yield() here - on ESP8266 the AsyncWebServer upload
-        // handler runs in system context where yield() causes a panic crash
-        #ifdef PLATFORM_ESP8266
-        ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
-        #endif
+    if (len && Update.write(data, len) != len) {
+        Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
+        _uploadFailed = true;
+        return;
     }
 
     if (final) {
         if (Update.end(true)) {
+            _updateBegun = false;  // Finished - nothing left to abort
             Serial.printf("[OTA] Update success: %u bytes\n", index + len);
         } else {
             Serial.printf("[OTA] Update failed: %s\n", UPDATE_ERROR_STRING());
@@ -310,14 +312,14 @@ void WebServer::handleUploadChunk(AsyncWebServerRequest* request, bool filesyste
     }
 }
 
-// Upload complete handler (runs after the last chunk)
+// Upload complete handler (runs after the last chunk, AsyncTCP task)
 void WebServer::handleUploadDone(AsyncWebServerRequest* request) {
     if (request != _uploadRequest) {
-        request->send(403, "text/plain", "Upload rejected");
+        request->send(409, "text/plain", "Upload rejected (cross-site, busy, or another update running)");
         return;
     }
 
-    bool success = _uploadActive && !_uploadFailed && !Update.hasError();
+    bool success = _uploadActive && !_uploadFailed && !_updateBegun && !Update.hasError();
     AsyncWebServerResponse* response = request->beginResponse(
         success ? 200 : 500,
         "text/plain",
@@ -326,19 +328,18 @@ void WebServer::handleUploadDone(AsyncWebServerRequest* request) {
     response->addHeader("Connection", "close");
     request->send(response);
 
-    StateLock lock(LOCK_TIMEOUT_MS);
+    // Detach from the request; the disconnect callback must not fire an abort
+    _uploadRequest = nullptr;
     if (success) {
-        _uploadActive = false;
-        _uploadRequest = nullptr;
         // Schedule restart in loop() to avoid blocking async callback
         _pendingRestart = true;
         _pendingActionTime = millis();
-    } else if (_uploadActive) {
-        // Reset OTA state so LED, MQTT and logging return to normal
-        abortUpload();
-        logger.warn("Web OTA upload failed");
+    } else {
+        // Reset OTA state in loop() so LED, MQTT and logging return to normal
+        _uploadAbortPending = true;
     }
 }
+#endif // !PLATFORM_ESP8266
 
 void WebServer::setupRoutes() {
     // NOTE on ordering: AsyncCallbackWebHandler matches "/x" also for "/x/...",
@@ -465,6 +466,7 @@ void WebServer::setupRoutes() {
     });
     #endif
 
+    #ifndef PLATFORM_ESP8266
     // OTA Update - Firmware
     _server->on("/api/update/firmware", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
@@ -484,6 +486,16 @@ void WebServer::setupRoutes() {
             handleUploadChunk(request, true, index, data, len, final);
         }
     );
+    #else
+    // ESP8266: Update can't run from the async (SYS) context - Updater calls
+    // yield() and the device panics. Uploads go through Safe Update mode.
+    // No upload handler is registered, so the body is never written anywhere.
+    auto useSafeMode = [](AsyncWebServerRequest* request) {
+        request->send(400, "text/plain", "ESP8266: use Safe Update mode (POST /api/ota/prepare)");
+    };
+    _server->on("/api/update/firmware", HTTP_POST, useSafeMode);
+    _server->on("/api/update/filesystem", HTTP_POST, useSafeMode);
+    #endif
 
     // Captive portal detection endpoints
     // Use PROGMEM strings to save RAM on ESP8266
