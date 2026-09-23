@@ -493,7 +493,11 @@ pio run -e esp8266 -t uploadfs
 - [PubSubClient](https://github.com/knolleary/pubsubclient) - MQTT client
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson) - JSON parsing
 - [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer) - Async web server
-- [FastLED](https://github.com/FastLED/FastLED) - WS2812 LED control
+- [FastLED](https://github.com/FastLED/FastLED) - WS2812 LED control (ESP32)
+- [NeoPixelBus](https://github.com/Makuna/NeoPixelBus) - WS2812 LED control (ESP8266)
+- [MFRC522](https://github.com/miguelbalboa/rfid) - RC522 RFID reader
+
+Exact versions are pinned in `platformio.ini` so builds are reproducible.
 
 ## Credits
 
@@ -526,7 +530,14 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 - MQTT host/user/password length validation matches the storage size (no silent truncation)
 - "Web interface files missing" page names the correct filesystem image
 
+**ESP8266 RAM (static RAM 75.7% → 61.6%, ~12 KB more free heap):**
+- Removed unused `ASYNCWEBSERVER_REGEX` build flag: no route uses regex, but it pulled in `std::regex` and the C++ locale tables (~11 KB RAM, ~190 KB flash; ESP32: ~5 KB RAM, ~240 KB flash)
+- EEPROM buffer is only allocated while settings are read or written (~440 bytes heap)
+- Update checker skips the release asset list on ESP8266 (no auto-update there): ~1 KB less heap during the TLS check, and no risk of the JSON document overflowing on releases with many files
+- ESP32-only update URLs no longer reserved on ESP8266 (392 bytes)
+
 **Improvements:**
+- Platform and library versions pinned exactly in `platformio.ini` (reproducible builds)
 - Rear button: factory reset now needs a 5 second hold. After 1s the LED blinks red as a warning; releasing cancels.
 - CSRF protection: state-changing API requests coming from another website (Origin/Referer not matching the device) are rejected, so a web page can no longer trigger reset/upload through your browser. Scripts and curl are unaffected.
 - ESP32: HTTP handlers and the main loop are serialized with a mutex (no more races between web requests and fan/MQTT/LED updates)

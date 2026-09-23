@@ -18,7 +18,18 @@ Bug fixes from a full code review, a safer factory reset on the rear button, and
 - **WiFi reconnect status:** when WiFi comes back on its own, the LED and MQTT recover immediately instead of after up to 60 seconds.
 - **MQTT settings validation:** host/user/password length limits now match the storage size (no silent truncation of the last character).
 
+## ESP8266 RAM
+
+Static RAM usage drops from 75.7% to 61.6%: about 12 KB more free heap, which makes out-of-memory crashes much less likely and leaves room for the HTTPS update check.
+
+- **Unused `ASYNCWEBSERVER_REGEX` build flag removed:** no web route uses regular expressions, but the flag pulled in `std::regex` and the C++ locale tables (~11 KB RAM, ~190 KB flash on ESP8266; ~5 KB RAM, ~240 KB flash on ESP32). Web behaviour is unchanged.
+- **EEPROM buffer freed after use:** the settings copy is only held in RAM while reading or writing (~440 bytes heap).
+- **Leaner update check:** ESP8266 no longer parses the release asset list it never uses (~1 KB less heap during the TLS check).
+- **ESP32-only update URLs** no longer reserved on ESP8266 (392 bytes).
+
 ## Improvements
+
+- **Reproducible builds:** platform and library versions are pinned exactly in `platformio.ini`.
 
 - **Rear button factory reset:** needs a 5 second hold. After 1 second the LED blinks red slowly as a warning; releasing the button cancels. At 5 seconds the LED blinks red fast to confirm, then the settings are cleared. A short press still restarts the device.
 - **CSRF protection:** state-changing requests sent by a browser from another website (Origin/Referer header not matching the device address) are rejected with 403. A malicious web page can no longer reset or reflash the diffuser through your browser. The web UI, curl and scripts are unaffected.
@@ -33,9 +44,9 @@ Bug fixes from a full code review, a safer factory reset on the rear button, and
 
 | Platform | RAM | Flash |
 |----------|-----|-------|
-| ESP8266 | ~76% | ~72% |
-| ESP32 | ~22% | ~72% |
-| ESP32-C3 | ~19% | ~68% |
+| ESP8266 | ~62% | ~54% |
+| ESP32 | ~20% | ~60% |
+| ESP32-C3 | ~18% | ~57% |
 
 ## Binaries
 

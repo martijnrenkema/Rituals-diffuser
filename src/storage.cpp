@@ -3,6 +3,16 @@
 
 #ifdef PLATFORM_ESP8266
     #include <EEPROM.h>
+    // The EEPROM library keeps a RAM copy of the whole emulated EEPROM while it
+    // is open. Settings are cached in _settings anyway, so only open it for the
+    // duration of a read or write (saves ~440 bytes heap permanently).
+    #define EEPROM_SIZE (sizeof(DiffuserSettings) + 16)  // Extra padding
+
+    static void eepromWrite(const DiffuserSettings& settings) {
+        EEPROM.begin(EEPROM_SIZE);
+        EEPROM.put(0, settings);
+        EEPROM.end();  // Commits (only if changed) and frees the buffer
+    }
 #else
     #include <Preferences.h>
     static Preferences prefs;
@@ -12,7 +22,6 @@ Storage storage;
 
 void Storage::begin() {
 #ifdef PLATFORM_ESP8266
-    EEPROM.begin(sizeof(DiffuserSettings) + 16);  // Extra padding
     Serial.println("[STORAGE] EEPROM initialized");
 #else
     prefs.begin(NVS_NAMESPACE, false);
@@ -29,6 +38,7 @@ DiffuserSettings Storage::load() {
     memset(&settings, 0, sizeof(settings));
 
 #ifdef PLATFORM_ESP8266
+    EEPROM.begin(EEPROM_SIZE);
     EEPROM.get(0, settings);
 
     // Check magic number
@@ -42,6 +52,7 @@ DiffuserSettings Storage::load() {
         EEPROM.commit();
         Serial.println("[STORAGE] Defaults saved to EEPROM");
     }
+    EEPROM.end();  // Free the RAM copy
 #else
     // ESP32: Use Preferences
     String ssid = prefs.getString(NVS_WIFI_SSID, "");
@@ -89,8 +100,7 @@ void Storage::save(const DiffuserSettings& settings) {
     _settings.magic = SETTINGS_MAGIC;
 
 #ifdef PLATFORM_ESP8266
-    EEPROM.put(0, _settings);
-    EEPROM.commit();
+    eepromWrite(_settings);
 #else
     prefs.putString(NVS_WIFI_SSID, settings.wifiSsid);
     prefs.putString(NVS_WIFI_PASS, settings.wifiPassword);
@@ -225,8 +235,7 @@ void Storage::reset() {
     _settings.magic = 0;  // Invalidate magic
 
 #ifdef PLATFORM_ESP8266
-    EEPROM.put(0, _settings);
-    EEPROM.commit();
+    eepromWrite(_settings);
 #else
     prefs.clear();
 #endif

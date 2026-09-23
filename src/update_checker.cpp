@@ -27,8 +27,10 @@ void UpdateChecker::begin() {
     // Initialize current version
     strlcpy(_info.currentVersion, FIRMWARE_VERSION, sizeof(_info.currentVersion));
     memset(_info.latestVersion, 0, sizeof(_info.latestVersion));
+#ifndef PLATFORM_ESP8266
     memset(_info.downloadUrl, 0, sizeof(_info.downloadUrl));
     memset(_info.spiffsUrl, 0, sizeof(_info.spiffsUrl));
+#endif
     memset(_info.releaseUrl, 0, sizeof(_info.releaseUrl));
     memset(_info.errorMessage, 0, sizeof(_info.errorMessage));
     _info.available = false;
@@ -204,10 +206,15 @@ bool UpdateChecker::fetchGitHubRelease() {
     StaticJsonDocument<200> filter;
     filter["tag_name"] = true;
     filter["html_url"] = true;
+#ifdef PLATFORM_ESP8266
+    // No auto-update on ESP8266: skip the asset list (6 names + long URLs).
+    // Keeps heap free during the TLS session, where ESP8266 is tightest.
+    DynamicJsonDocument doc(384);
+#else
     filter["assets"][0]["name"] = true;
     filter["assets"][0]["browser_download_url"] = true;
-
     DynamicJsonDocument doc(1536);
+#endif
     WiFiClient* stream = http.getStreamPtr();
     DeserializationError err = deserializeJson(doc, *stream, DeserializationOption::Filter(filter));
     http.end();
