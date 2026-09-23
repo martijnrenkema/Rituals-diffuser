@@ -1,8 +1,51 @@
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
-const circumference=2*Math.PI*54;
-let state={on:false,speed:50};
+const RING=2*Math.PI*52;
+const REL='https://github.com/martijnrenkema/Rituals-diffuser/releases';
+let state={on:false,speed:50,intervalMode:false,intOn:30,intOff:30};
+let info={mqttHost:'',mqttPort:1883,platform:''};
+let isESP8266=false;
+let speedTimer,dragging=false;  // dragging: don't let polling move the slider under the finger
 
-// Polling interval management - pause when tab is hidden to save resources
+// ---------- helpers ----------
+let toastTimer;
+function toast(msg,bad){
+    const t=$('#toast');
+    t.textContent=msg;
+    t.className='toast'+(bad?' bad':'');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>t.classList.add('hidden'),3500);
+}
+async function post(url,params){
+    const r=await fetch(url,{method:'POST',body:new URLSearchParams(params||{})});
+    let d={};
+    try{d=await r.json()}catch(e){}
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    return d;
+}
+async function getJSON(url){
+    const r=await fetch(url);
+    return r.json();
+}
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const pad=n=>String(n).padStart(2,'0');
+
+// ---------- views (hash routing) ----------
+function showView(){
+    const v=(location.hash||'#control').slice(1);
+    const name=['control','settings','firmware'].includes(v)?v:'control';
+    $$('.view').forEach(el=>el.classList.toggle('hidden',el.id!=='v-'+name));
+    $$('.tabs a').forEach(a=>{
+        const on=a.dataset.view===name;
+        a.classList.toggle('on',on);
+        if(on)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');
+    });
+    if(name==='firmware')fetchUpdateStatus();
+    window.scrollTo(0,0);
+}
+window.addEventListener('hashchange',showView);
+showView();
+
+// ---------- status polling ----------
 let pollInterval=setInterval(fetchStatusLite,5000);
 document.addEventListener('visibilitychange',()=>{
     if(document.hidden){
@@ -10,335 +53,263 @@ document.addEventListener('visibilitychange',()=>{
         pollInterval=null;
     }else{
         if(!pollInterval)pollInterval=setInterval(fetchStatusLite,5000);
-        fetchStatusLite();  // Immediate update when tab becomes visible
+        fetchStatusLite();
     }
 });
 fetchStatus();  // Full status only at page load
 
 async function fetchStatus(){
-    try{
-        const r=await fetch('/api/status');
-        const d=await r.json();
-        update(d);
-    }catch(e){console.error(e)}
+    try{update(await getJSON('/api/status'))}catch(e){console.error(e)}
+}
+async function fetchStatusLite(){
+    try{updateLite(await getJSON('/api/status/lite'))}catch(e){console.error(e)}
 }
 
-async function fetchStatusLite(){
-    try{
-        const r=await fetch('/api/status/lite');
-        const d=await r.json();
-        updateLite(d);
-    }catch(e){console.error(e)}
+function setConn(wifi,mqtt){
+    if(wifi){
+        $('#wifi-dot').classList.toggle('on',!!(wifi.connected||wifi.ap_mode));
+        $('#wifi-label').textContent=wifi.ap_mode?'Setup AP':'WiFi';
+    }
+    if(mqtt&&mqtt.connected!==undefined){
+        $('#mqtt-dot').classList.toggle('on',mqtt.connected);
+        $('#mqtt-sum').textContent=mqtt.connected?'Connected to '+info.mqttHost+':'+info.mqttPort
+            :info.mqttHost?'Not connected ('+info.mqttHost+')':'Not configured';
+    }
 }
 
 function updateLite(d){
-    // Lightweight update for polling - only updates dynamic elements
-    if(d.wifi){
-        $('#wifi-dot').classList.toggle('on',d.wifi.connected||d.wifi.ap_mode);
-    }
-    if(d.mqtt){
-        $('#mqtt-dot').classList.toggle('on',d.mqtt.connected);
-    }
+    if(d.mqtt&&d.mqtt.host!==undefined){info.mqttHost=d.mqtt.host;info.mqttPort=d.mqtt.port}
+    setConn(d.wifi,d.mqtt);
     updateFan(d.fan);
+    if(d.rfid)updateRfid(d.rfid);
+}
 
-    // RFID status (lite version)
-    if(d.rfid){
-        const dot=$('#rfid-dot');
-        if(d.rfid.cartridge_present){
-            dot?.classList.add('on');
-            dot?.classList.remove('scanning');
-            if(d.rfid.last_scent)$('#scent-name').textContent=d.rfid.last_scent;
-        }else if(d.rfid.connected){
-            dot?.classList.remove('on');
-            dot?.classList.add('scanning');
-        }else{
-            dot?.classList.remove('on','scanning');
+function update(d){
+    updateLite(d);
+    if(d.wifi){
+        const w=d.wifi;
+        $('#wifi-sum').textContent=w.ap_mode?'Setup access point · '+w.ip
+            :w.connected?[w.ssid,w.rssi+' dBm',w.ip].join(' · '):'Not connected';
+        if(w.rssi)$('#rssi').textContent=w.rssi;
+        if(w.ssid&&!w.ap_mode)$('#w-ssid').value=w.ssid;
+    }
+    if(d.device){
+        const dv=d.device;
+        if(dv.name){$('#dev-name').textContent=dv.name;$('#name-sum').textContent=dv.name;$('#device-name').value=dv.name;document.title=dv.name}
+        if(dv.mac)$('#mac').textContent=dv.mac;
+        if(dv.version)$$('.version').forEach(el=>el.textContent='v'+dv.version);
+        if(dv.platform){
+            info.platform=dv.platform;
+            $('#platform').textContent=dv.platform;
+            isESP8266=dv.platform==='ESP8266';
+            $('#esp8266-info').classList.toggle('hidden',!isESP8266);
         }
     }
+    if(d.mqtt&&d.mqtt.host){$('#m-host').value=d.mqtt.host;$('#m-port').value=d.mqtt.port}
+    if(d.stats){
+        $('#total-runtime').textContent=d.stats.total_runtime.toFixed(1)+' h';
+        $('#session-runtime').textContent=d.stats.session_runtime;
+    }
+    if(d.night)updateNight(d.night);
+    if(d.update)updateUpdateUI(d.update);
+    // No RFID reader compiled in (ESP8266 lite builds): hide the card
+    if(!d.rfid)$('#rfid-section').classList.add('hidden');
+}
+
+// ---------- fan ----------
+function setRing(speed,on){
+    $('#speed-circle').style.strokeDashoffset=RING*(1-(on?speed:0)/100);
+    $('.ring').classList.toggle('off',!on);
 }
 
 function updateFan(f){
     if(!f)return;
     state.on=f.on;
     state.speed=f.speed;
+    if(f.interval_mode!==undefined)state.intervalMode=f.interval_mode;
+    if(f.interval_on!==undefined)state.intOn=f.interval_on;
+    if(f.interval_off!==undefined)state.intOff=f.interval_off;
 
-    $('#power').classList.toggle('on',f.on);
-    $('#speed').value=f.speed;
-    $('#speed-val').textContent=f.speed;
-    if(f.rpm!==undefined)$('#rpm').textContent=f.rpm;
+    const p=$('#power');
+    p.classList.toggle('on',f.on);
+    p.setAttribute('aria-label',f.on?'Turn diffuser off':'Turn diffuser on');
+    if(!dragging){
+        $('#speed').value=f.speed;
+        $('#speed-val').textContent=f.speed;
+        setRing(f.speed,f.on);
+    }
+    if(f.rpm!==undefined)$('#rpm-text').textContent=f.on?f.rpm.toLocaleString('en-US')+' rpm':'Standby';
 
-    const offset=circumference-(f.speed/100)*circumference;
-    $('#speed-circle').style.strokeDashoffset=offset;
+    $('#state-title').textContent=f.on?'Diffusing':'Off';
+    $('#state-sub').textContent=!f.on?'Tap to start'
+        :state.intervalMode?'Interval · '+state.intOn+' s on, '+state.intOff+' s off':'Continuous';
 
-    $$('.timer-btn').forEach(b=>{
-        b.classList.remove('active');
+    $$('.chip').forEach(b=>{
         const t=+b.dataset.t;
-        if(f.timer_active){
-            if(t>0&&f.remaining_minutes<=t&&f.remaining_minutes>t-30)b.classList.add('active');
-        }else if(t===0&&f.on)b.classList.add('active');
+        let on=false;
+        if(f.timer_active)on=t>0&&f.remaining_minutes<=t&&f.remaining_minutes>t-30;
+        else on=t===0&&f.on;
+        b.classList.toggle('on',on);
+        b.setAttribute('aria-pressed',on);
     });
+    $('#remaining').textContent=!f.on?'Not running':f.timer_active?'Turns off in '+f.remaining_minutes+' min':'Runs until turned off';
 
-    $('#remaining').textContent=f.timer_active?f.remaining_minutes+' min remaining':'';
-
-    $('#interval').checked=f.interval_mode;
-    $('#interval-cfg').classList.toggle('show',f.interval_mode);
-    if(f.interval_on!==undefined)$('#int-on').value=f.interval_on;
-    if(f.interval_off!==undefined)$('#int-off').value=f.interval_off;
-}
-
-function update(d){
-    // Only update status dots if we have valid data
-    if(d.wifi&&(d.wifi.connected!==undefined||d.wifi.ap_mode!==undefined)){
-        $('#wifi-dot').classList.toggle('on',d.wifi.connected||d.wifi.ap_mode);
-    }
-    if(d.mqtt&&d.mqtt.connected!==undefined){
-        $('#mqtt-dot').classList.toggle('on',d.mqtt.connected);
-    }
-
-    updateFan(d.fan);
-
-    if(d.wifi){
-        if(d.wifi.ssid)$('#cur-ssid').textContent=d.wifi.ssid;
-        if(d.wifi.ip)$('#cur-ip').textContent=d.wifi.ip;
-        if(d.wifi.rssi)$('#rssi').textContent=d.wifi.rssi;
-    }
-    if(d.device){
-        if(d.device.mac)$('#mac').textContent=d.device.mac;
-        if(d.device.name)$('#device-name').placeholder=d.device.name;
-        if(d.device.version){
-            $$('.version').forEach(el=>el.textContent='v'+d.device.version);
-            $('#footer-version').textContent='v'+d.device.version;
-        }
-    }
-
-    // Update info from status
-    if(d.update){
-        updateUpdateUI(d.update);
-    }
-
-    if(d.mqtt&&d.mqtt.host){
-        $('#m-host').value=d.mqtt.host;
-        $('#m-port').value=d.mqtt.port;
-    }
+    $('#interval').checked=state.intervalMode;
+    if(document.activeElement!==$('#int-on'))$('#int-on').value=state.intOn;
+    if(document.activeElement!==$('#int-off'))$('#int-off').value=state.intOff;
 }
 
 async function cmd(p){
     try{
-        const r=await fetch('/api/fan',{method:'POST',body:new URLSearchParams(p)});
-        const d=await r.json();
+        const d=await post('/api/fan',p);
         if(d.fan)updateFan(d.fan);
-    }catch(e){console.error(e)}
+    }catch(e){toast('Could not reach the diffuser',true)}
 }
 
 $('#power').onclick=()=>cmd({power:state.on?'off':'on'});
 
-let speedTimer;
 $('#speed').oninput=e=>{
-    $('#speed-val').textContent=e.target.value;
-    const offset=circumference-(e.target.value/100)*circumference;
-    $('#speed-circle').style.strokeDashoffset=offset;
+    dragging=true;
+    const v=+e.target.value;
+    $('#speed-val').textContent=v;
+    setRing(v,v>0||state.on);
     clearTimeout(speedTimer);
-    speedTimer=setTimeout(()=>cmd({speed:e.target.value}),150);  // Debounce: fewer requests while dragging
+    speedTimer=setTimeout(async()=>{await cmd({speed:v});dragging=false},150);  // Debounce while dragging
 };
 
-$$('.timer-btn').forEach(b=>b.onclick=()=>cmd({timer:b.dataset.t}));
-
+$$('.chip').forEach(b=>b.onclick=()=>cmd({timer:b.dataset.t}));
 $('#interval').onchange=e=>cmd({interval:e.target.checked});
 
-$('#save-int').onclick=()=>cmd({interval_on:$('#int-on').value,interval_off:$('#int-off').value});
+let intTimer;
+function saveInterval(){
+    clearTimeout(intTimer);
+    intTimer=setTimeout(()=>cmd({interval_on:$('#int-on').value,interval_off:$('#int-off').value}),400);
+}
+$('#int-on').onchange=saveInterval;
+$('#int-off').onchange=saveInterval;
 
+// ---------- scent cartridge ----------
+function updateRfid(r){
+    const badge=$('#rfid-badge');
+    $('#rfid-section').classList.remove('hidden');
+    if(r.cartridge_present){
+        badge.textContent='Detected';badge.className='badge ok';
+        if(r.last_scent)$('#scent-name').textContent=r.last_scent;
+        $('#scent-uid').textContent='';
+    }else if(r.connected){
+        badge.textContent='Waiting';badge.className='badge wait';
+        if(r.has_tag&&r.last_scent){
+            $('#scent-name').textContent=r.last_scent;
+            $('#scent-uid').textContent='Removed · place the cartridge back';
+        }else{
+            $('#scent-name').textContent='No cartridge';
+            $('#scent-uid').textContent='Place a Rituals cartridge in the diffuser';
+        }
+    }else{
+        badge.textContent='No reader';badge.className='badge';
+        $('#scent-name').textContent='RFID reader not found';
+        $('#scent-uid').textContent='Check the reader wiring';
+    }
+}
+
+// ---------- settings: WiFi / MQTT ----------
 $('#wifi-form').onsubmit=async e=>{
     e.preventDefault();
     try{
-        const r=await fetch('/api/wifi',{method:'POST',body:new URLSearchParams({ssid:$('#w-ssid').value,password:$('#w-pass').value})});
-        const d=await r.json();
-        alert(d.message||'Saved');
-    }catch(e){alert('Error')}
+        const d=await post('/api/wifi',{ssid:$('#w-ssid').value,password:$('#w-pass').value});
+        toast(d.message||'Saved');
+        $('#w-pass').value='';
+    }catch(err){toast(err.message,true)}
 };
 
 $('#mqtt-form').onsubmit=async e=>{
     e.preventDefault();
     try{
-        const r=await fetch('/api/mqtt',{method:'POST',body:new URLSearchParams({host:$('#m-host').value,port:$('#m-port').value,user:$('#m-user').value,password:$('#m-pass').value})});
-        const d=await r.json();
-        alert(d.message||'Saved');
-    }catch(e){alert('Error')}
+        const d=await post('/api/mqtt',{host:$('#m-host').value,port:$('#m-port').value,user:$('#m-user').value,password:$('#m-pass').value});
+        info.mqttHost=$('#m-host').value;info.mqttPort=$('#m-port').value;
+        toast(d.message||'Saved');
+        $('#m-pass').value='';
+    }catch(err){toast(err.message,true)}
 };
 
-$('#reset').onclick=async()=>{
-    if(confirm('Reset all settings?')){
-        await fetch('/api/reset',{method:'POST'});
-        alert('Resetting...');
-    }
+// ---------- settings: night mode ----------
+['#night-start','#night-end'].forEach(id=>{
+    const s=$(id);
+    for(let h=0;h<24;h++)s.add(new Option(pad(h)+':00',h));
+});
+function nightSummary(n){
+    $('#night-sum').textContent=n.enabled?pad(n.start)+':00 – '+pad(n.end)+':00 · '+n.brightness+'%':'Off';
+}
+function updateNight(n){
+    $('#night-enable').checked=n.enabled;
+    $('#night-start').value=n.start;
+    $('#night-end').value=n.end;
+    $('#night-bright').value=n.brightness;
+    $('#night-bright-val').textContent=n.brightness+'%';
+    nightSummary(n);
+}
+$('#night-bright').oninput=e=>{$('#night-bright-val').textContent=e.target.value+'%'};
+async function saveNightMode(showToast){
+    const n={enabled:$('#night-enable').checked,start:+$('#night-start').value,end:+$('#night-end').value,brightness:+$('#night-bright').value};
+    try{
+        await post('/api/night',n);
+        nightSummary(n);
+        if(showToast)toast('Night mode saved');
+    }catch(err){toast(err.message,true)}
+}
+$('#night-enable').onchange=()=>saveNightMode(false);
+$('#save-night').onclick=()=>saveNightMode(true);
+
+// ---------- settings: device / passwords ----------
+$('#device-form').onsubmit=async e=>{
+    e.preventDefault();
+    const name=$('#device-name').value.trim();
+    if(!name)return;
+    try{
+        await post('/api/device',{name:name});
+        $('#dev-name').textContent=name;$('#name-sum').textContent=name;
+        toast('Name saved. Restart the diffuser to update Home Assistant.');
+    }catch(err){toast(err.message,true)}
 };
 
-// Password settings
 async function fetchPasswords(){
     try{
-        const r=await fetch('/api/passwords');
-        const d=await r.json();
-        $('#ota-status').textContent=d.ota_custom?'(custom set)':'(using default)';
-        $('#ap-status').textContent=d.ap_custom?'(custom set)':'(using default)';
+        const d=await getJSON('/api/passwords');
+        const custom=[d.ota_custom&&'OTA',d.ap_custom&&'access point'].filter(Boolean);
+        $('#pass-sum').textContent=custom.length?'Custom: '+custom.join(', '):'Default';
     }catch(e){console.error(e)}
 }
 fetchPasswords();
 
 $('#pass-form').onsubmit=async e=>{
     e.preventDefault();
-    const otaPass=$('#p-ota').value;
-    const apPass=$('#p-ap').value;
-
-    if(!otaPass&&!apPass){
-        alert('Enter at least one password to change');
-        return;
-    }
-
     const params={};
-    if(otaPass)params.ota_password=otaPass;
-    if(apPass)params.ap_password=apPass;
-
+    if($('#p-ota').value)params.ota_password=$('#p-ota').value;
+    if($('#p-ap').value)params.ap_password=$('#p-ap').value;
+    if(!params.ota_password&&!params.ap_password){toast('Enter at least one new password',true);return}
     try{
-        const r=await fetch('/api/passwords',{method:'POST',body:new URLSearchParams(params)});
-        const d=await r.json();
-        if(d.success){
-            alert(d.message);
-            $('#p-ota').value='';
-            $('#p-ap').value='';
-            fetchPasswords();
-        }else{
-            alert(d.error||'Error saving passwords');
-        }
-    }catch(e){alert('Error')}
+        const d=await post('/api/passwords',params);
+        toast(d.message||'Saved');
+        $('#p-ota').value='';$('#p-ap').value='';
+        fetchPasswords();
+    }catch(err){toast(err.message,true)}
 };
 
-// Device settings
-$('#device-form').onsubmit=async e=>{
-    e.preventDefault();
-    const name=$('#device-name').value.trim();
-    if(!name){
-        alert('Please enter a device name');
-        return;
-    }
-    try{
-        const r=await fetch('/api/device',{method:'POST',body:new URLSearchParams({name:name})});
-        const d=await r.json();
-        if(d.success){
-            alert('Device name saved. Restart device to update MQTT discovery.');
-            $('#device-name').value='';
-            $('#device-name').placeholder=name;
-        }else{
-            alert(d.error||'Error saving device name');
-        }
-    }catch(e){alert('Error')}
+// ---------- settings: restart / reset ----------
+$('#restart').onclick=async()=>{
+    if(!confirm('Restart the diffuser?'))return;
+    try{await post('/api/restart');toast('Restarting...')}catch(err){toast(err.message,true)}
+};
+$('#reset').onclick=async()=>{
+    if(!confirm('Erase all settings (WiFi, MQTT, passwords) and restart?'))return;
+    try{await post('/api/reset');toast('Resetting... connect to the setup access point afterwards.')}catch(err){toast(err.message,true)}
 };
 
-// Night mode handlers
-$('#night-enable').onchange=async e=>{
-    await saveNightMode();
-};
-
-$('#night-bright').oninput=e=>{
-    $('#night-bright-val').textContent=e.target.value+'%';
-};
-
-$('#save-night').onclick=async()=>{
-    await saveNightMode();
-    alert('Night mode settings saved');
-};
-
-async function saveNightMode(){
-    const params={
-        enabled:$('#night-enable').checked,
-        start:$('#night-start').value,
-        end:$('#night-end').value,
-        brightness:$('#night-bright').value
-    };
-    try{
-        await fetch('/api/night',{method:'POST',body:new URLSearchParams(params)});
-    }catch(e){console.error(e)}
-}
-
-// Update function extended for new data
-function updateExtended(d){
-    // Statistics
-    if(d.stats){
-        $('#total-runtime').textContent=d.stats.total_runtime.toFixed(1);
-        $('#session-runtime').textContent=d.stats.session_runtime;
-    }
-
-    // Night mode
-    if(d.night){
-        $('#night-enable').checked=d.night.enabled;
-        $('#night-cfg').classList.toggle('show',d.night.enabled);
-        $('#night-start').value=d.night.start;
-        $('#night-end').value=d.night.end;
-        $('#night-bright').value=d.night.brightness;
-        $('#night-bright-val').textContent=d.night.brightness+'%';
-    }
-
-    // RFID / Scent Cartridge (ESP32-C3 SuperMini only)
-    const rfidSection=$('#rfid-section');
-    if(d.rfid){
-        if(rfidSection)rfidSection.style.display='';
-
-        // Status indicator: green=cartridge present, orange=reader connected but no cartridge, red=not connected
-        const dot=$('#rfid-dot');
-        if(d.rfid.cartridge_present){
-            dot.classList.add('on');
-            dot.classList.remove('scanning');
-        }else if(d.rfid.connected){
-            dot.classList.remove('on');
-            dot.classList.add('scanning');  // Orange pulsing = waiting for cartridge
-        }else{
-            dot.classList.remove('on','scanning');
-        }
-
-        // Content based on state
-        if(d.rfid.cartridge_present&&d.rfid.last_scent){
-            // Cartridge is present NOW
-            $('#scent-name').textContent=d.rfid.last_scent;
-            $('#scent-uid').textContent='UID: '+d.rfid.last_uid;
-        }else if(d.rfid.has_tag&&d.rfid.last_scent){
-            // Had a cartridge but removed (show last known + removed message)
-            $('#scent-name').textContent=d.rfid.last_scent+' (removed)';
-            $('#scent-uid').textContent='Place cartridge back on reader';
-        }else if(d.rfid.connected){
-            // Reader connected, never had a cartridge
-            $('#scent-name').textContent='No cartridge detected';
-            $('#scent-uid').textContent='Place a Rituals cartridge on the reader';
-        }else{
-            // Reader not connected
-            $('#scent-name').textContent='RFID reader not connected';
-            $('#scent-uid').textContent='Check wiring';
-        }
-    }else{
-        // Hide RFID section if not available (ESP8266 or no RFID)
-        if(rfidSection)rfidSection.style.display='none';
-    }
-}
-
-// Wrap original update to include extended data
-const originalUpdate=update;
-update=function(d){
-    originalUpdate(d);
-    updateExtended(d);
-};
-
-// =====================================================
-// Hardware Diagnostics
-// =====================================================
-
-// Fetch diagnostic data
+// ---------- diagnostics ----------
 async function fetchDiagnostic(){
-    try{
-        const r=await fetch('/api/diagnostic');
-        const d=await r.json();
-        updateDiagnostic(d);
-    }catch(e){console.error(e)}
+    try{updateDiagnostic(await getJSON('/api/diagnostic'))}catch(e){console.error(e)}
 }
-
 function updateDiagnostic(d){
-    // Pin configuration
     if(d.pins){
         $('#diag-platform').textContent=d.pins.platform;
         $('#diag-fan-pwm').textContent=d.pins.fan_pwm;
@@ -349,308 +320,221 @@ function updateDiagnostic(d){
         $('#btn-front-pin').textContent=d.pins.btn_front;
         $('#btn-rear-pin').textContent=d.pins.btn_rear;
     }
-
-    // LED status
     if(d.led){
         $('#led-status').classList.toggle('on',d.led.connected);
-        $('#led-status-text').textContent=d.led.connected?'Connected (mode: '+d.led.mode+')':'Not connected';
+        $('#led-status-text').textContent='Mode '+d.led.mode+' · brightness '+d.led.brightness+'%';
     }
-
-    // Fan status
     if(d.fan){
         const running=d.fan.on&&d.fan.rpm>0;
         $('#fan-status').classList.toggle('on',running);
         $('#fan-rpm').textContent=d.fan.rpm;
         $('#fan-pwm').textContent=d.fan.pwm!==undefined?d.fan.pwm:'--';
-        if(d.fan.on){
-            $('#fan-status-text').textContent=d.fan.rpm>0?'Running at '+d.fan.speed+'%':'No RPM detected!';
-        }else{
-            $('#fan-status-text').textContent='Off';
-        }
-        // Update min PWM display
+        $('#fan-status-text').textContent=d.fan.calibrating?'Calibrating...':d.fan.on?(d.fan.rpm>0?'Running at '+d.fan.speed+'%':'No RPM detected'):'Off';
         if(d.fan.min_pwm!==undefined){
             $('#min-pwm-val').textContent=d.fan.min_pwm;
             $('#min-pwm-input').value=d.fan.min_pwm;
         }
     }
 }
-
-// Poll button status
 async function pollButtons(){
     try{
-        const r=await fetch('/api/diagnostic/buttons');
-        const d=await r.json();
-
+        const d=await getJSON('/api/diagnostic/buttons');
         $('#btn-front-status').classList.toggle('on',d.front.pressed);
-        $('#btn-front-text').textContent=d.front.pressed?'PRESSED':'Released';
-
+        $('#btn-front-text').textContent=d.front.pressed?'Pressed':'Released';
         $('#btn-rear-status').classList.toggle('on',d.rear.pressed);
-        $('#btn-rear-text').textContent=d.rear.pressed?'PRESSED':'Released';
+        $('#btn-rear-text').textContent=d.rear.pressed?'Pressed':'Released';
     }catch(e){}
 }
-
-// LED test buttons
-$$('.diag-led').forEach(btn=>{
-    btn.onclick=async()=>{
-        const color=btn.dataset.color;
-        try{
-            await fetch('/api/diagnostic/led',{method:'POST',body:new URLSearchParams({action:color})});
-            if(color==='test'){
-                $('#led-status-text').textContent='Testing colors...';
-                setTimeout(()=>fetchDiagnostic(),4000);
-            }
-        }catch(e){console.error(e)}
-    };
+$$('.diag-led').forEach(btn=>btn.onclick=async()=>{
+    try{
+        await post('/api/diagnostic/led',{action:btn.dataset.color});
+        setTimeout(fetchDiagnostic,btn.dataset.color==='test'?4000:500);
+    }catch(err){toast(err.message,true)}
 });
-
-// Fan test buttons
-$$('.diag-fan').forEach(btn=>{
-    btn.onclick=async()=>{
-        const action=btn.dataset.action;
-        try{
-            await fetch('/api/diagnostic/fan',{method:'POST',body:new URLSearchParams({action:action})});
-            if(action==='test'){
-                $('#fan-status-text').textContent='Testing speeds...';
-                setTimeout(()=>fetchDiagnostic(),5000);
-            }else{
-                setTimeout(()=>fetchDiagnostic(),500);
-            }
-        }catch(e){console.error(e)}
-    };
+$$('.diag-fan').forEach(btn=>btn.onclick=async()=>{
+    const a=btn.dataset.action;
+    try{
+        await post('/api/diagnostic/fan',{action:a});
+        if(a==='test')$('#fan-status-text').textContent='Testing...';
+        if(a==='calibrate')$('#fan-status-text').textContent='Calibrating...';
+        setTimeout(fetchDiagnostic,a==='test'?5000:a==='calibrate'?15000:500);
+    }catch(err){toast(err.message,true)}
 });
-
-// Manual set min PWM
 $('#set-min-btn').onclick=async()=>{
-    const val=$('#min-pwm-input').value;
     try{
-        const r=await fetch('/api/diagnostic/fan',{method:'POST',body:new URLSearchParams({action:'setmin',value:val})});
-        const d=await r.json();
-        if(d.success){
-            $('#min-pwm-val').textContent=d.min_pwm;
-            $('#calibrate-status').textContent='Min PWM ingesteld op '+d.min_pwm;
-        }
-    }catch(e){console.error(e)}
+        const d=await post('/api/diagnostic/fan',{action:'setmin',value:$('#min-pwm-input').value});
+        $('#min-pwm-val').textContent=d.min_pwm;
+        toast('Minimum PWM set to '+d.min_pwm);
+    }catch(err){toast(err.message,true)}
 };
-
-// Initial diagnostic fetch
-fetchDiagnostic();
-
-// Poll buttons every 2000ms when diagnostic section is open (reduced from 500ms for ESP8266 stability)
-let buttonPollInterval=null;
-try{
-    document.querySelector('details:has(.diag-section)')?.addEventListener('toggle',function(e){
-        if(this.open){
-            fetchDiagnostic();
-            buttonPollInterval=setInterval(pollButtons,2000);
-        }else{
-            if(buttonPollInterval)clearInterval(buttonPollInterval);
-        }
-    });
-}catch(e){/* :has() not supported in this browser */}
-
-// =====================================================
-// System Logs
-// =====================================================
-
-async function fetchLogs(){
-    try{
-        const r=await fetch('/api/logs');
-        const logs=await r.json();
-        renderLogs(logs);
-    }catch(e){
-        console.error(e);
-        $('#logs-container').innerHTML='<div class="log-error">Error loading logs</div>';
-    }
-}
-
-function renderLogs(logs){
-    const container=$('#logs-container');
-    if(!logs||logs.length===0){
-        container.innerHTML='<div class="log-empty">No logs available</div>';
-        return;
-    }
-
-    // Reverse to show newest first
-    const html=logs.slice().reverse().map(log=>{
-        const time=formatLogTime(log);
-        const levelClass=log.l.toLowerCase();
-        return `<div class="log-entry log-${levelClass}">
-            <span class="log-time">${time}</span>
-            <span class="log-level">${log.l}</span>
-            <span class="log-msg">${escapeHtml(log.m)}</span>
-        </div>`;
-    }).join('');
-
-    container.innerHTML=html;
-}
-
-function formatLogTime(log){
-    // If we have epoch time, format it with date and time
-    if(log.e>0){
-        const d=new Date(log.e*1000);
-        const now=new Date();
-        const isToday=d.toDateString()===now.toDateString();
-        const isYesterday=new Date(now-86400000).toDateString()===d.toDateString();
-
-        const timeStr=d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-
-        if(isToday){
-            return timeStr;
-        }else if(isYesterday){
-            return`Yesterday ${timeStr}`;
-        }else{
-            // Show date for older entries
-            const dateStr=d.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit'});
-            return`${dateStr} ${timeStr}`;
-        }
-    }
-    // Fallback: show uptime in seconds (no NTP sync yet)
-    const secs=Math.floor((log.u||0)/1000);
-    const mins=Math.floor(secs/60);
-    const hrs=Math.floor(mins/60);
-    if(hrs>0)return`+${hrs}h${mins%60}m`;
-    if(mins>0)return`+${mins}m${secs%60}s`;
-    return`+${secs}s`;
-}
-
-function escapeHtml(str){
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-$('#refresh-logs').onclick=()=>fetchLogs();
-
-$('#clear-logs').onclick=async()=>{
-    if(confirm('Clear all logs?')){
-        try{
-            await fetch('/api/logs',{method:'DELETE'});
-            fetchLogs();
-        }catch(e){console.error(e)}
-    }
-};
-
-// Load logs when section is opened
-$('#logs-section')?.addEventListener('toggle',function(){
-    if(this.open)fetchLogs();
+// Poll buttons every 2s only while diagnostics are open (keeps ESP8266 load low)
+let buttonPoll=null;
+$('#diag-section').addEventListener('toggle',function(){
+    clearInterval(buttonPoll);buttonPoll=null;
+    if(this.open){fetchDiagnostic();buttonPoll=setInterval(pollButtons,2000)}
 });
 
-// =====================================================
-// Update Checker
-// =====================================================
+// ---------- logs ----------
+async function fetchLogs(){
+    try{renderLogs(await getJSON('/api/logs'))}
+    catch(e){$('#logs-container').innerHTML='<div class="log">Could not load logs</div>'}
+}
+function renderLogs(logs){
+    const c=$('#logs-container');
+    if(!logs||!logs.length){c.innerHTML='<div class="log">No log entries</div>';return}
+    c.innerHTML=logs.slice().reverse().map(l=>
+        '<div class="log '+esc(l.l.toLowerCase())+'"><span class="t">'+formatLogTime(l)+'</span><span class="l">'+esc(l.l)+'</span><span>'+esc(l.m)+'</span></div>'
+    ).join('');
+}
+function formatLogTime(l){
+    if(l.e>0){
+        const d=new Date(l.e*1000),now=new Date();
+        const t=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        if(d.toDateString()===now.toDateString())return t;
+        if(new Date(now-86400000).toDateString()===d.toDateString())return'Yesterday '+t;
+        return d.toLocaleDateString([],{day:'2-digit',month:'2-digit'})+' '+t;
+    }
+    // No NTP time yet: show uptime
+    const s=Math.floor((l.u||0)/1000),m=Math.floor(s/60),h=Math.floor(m/60);
+    return h>0?'+'+h+'h'+(m%60)+'m':m>0?'+'+m+'m'+(s%60)+'s':'+'+s+'s';
+}
+$('#refresh-logs').onclick=fetchLogs;
+$('#clear-logs').onclick=async()=>{
+    if(!confirm('Clear all log entries?'))return;
+    try{await fetch('/api/logs',{method:'DELETE'});fetchLogs()}catch(e){toast('Could not clear logs',true)}
+};
+$('#logs-section').addEventListener('toggle',function(){if(this.open)fetchLogs()});
 
-let updateDismissed=false;
-let updatePollInterval=null;
-
+// ---------- firmware: update checker ----------
+let updateDismissed=false,updatePoll=null;
 function updateUpdateUI(d){
     if(!d)return;
-
-    // Update status section
     $('#current-ver').textContent=d.current||'--';
     $('#latest-ver').textContent=d.latest||'--';
 
-    // State display
-    const states=['Ready','Checking...','Downloading...','Error'];
-    const stateText=states[d.state]||'Unknown';
-    $('#update-state').textContent=d.available?'Update available':stateText;
+    const st=$('#update-state');
+    const checking=d.state===1,downloading=d.state===2,failed=d.state===3;
+    if(downloading){st.className='note';st.textContent='Downloading update...'}
+    else if(checking){st.className='note';st.textContent='Checking for updates...'}
+    else if(failed){st.className='note bad';st.textContent='Update check failed'+(d.error?': '+d.error:'')}
+    else if(d.available){st.className='note';st.textContent='Version '+d.latest+' is available'}
+    else if(d.latest){st.className='note ok';st.textContent='Up to date'}
+    else{st.className='note';st.textContent='Not checked yet'}
 
-    // Progress bar (ESP32 only during download)
-    if(d.progress>0&&d.progress<100){
-        $('#update-progress-section').classList.remove('hidden');
+    $('#fw-sum').textContent='v'+(d.current||'--')+(d.available?' · update available':d.latest?' · up to date':'');
+    $('#fw-badge').classList.toggle('hidden',!d.available);
+
+    const showProg=d.progress>0&&d.progress<100;
+    $('#update-progress-section').classList.toggle('hidden',!showProg);
+    if(showProg){
         $('#update-progress-bar').style.width=d.progress+'%';
         $('#update-progress-text').textContent=d.progress+'%';
-    }else{
-        $('#update-progress-section').classList.add('hidden');
     }
 
-    // Show/hide install vs manual buttons based on platform
-    if(d.can_auto_update){
-        $('#install-section').classList.toggle('hidden',!d.available);
-        $('#manual-section').classList.add('hidden');
-        $('#esp32-actions').classList.remove('hidden');
-        $('#esp8266-actions').classList.add('hidden');
-    }else{
-        $('#install-section').classList.add('hidden');
-        $('#manual-section').classList.toggle('hidden',!d.available);
-        $('#esp32-actions').classList.add('hidden');
-        $('#esp8266-actions').classList.remove('hidden');
-    }
+    $('#do-install').classList.toggle('hidden',!(d.can_auto_update&&d.available));
+    $('#download-link').href=d.release_url||REL;
+    $('#download-link').textContent=d.available&&!d.can_auto_update?'Download from GitHub':'Release notes';
 
-    // Set GitHub links
-    const releaseUrl=d.release_url||'https://github.com/martijnrenkema/Rituals-diffuser/releases';
-    $('#download-link').href=releaseUrl;
-    $('#banner-github').href=releaseUrl;
-
-    // Show/hide banner
-    if(d.available&&!updateDismissed){
-        $('#update-banner').classList.remove('hidden');
-        $('#update-version').textContent='v'+d.latest;
-    }else{
-        $('#update-banner').classList.add('hidden');
-    }
+    const showBanner=d.available&&!updateDismissed;
+    $('#update-banner').classList.toggle('hidden',!showBanner);
+    if(showBanner)$('#update-version').textContent='v'+d.latest;
 }
-
 async function fetchUpdateStatus(){
+    try{const d=await getJSON('/api/update/status');updateUpdateUI(d);return d}
+    catch(e){return null}
+}
+$('#check-update').onclick=async()=>{
+    $('#update-state').className='note';
+    $('#update-state').textContent='Checking for updates...';
     try{
-        const r=await fetch('/api/update/status');
-        const d=await r.json();
-        updateUpdateUI(d);
-        return d;
-    }catch(e){
-        console.error('Update status error:',e);
-        return null;
-    }
+        await post('/api/update/check');
+        // HTTPS on ESP8266 can take 5-15 seconds
+        [3000,6000,10000,15000].forEach(t=>setTimeout(fetchUpdateStatus,t));
+    }catch(err){toast(err.message,true)}
+};
+$('#do-install').onclick=async()=>{
+    if(!confirm('Install the update? The diffuser restarts when the download is complete.'))return;
+    try{
+        await post('/api/update/install');
+        clearInterval(updatePoll);
+        updatePoll=setInterval(async()=>{
+            const d=await fetchUpdateStatus();
+            if(d&&(d.state===0||d.state===3)){clearInterval(updatePoll);updatePoll=null}
+        },1000);
+    }catch(err){toast(err.message,true)}
+};
+$('#banner-dismiss').onclick=()=>{updateDismissed=true;$('#update-banner').classList.add('hidden')};
+setTimeout(fetchUpdateStatus,3000);
+setInterval(fetchUpdateStatus,30000);
+
+// ---------- firmware: manual upload ----------
+function prepareOTAMode(){
+    const modal=$('#ota-modal'),cd=$('#countdown');
+    modal.classList.remove('hidden');
+    post('/api/ota/prepare').then(()=>{
+        let n=3;
+        cd.textContent=n;
+        const iv=setInterval(()=>{
+            n--;
+            if(n>0){cd.textContent=n}
+            else{clearInterval(iv);cd.textContent='...';setTimeout(()=>{location.href='/'},1000)}
+        },1000);
+    }).catch(err=>{
+        modal.classList.add('hidden');
+        toast('Could not start Safe Update mode: '+err.message,true);
+    });
 }
 
-// Check for updates button
-$('#check-update')?.addEventListener('click',async()=>{
-    $('#update-state').textContent='Checking...';
-    try{
-        await fetch('/api/update/check',{method:'POST'});
-        // Poll for result after a few seconds (ESP8266 HTTPS can take 5-10s)
-        setTimeout(fetchUpdateStatus,3000);
-        setTimeout(fetchUpdateStatus,6000);
-        setTimeout(fetchUpdateStatus,10000);
-        setTimeout(fetchUpdateStatus,15000);
-    }catch(e){
-        $('#update-state').textContent='Error';
+function setupUpload(p,endpoint){
+    const card=$('#'+p+'-up'),input=$('#'+p+'-file'),btn=$('#'+p+'-upload-btn');
+    const name=$('#'+p+'-file-name'),bar=$('#'+p+'-bar'),fill=$('#'+p+'-fill'),pct=$('#'+p+'-pct'),status=$('#'+p+'-status');
+    const hint=name.textContent;
+    card.querySelector('.pick').onclick=()=>input.click();
+    card.addEventListener('dragover',e=>{e.preventDefault();card.classList.add('drag')});
+    card.addEventListener('dragleave',()=>card.classList.remove('drag'));
+    card.addEventListener('drop',e=>{
+        e.preventDefault();card.classList.remove('drag');
+        if(e.dataTransfer.files.length){input.files=e.dataTransfer.files;picked()}
+    });
+    input.onchange=picked;
+    function picked(){
+        const f=input.files[0];
+        name.textContent=f?f.name+' · '+(f.size/1024).toFixed(0)+' KB':hint;
+        btn.disabled=!f;
+        status.textContent='';
     }
-});
-
-// Install update button (ESP32 only)
-$('#do-install')?.addEventListener('click',async()=>{
-    if(!confirm('Install update? Device will restart after download.'))return;
-    try{
-        await fetch('/api/update/install',{method:'POST'});
-        $('#update-state').textContent='Downloading...';
-        // Start polling progress
-        updatePollInterval=setInterval(async()=>{
-            const d=await fetchUpdateStatus();
-            if(d&&(d.state===0||d.state===3)){
-                clearInterval(updatePollInterval);
-                updatePollInterval=null;
+    btn.onclick=()=>{
+        if(!input.files.length)return;
+        if(isESP8266){prepareOTAMode();return}  // ESP8266 uploads through Safe Update mode
+        const fd=new FormData();
+        fd.append('file',input.files[0]);
+        const xhr=new XMLHttpRequest();
+        xhr.open('POST',endpoint,true);
+        xhr.upload.onprogress=e=>{
+            if(e.lengthComputable){
+                const v=Math.round(e.loaded/e.total*100);
+                fill.style.width=v+'%';pct.textContent=v+'%';
             }
-        },1000);
-    }catch(e){
-        alert('Failed to start update');
-    }
-});
-
-// Banner install button links to section button
-$('#banner-install')?.addEventListener('click',()=>{
-    $('#do-install')?.click();
-});
-
-// Dismiss banner
-$('#banner-dismiss')?.addEventListener('click',()=>{
-    updateDismissed=true;
-    $('#update-banner').classList.add('hidden');
-});
-
-// Check update status when section is opened
-$('#update-section')?.addEventListener('toggle',function(){
-    if(this.open)fetchUpdateStatus();
-});
-
-// Fetch update status on page load and periodically
-// This ensures banner shows after auto-check completes (2 min after boot)
-setTimeout(fetchUpdateStatus,3000);  // Initial check after 3 seconds
-setInterval(fetchUpdateStatus,30000); // Then every 30 seconds
+        };
+        xhr.onloadstart=()=>{
+            btn.disabled=true;bar.classList.remove('hidden');fill.style.width='0%';pct.textContent='0%';
+            status.className='muted sm';status.textContent='Uploading · keep this page open and the diffuser plugged in';
+        };
+        xhr.onload=()=>{
+            if(xhr.status===200){
+                status.className='sm';status.textContent='Update installed. Restarting...';
+                setTimeout(()=>{location.href='/'},8000);
+            }else{
+                status.className='sm danger';status.textContent='Upload failed: '+(xhr.responseText||xhr.status);
+                btn.disabled=false;
+            }
+        };
+        xhr.onerror=()=>{
+            status.className='sm danger';status.textContent='Connection lost during upload';
+            btn.disabled=false;
+        };
+        xhr.send(fd);
+    };
+}
+setupUpload('fw','/api/update/firmware');
+setupUpload('fs','/api/update/filesystem');

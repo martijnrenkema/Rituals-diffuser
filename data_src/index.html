@@ -1,298 +1,230 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Rituals Diffuser</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Rituals Diffuser</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app">
-        <header>
-            <div class="logo">
-                <svg viewBox="0 0 24 24" width="32" height="32"><path fill="currentColor" d="M12 2C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2 15h-4v-1h4v1zm0-2h-4v-1h4v1zm-1.5-3.59V14h-1v-2.59L9.67 9.59l.71-.71L12 10.5l1.62-1.62.71.71-1.83 1.82z"/></svg>
-                <span>Rituals Diffuser</span>
-            </div>
-            <div class="status">
-                <span class="status-item"><span id="wifi-dot" class="dot"></span>WiFi</span>
-                <span class="status-item"><span id="mqtt-dot" class="dot"></span>MQTT</span>
-            </div>
-        </header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3c3.5 4.2 6 7.4 6 10.5a6 6 0 0 1-12 0C6 10.4 8.5 7.2 12 3z"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+<symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0"/></symbol>
+<symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".8"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.9l7.4-3.8M8.3 13.1l7.4 3.8"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+<symbol id="i-restart" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+<symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
+<symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+</svg>
 
-        <!-- Update notification banner -->
-        <div id="update-banner" class="update-banner hidden">
-            <div class="update-content">
-                <span class="update-icon">Update available!</span>
-                <span id="update-version"></span>
-            </div>
-            <div class="update-actions">
-                <span id="esp32-actions" class="hidden">
-                    <button id="banner-install" class="btn-sm">Install</button>
-                </span>
-                <span id="esp8266-actions" class="hidden">
-                    <a id="banner-github" href="#" target="_blank" class="btn-sm">Download</a>
-                    <a href="/update.html" class="btn-sm">Upload</a>
-                </span>
-                <button id="banner-dismiss" class="btn-sm-ghost">Dismiss</button>
-            </div>
-        </div>
+<div class="app">
+<nav class="tabs" aria-label="Main">
+<div class="brand"><b>Rituals Diffuser</b><small class="version">v--</small></div>
+<a href="#control" data-view="control"><svg class="i"><use href="#i-drop"/></svg>Control</a>
+<a href="#settings" data-view="settings"><svg class="i"><use href="#i-sliders"/></svg>Settings</a>
+<a href="#firmware" data-view="firmware"><svg class="i"><use href="#i-up"/></svg>Firmware<span id="fw-badge" class="tab-dot hidden"></span></a>
+</nav>
 
-        <main>
-            <section class="hero">
-                <button id="power" class="power-btn">
-                    <svg viewBox="0 0 24 24"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
-                </button>
-                <div class="speed-ring" id="speed-ring">
-                    <svg viewBox="0 0 120 120">
-                        <defs>
-                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#6366f1"/>
-                                <stop offset="100%" style="stop-color:#8b5cf6"/>
-                            </linearGradient>
-                        </defs>
-                        <circle class="bg" cx="60" cy="60" r="54"/>
-                        <circle class="progress" cx="60" cy="60" r="54" id="speed-circle"/>
-                    </svg>
-                    <div class="speed-text">
-                        <span id="speed-val">50</span><small>%</small>
-                    </div>
-                </div>
-                <input type="range" id="speed" min="0" max="100" value="50">
-                <div class="rpm">RPM: <span id="rpm">0</span></div>
-            </section>
+<main>
+<!-- ================= CONTROL ================= -->
+<section id="v-control" class="view">
+<header class="top">
+<div><h1 id="dev-name">Rituals Diffuser</h1><span class="muted version-line"><span class="version">v--</span> · <span id="platform">--</span></span></div>
+<div class="pills"><span class="pill"><span id="wifi-dot" class="dot"></span><span id="wifi-label">WiFi</span></span><span class="pill"><span id="mqtt-dot" class="dot"></span>MQTT</span></div>
+</header>
 
-            <section class="card" id="rfid-section">
-                <h3>Scent Cartridge <span id="rfid-dot" class="dot"></span></h3>
-                <div class="rfid-info">
-                    <div class="scent-name" id="scent-name">No cartridge detected</div>
-                    <div class="scent-uid" id="scent-uid"></div>
-                </div>
-            </section>
+<div id="update-banner" class="note note-pri hidden">
+<svg class="i"><use href="#i-up"/></svg>
+<span>Version <b id="update-version"></b> is available.</span>
+<a href="#firmware" class="btn btn-sm">View</a>
+<button id="banner-dismiss" class="btn-x" aria-label="Dismiss">×</button>
+</div>
 
-            <section class="card">
-                <h3>Timer</h3>
-                <div class="timer-grid">
-                    <button class="timer-btn" data-t="30">30m</button>
-                    <button class="timer-btn" data-t="60">60m</button>
-                    <button class="timer-btn" data-t="90">90m</button>
-                    <button class="timer-btn" data-t="120">120m</button>
-                    <button class="timer-btn active" data-t="0">∞</button>
-                </div>
-                <div class="remaining" id="remaining"></div>
-            </section>
+<div class="grid">
+<div class="card hero">
+<div class="ring">
+<svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="prog" id="speed-circle"/></svg>
+<div class="ring-in"><span class="label">Fan speed</span><span class="big"><span id="speed-val">50</span><small>%</small></span><span class="muted sm" id="rpm-text">-- rpm</span></div>
+</div>
+<input type="range" id="speed" min="0" max="100" value="50" aria-label="Fan speed">
+<div class="hero-foot">
+<div><b id="state-title">--</b><span class="muted sm" id="state-sub"></span></div>
+<button id="power" class="power" aria-label="Turn diffuser on"><svg class="i"><use href="#i-power"/></svg></button>
+</div>
+</div>
 
-            <section class="card">
-                <div class="row">
-                    <h3>Interval Mode <span class="tooltip" title="Cycles the fan on/off at set intervals to conserve fragrance">?</span></h3>
-                    <label class="switch"><input type="checkbox" id="interval"><span></span></label>
-                </div>
-                <div class="interval-cfg" id="interval-cfg">
-                    <div class="field"><label>On <span class="tooltip" title="How long the fan runs during each cycle">?</span></label><input type="number" id="int-on" min="10" max="120" step="5" value="30"><span>s</span></div>
-                    <div class="field"><label>Off <span class="tooltip" title="How long the fan pauses between cycles">?</span></label><input type="number" id="int-off" min="10" max="120" step="5" value="30"><span>s</span></div>
-                    <button id="save-int" class="btn-sm">Save</button>
-                </div>
-            </section>
+<div class="stack">
+<div class="card row-card" id="rfid-section">
+<span class="ico"><svg class="i"><use href="#i-drop"/></svg></span>
+<div class="grow"><span class="label">Scent cartridge</span><b class="scent" id="scent-name">No cartridge detected</b><span class="muted sm" id="scent-uid"></span></div>
+<span id="rfid-badge" class="badge">--</span>
+</div>
 
-            <details class="card">
-                <summary>WiFi Settings</summary>
-                <form id="wifi-form">
-                    <input type="text" id="w-ssid" placeholder="SSID" required>
-                    <input type="password" id="w-pass" placeholder="Password">
-                    <button type="submit" class="btn">Connect</button>
-                </form>
-                <div class="info">
-                    <span>Network: <b id="cur-ssid">--</b></span>
-                    <span>IP: <b id="cur-ip">--</b></span>
-                </div>
-            </details>
+<div class="card">
+<div class="card-head"><h2>Timer</h2><span class="muted sm" id="remaining"></span></div>
+<div class="chips">
+<button class="chip" data-t="30">30m</button><button class="chip" data-t="60">60m</button><button class="chip" data-t="90">90m</button><button class="chip" data-t="120">120m</button><button class="chip" data-t="0" aria-label="Continuous">∞</button>
+</div>
+</div>
 
-            <details class="card">
-                <summary>MQTT Settings</summary>
-                <form id="mqtt-form">
-                    <div class="row-2">
-                        <input type="text" id="m-host" placeholder="Host" required>
-                        <input type="number" id="m-port" placeholder="Port" value="1883">
-                    </div>
-                    <input type="text" id="m-user" placeholder="Username">
-                    <input type="password" id="m-pass" placeholder="Password">
-                    <button type="submit" class="btn">Save</button>
-                </form>
-            </details>
+<div class="card">
+<div class="card-head"><div><h2>Interval mode</h2><span class="muted sm">Pauses the fan to make a cartridge last longer</span></div>
+<label class="sw"><input type="checkbox" role="switch" id="interval" aria-label="Interval mode"><span></span></label></div>
+<div class="two">
+<label class="field">Run for<span class="unit"><input type="number" id="int-on" min="10" max="120" step="5" value="30"><i>sec</i></span></label>
+<label class="field">Pause for<span class="unit"><input type="number" id="int-off" min="10" max="120" step="5" value="30"><i>sec</i></span></label>
+</div>
+</div>
+</div>
+</div>
+</section>
 
-            <details class="card">
-                <summary>Night Mode</summary>
-                <div class="row">
-                    <span>Enable night mode</span>
-                    <label class="switch"><input type="checkbox" id="night-enable"><span></span></label>
-                </div>
-                <div id="night-cfg" class="night-cfg">
-                    <div class="row-2">
-                        <div class="field-group">
-                            <label>Start (hour)</label>
-                            <input type="number" id="night-start" min="0" max="23" value="22">
-                        </div>
-                        <div class="field-group">
-                            <label>End (hour)</label>
-                            <input type="number" id="night-end" min="0" max="23" value="7">
-                        </div>
-                    </div>
-                    <div class="field-group">
-                        <label>LED Brightness</label>
-                        <input type="range" id="night-bright" min="0" max="100" value="10">
-                        <span id="night-bright-val">10%</span>
-                    </div>
-                    <button id="save-night" class="btn">Save Night Mode</button>
-                </div>
-            </details>
+<!-- ================= SETTINGS ================= -->
+<section id="v-settings" class="view hidden">
+<h1 class="page-title">Settings</h1>
 
-            <details class="card">
-                <summary>Hardware Diagnostics</summary>
-                <div class="diag-section">
-                    <h4>Pin Configuration</h4>
-                    <div class="info">
-                        <span>Platform: <b id="diag-platform">--</b></span>
-                        <span>Fan PWM: <b>G<span id="diag-fan-pwm">--</span></b></span>
-                        <span>Fan Tacho: <b>G<span id="diag-fan-tacho">--</span></b></span>
-                        <span>LED: <b>G<span id="diag-led">--</span></b></span>
-                        <span>Btn Front: <b>G<span id="diag-btn-front">--</span></b></span>
-                        <span>Btn Rear: <b>G<span id="diag-btn-rear">--</span></b></span>
-                    </div>
-                </div>
-                <div class="diag-section">
-                    <h4>Fan Test</h4>
-                    <div class="diag-status">Status: <span id="fan-status" class="dot"></span> <span id="fan-status-text">--</span></div>
-                    <div class="diag-status">RPM: <b id="fan-rpm">0</b> | PWM: <b id="fan-pwm">0</b></div>
-                    <div class="diag-btns">
-                        <button class="btn-sm diag-fan" data-action="test">Test Cycle</button>
-                        <button class="btn-sm diag-fan" data-action="on">On</button>
-                        <button class="btn-sm diag-fan" data-action="off">Off</button>
-                    </div>
-                    <div class="field-group" style="margin-top:10px">
-                        <label><span>Min PWM (current: <b id="min-pwm-val">0</b>) <span class="tooltip" title="Lowest PWM value where the fan starts spinning. Use Calibrate to auto-detect, or set manually (0-255)">?</span></span></label>
-                        <div class="diag-btns">
-                            <input type="number" id="min-pwm-input" min="0" max="255" value="0" style="width:60px">
-                            <button class="btn-sm" id="set-min-btn">Set</button>
-                            <button class="btn-sm diag-fan" data-action="calibrate">Calibrate</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="diag-section">
-                    <h4>LED Test</h4>
-                    <div class="diag-status">Status: <span id="led-status" class="dot"></span> <span id="led-status-text">--</span></div>
-                    <div class="diag-btns">
-                        <button class="btn-sm diag-led" data-color="test">Test All</button>
-                        <button class="btn-sm diag-led" data-color="red" style="background:#e74c3c">Red</button>
-                        <button class="btn-sm diag-led" data-color="green" style="background:#27ae60">Green</button>
-                        <button class="btn-sm diag-led" data-color="blue" style="background:#3498db">Blue</button>
-                        <button class="btn-sm diag-led" data-color="reset">Reset</button>
-                    </div>
-                </div>
-                <div class="diag-section">
-                    <h4>Button Test</h4>
-                    <div class="diag-status">
-                        Front (G<span id="btn-front-pin">--</span>): <span id="btn-front-status" class="dot"></span> <span id="btn-front-text">Released</span>
-                    </div>
-                    <div class="diag-status">
-                        Rear (G<span id="btn-rear-pin">--</span>): <span id="btn-rear-status" class="dot"></span> <span id="btn-rear-text">Released</span>
-                    </div>
-                    <small class="hint">Press buttons on device to test</small>
-                </div>
-            </details>
+<h3 class="label group">Connection</h3>
+<div class="card list">
+<details class="row">
+<summary><span class="ico"><svg class="i"><use href="#i-wifi"/></svg></span><span class="grow"><b>WiFi</b><span class="muted sm" id="wifi-sum">--</span></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+<form id="wifi-form" class="body">
+<label class="field">Network name (SSID)<input type="text" id="w-ssid" required maxlength="32" autocomplete="off"></label>
+<label class="field">Password<input type="password" id="w-pass" maxlength="63" placeholder="Leave empty for an open network"></label>
+<button type="submit" class="btn">Connect</button>
+</form>
+</details>
+<details class="row">
+<summary><span class="ico"><svg class="i"><use href="#i-share"/></svg></span><span class="grow"><b>MQTT · Home Assistant</b><span class="muted sm" id="mqtt-sum">--</span></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+<form id="mqtt-form" class="body">
+<div class="two wide"><label class="field">Broker host<input type="text" id="m-host" required maxlength="63"></label><label class="field">Port<input type="number" id="m-port" value="1883" min="1" max="65535"></label></div>
+<label class="field">Username<input type="text" id="m-user" maxlength="31" autocomplete="off"></label>
+<label class="field">Password<input type="password" id="m-pass" maxlength="63"></label>
+<button type="submit" class="btn">Save</button>
+</form>
+</details>
+</div>
 
-            <details class="card">
-                <summary>Device Settings</summary>
-                <form id="device-form">
-                    <div class="field-group">
-                        <label>Device Name <span class="tooltip" title="Name shown in Home Assistant and web interface">?</span></label>
-                        <input type="text" id="device-name" placeholder="Rituals Diffuser" maxlength="31">
-                    </div>
-                    <button type="submit" class="btn">Save</button>
-                </form>
-            </details>
+<h3 class="label group">LED</h3>
+<div class="card list">
+<details class="row">
+<summary><span class="ico"><svg class="i"><use href="#i-moon"/></svg></span><span class="grow"><b>Night mode</b><span class="muted sm" id="night-sum">--</span></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+<div class="body">
+<div class="card-head"><span>Dim the LED at night</span><label class="sw"><input type="checkbox" role="switch" id="night-enable" aria-label="Night mode"><span></span></label></div>
+<div class="two"><label class="field">From<select id="night-start"></select></label><label class="field">Until<select id="night-end"></select></label></div>
+<label class="field"><span class="split"><span>Brightness at night</span><b id="night-bright-val">10%</b></span><input type="range" id="night-bright" min="0" max="100" value="10"></label>
+<button id="save-night" class="btn">Save</button>
+</div>
+</details>
+</div>
 
-            <details class="card">
-                <summary>Statistics</summary>
-                <div class="info">
-                    <span>Total runtime: <b id="total-runtime">--</b> hours</span>
-                    <span>Session: <b id="session-runtime">--</b> min</span>
-                </div>
-            </details>
+<h3 class="label group">Device</h3>
+<div class="card list">
+<details class="row">
+<summary><span class="ico"><svg class="i"><use href="#i-tag"/></svg></span><span class="grow"><b>Name</b><span class="muted sm" id="name-sum">--</span></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+<form id="device-form" class="body">
+<label class="field">Device name<input type="text" id="device-name" maxlength="31" required></label>
+<span class="muted sm">Shown in Home Assistant after a restart.</span>
+<button type="submit" class="btn">Save</button>
+</form>
+</details>
+<details class="row">
+<summary><span class="ico"><svg class="i"><use href="#i-lock"/></svg></span><span class="grow"><b>Passwords</b><span class="muted sm" id="pass-sum">--</span></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+<form id="pass-form" class="body">
+<label class="field">OTA password<input type="password" id="p-ota" minlength="8" placeholder="New password (min. 8 characters)"></label>
+<label class="field">WiFi access point password<input type="password" id="p-ap" minlength="8" placeholder="New password (min. 8 characters)"></label>
+<span class="muted sm">A restart is needed to apply new passwords.</span>
+<button type="submit" class="btn">Save</button>
+</form>
+</details>
+<div class="row static"><span class="ico"><svg class="i"><use href="#i-clock"/></svg></span><span class="grow"><b>Total runtime</b><span class="muted sm"><span id="session-runtime">0</span> min this session</span></span><span class="muted" id="total-runtime">--</span></div>
+</div>
 
-            <details class="card">
-                <summary>Security</summary>
-                <form id="pass-form">
-                    <div class="field-group">
-                        <label>OTA Password <small id="ota-status"></small></label>
-                        <input type="password" id="p-ota" placeholder="New OTA password (min 8 chars)">
-                    </div>
-                    <div class="field-group">
-                        <label>WiFi AP Password <small id="ap-status"></small></label>
-                        <input type="password" id="p-ap" placeholder="New AP password (min 8 chars)">
-                    </div>
-                    <button type="submit" class="btn">Save Passwords</button>
-                    <small class="hint">Device restart required after changing passwords</small>
-                </form>
-            </details>
+<h3 class="label group">Maintenance</h3>
+<div class="card list">
+<a class="row static link" href="#firmware"><span class="ico"><svg class="i"><use href="#i-up"/></svg></span><span class="grow"><b>Firmware</b><span class="muted sm" id="fw-sum">--</span></span><svg class="i chev"><use href="#i-chev"/></svg></a>
+<details class="row" id="diag-section">
+<summary><span class="ico"><svg class="i"><use href="#i-pulse"/></svg></span><span class="grow"><b>Hardware diagnostics</b><span class="muted sm">Fan, LED and buttons</span></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+<div class="body">
+<h4 class="label">Fan</h4>
+<div class="kv"><span>Status</span><span><span id="fan-status" class="dot"></span> <span id="fan-status-text">--</span></span><span>RPM / PWM</span><span><b id="fan-rpm">0</b> / <b id="fan-pwm">0</b></span><span>Minimum PWM</span><b id="min-pwm-val">0</b></div>
+<div class="btns"><button class="btn2 btn-sm diag-fan" data-action="test">Test</button><button class="btn2 btn-sm diag-fan" data-action="on">On</button><button class="btn2 btn-sm diag-fan" data-action="off">Off</button><button class="btn2 btn-sm diag-fan" data-action="calibrate">Calibrate</button></div>
+<div class="btns"><input type="number" id="min-pwm-input" min="0" max="255" value="0" aria-label="Minimum PWM (0-255)" class="narrow"><button class="btn2 btn-sm" id="set-min-btn">Set minimum PWM</button></div>
+<h4 class="label">LED</h4>
+<div class="kv"><span>Status</span><span><span id="led-status" class="dot"></span> <span id="led-status-text">--</span></span></div>
+<div class="btns"><button class="btn2 btn-sm diag-led" data-color="test">Test</button><button class="btn2 btn-sm diag-led" data-color="red"><span class="sq" style="background:#E5484D"></span>Red</button><button class="btn2 btn-sm diag-led" data-color="green"><span class="sq" style="background:#30A46C"></span>Green</button><button class="btn2 btn-sm diag-led" data-color="blue"><span class="sq" style="background:#2563EB"></span>Blue</button><button class="btn2 btn-sm diag-led" data-color="reset">Reset</button></div>
+<h4 class="label">Buttons</h4>
+<div class="kv"><span>Front (GPIO <span id="btn-front-pin">--</span>)</span><span><span id="btn-front-status" class="dot"></span> <span id="btn-front-text">Released</span></span><span>Rear (GPIO <span id="btn-rear-pin">--</span>)</span><span><span id="btn-rear-status" class="dot"></span> <span id="btn-rear-text">Released</span></span></div>
+<span class="muted sm">Press a button on the diffuser to test it.</span>
+<h4 class="label">Pins</h4>
+<div class="kv"><span>Platform</span><b id="diag-platform">--</b><span>Fan PWM / tacho</span><span>GPIO <span id="diag-fan-pwm">--</span> / <span id="diag-fan-tacho">--</span></span><span>LED</span><span>GPIO <span id="diag-led">--</span></span><span>Buttons</span><span>GPIO <span id="diag-btn-front">--</span> / <span id="diag-btn-rear">--</span></span></div>
+</div>
+</details>
+<details class="row" id="logs-section">
+<summary><span class="ico"><svg class="i"><use href="#i-list"/></svg></span><span class="grow"><b>System log</b><span class="muted sm">Events and errors</span></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+<div class="body">
+<div class="btns"><button id="refresh-logs" class="btn2 btn-sm">Refresh</button><button id="clear-logs" class="btn2 btn-sm danger">Clear</button></div>
+<div id="logs-container" class="logs"><div class="muted sm">Loading...</div></div>
+</div>
+</details>
+<button class="row static link" id="restart"><span class="ico"><svg class="i"><use href="#i-restart"/></svg></span><span class="grow"><b>Restart device</b></span></button>
+</div>
 
-            <details class="card" id="logs-section">
-                <summary>System Logs</summary>
-                <div class="logs-header">
-                    <button id="refresh-logs" class="btn-sm">Refresh</button>
-                    <button id="clear-logs" class="btn-sm danger">Clear</button>
-                </div>
-                <div id="logs-container" class="logs-container">
-                    <div class="log-loading">Loading logs...</div>
-                </div>
-            </details>
+<div class="card list"><button class="row static link danger" id="reset"><b>Factory reset</b></button></div>
+<p class="muted sm foot">MAC <span id="mac">--</span> · Signal <span id="rssi">--</span> dBm · <a href="https://github.com/martijnrenkema/Rituals-diffuser" target="_blank" rel="noopener">GitHub</a></p>
+</section>
 
-            <details class="card" id="update-section">
-                <summary>Software Updates</summary>
-                <div class="update-status">
-                    <div class="row">
-                        <span>Current version:</span>
-                        <b id="current-ver">--</b>
-                    </div>
-                    <div class="row">
-                        <span>Latest version:</span>
-                        <b id="latest-ver">--</b>
-                    </div>
-                    <div class="row">
-                        <span>Status:</span>
-                        <span id="update-state">Unknown</span>
-                    </div>
-                </div>
-                <div class="update-progress hidden" id="update-progress-section">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="update-progress-bar"></div>
-                    </div>
-                    <span id="update-progress-text">0%</span>
-                </div>
-                <div class="update-buttons">
-                    <button id="check-update" class="btn">Check for Updates</button>
-                    <span id="install-section" class="hidden">
-                        <button id="do-install" class="btn btn-success">Install Update</button>
-                    </span>
-                    <span id="manual-section" class="hidden">
-                        <a id="download-link" href="#" target="_blank" class="btn">Download from GitHub</a>
-                    </span>
-                </div>
-            </details>
+<!-- ================= FIRMWARE ================= -->
+<section id="v-firmware" class="view hidden">
+<h1 class="page-title">Firmware</h1>
+<div class="card">
+<div class="two">
+<div><span class="label">Installed</span><div class="ver" id="current-ver">--</div></div>
+<div><span class="label">Latest</span><div class="ver" id="latest-ver">--</div></div>
+</div>
+<div id="update-state" class="note">Checking...</div>
+<div id="update-progress-section" class="hidden"><div class="bar"><i id="update-progress-bar"></i></div><span class="muted sm" id="update-progress-text">0%</span></div>
+<div class="btns grow2">
+<button id="check-update" class="btn2">Check again</button>
+<button id="do-install" class="btn hidden">Install update</button>
+<a id="download-link" class="btn2" href="https://github.com/martijnrenkema/Rituals-diffuser/releases" target="_blank" rel="noopener">Release notes</a>
+</div>
+</div>
 
-            <details class="card">
-                <summary>System</summary>
-                <div class="info">
-                    <span>MAC: <b id="mac">--</b></span>
-                    <span>Signal: <b id="rssi">--</b> dBm</span>
-                </div>
-                <button id="reset" class="btn danger">Factory Reset</button>
-            </details>
-        </main>
-        <footer>
-            <a href="/update.html">Firmware Update</a>
-            <a href="https://github.com/martijnrenkema/Rituals-diffuser" target="_blank" rel="noopener">GitHub</a>
-            <span class="version" id="footer-version">v--</span>
-        </footer>
-    </div>
-    <script src="script.js"></script>
+<h3 class="label group">Manual upload</h3>
+<div class="card upload" id="fw-up">
+<input type="file" id="fw-file" accept=".bin" hidden>
+<div class="row-card"><span class="ico"><svg class="i"><use href="#i-chip"/></svg></span><span class="grow"><b>Firmware</b><span class="muted sm" id="fw-file-name">Choose or drop a firmware_*.bin file</span></span><span class="big-pct" id="fw-pct"></span></div>
+<div class="bar hidden" id="fw-bar"><i id="fw-fill"></i></div>
+<div class="btns"><button class="btn2 pick" data-for="fw-file">Choose file</button><button class="btn" id="fw-upload-btn" disabled>Upload</button></div>
+<span class="muted sm" id="fw-status"></span>
+</div>
+<div class="card upload" id="fs-up">
+<input type="file" id="fs-file" accept=".bin" hidden>
+<div class="row-card"><span class="ico"><svg class="i"><use href="#i-window"/></svg></span><span class="grow"><b>Web interface</b><span class="muted sm" id="fs-file-name">Choose or drop a littlefs_/spiffs_*.bin file</span></span><span class="big-pct" id="fs-pct"></span></div>
+<div class="bar hidden" id="fs-bar"><i id="fs-fill"></i></div>
+<div class="btns"><button class="btn2 pick" data-for="fs-file">Choose file</button><button class="btn" id="fs-upload-btn" disabled>Upload</button></div>
+<span class="muted sm" id="fs-status"></span>
+</div>
+<div class="note"><svg class="i"><use href="#i-info"/></svg><span>Upload the firmware first, then the web interface. The diffuser restarts after each file. <span id="esp8266-info" class="hidden">The ESP8266 switches to Safe Update mode for uploads; you will be redirected to a simple upload page.</span></span></div>
+</section>
+</main>
+</div>
+
+<div id="ota-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ota-title">
+<div class="card"><h2 id="ota-title">Safe Update mode</h2><p class="muted">The ESP8266 needs a dedicated update mode. MQTT pauses and you will be redirected to the upload page.</p><div class="ver" id="countdown">3</div></div>
+</div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+<script src="script.js"></script>
 </body>
 </html>

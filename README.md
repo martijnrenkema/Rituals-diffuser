@@ -29,7 +29,7 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
 - **Usage Statistics** - Track total runtime
 - **OTA Updates** - Wireless firmware updates via web interface
 - **Auto-Update** - Checks GitHub for new releases, one-click install (ESP32)
-- **Web Interface** - Configure WiFi, MQTT, passwords, and control the diffuser
+- **Web Interface** - Clean, responsive UI (phone and desktop, light and dark mode) to control the diffuser and configure WiFi, MQTT and passwords
 - **RGB LED Status** - Visual feedback for device state
 - **Physical Buttons** - Front and rear button support
 
@@ -219,10 +219,12 @@ Once installed, you can update wirelessly using one of these methods:
 ### Method 1: Web Interface (Easiest)
 
 1. Open web interface: `http://rituals-diffuser.local` or device IP
-2. Click "Firmware Update" at bottom
+2. Open the **Firmware** tab
 3. Upload the firmware `.bin` file
-4. Upload the filesystem `.bin` file (optional, for web interface updates)
+4. Upload the web interface (filesystem) `.bin` file
 5. Wait for restart
+
+On ESP32 / ESP32-C3 the Firmware tab can also install new releases from GitHub with one click.
 
 <p align="center">
   <img src="docs/images/firmware-update.png" alt="Firmware Update" width="300"/>
@@ -249,7 +251,7 @@ pio run -e esp32_ota -t uploadfs
 **Requirements:**
 - Device must be on same network as your computer
 - Default hostname: `rituals-diffuser.local`
-- Default OTA password: `diffuser-ota` (configurable in web UI → Security)
+- Default OTA password: `diffuser-ota` (configurable in web UI → Settings → Passwords)
 - OTA port: 3232 (ESP32) / 8266 (ESP8266)
 
 > **Note:** OTA updates don't require flash addresses - the ESP framework handles this automatically.
@@ -352,7 +354,7 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 | WiFi AP | `diffuser123` | Yes |
 | OTA Updates | `diffuser-ota` | Yes |
 
-Change passwords in web interface under "Security". Minimum 8 characters. Restart required after change.
+Change passwords in the web interface under Settings → Passwords. Minimum 8 characters. Restart required after change.
 
 ### Night Mode
 
@@ -384,9 +386,9 @@ Outside night hours the LED runs at full brightness.
 
 ### Fan not spinning
 1. Check wiring connections
-2. Go to Hardware Diagnostics in web interface
-3. Try "Test Cycle" to verify fan works
-4. Adjust Min PWM if fan needs higher starting voltage
+2. Open Settings → Hardware diagnostics in the web interface
+3. Press "Test" to verify the fan works
+4. Use "Calibrate" or set the minimum PWM if the fan needs a higher starting voltage
 
 <p align="center">
   <img src="docs/images/hardware-diagnostics.png" alt="Hardware Diagnostics" width="250"/>
@@ -416,7 +418,7 @@ Outside night hours the LED runs at full brightness.
 **If you see "Web interface files missing":**
 - You need to flash the filesystem (the web interface files)
 - Download `littlefs_esp8266.bin` (ESP8266) or `spiffs_esp32.bin` (ESP32) from the [latest release](https://github.com/martijnrenkema/Rituals-diffuser/releases)
-- Flash via web interface (Firmware Update) or esptool:
+- Flash via web interface (Firmware tab) or esptool:
   ```bash
   # ESP8266: filesystem offset is 0x1E0000
   esptool.py write_flash 0x1E0000 littlefs_esp8266.bin
@@ -455,7 +457,7 @@ Look for these log messages:
 │   └── ota_handler.*         # ArduinoOTA
 ├── data/                     # Web files (LittleFS on ESP8266, SPIFFS on ESP32)
 │   ├── index.html
-│   ├── update.html
+│   ├── update.html         # Redirect to the Firmware tab (old links)
 │   ├── style.css
 │   └── script.js
 ├── platformio.ini
@@ -515,6 +517,20 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.11.0
+**New web interface:**
+- Redesigned UI with Control, Settings and Firmware tabs; bottom tab bar on phones, sidebar on desktop
+- Follows the system light/dark mode, uses Inter (or the system font), one blue accent colour
+- Settings are a grouped list showing the current state (WiFi network, MQTT broker, night mode hours, firmware version); tap a row to edit it
+- Firmware updates (check, one-click install on ESP32, manual upload) moved from `update.html` into the Firmware tab; `update.html` redirects there
+- Interval times save automatically; notifications replace pop-up alerts
+- Smaller than before: 14.4 KB gzipped for all web files (was 15.5 KB)
+- ESP8266 Safe Update page restyled to match
+
+**Firmware:**
+- New `POST /api/restart` endpoint (used by "Restart device" in Settings)
+- ESP32-C3 reports its platform as `ESP32-C3`
+
 ### v1.10.0
 **Bug Fixes:**
 - Front button AP mode no longer disappears after a few seconds (the background WiFi retry fired immediately and closed the AP)
@@ -573,10 +589,5 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 - Remove broken `esp32c3_rfid_scan` build environment (referenced non-existent source file)
 - Remove unused FastLED dependency from ESP8266 environments (ESP8266 uses NeoPixelBus)
 - Fix ESP32 build error: invalid WiFi TX power constant (WIFI_POWER_20_5dBm → WIFI_POWER_19_5dBm)
-
-### v1.9.7
-**ESP8266 RAM Optimization:**
-- Disabled ArduinoOTA background service on ESP8266 to free RAM - use web-based Safe Update mode instead
-- ESP32 and ESP32-C3 retain ArduinoOTA (plenty of RAM available)
 
 For older versions, see [GitHub Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases).

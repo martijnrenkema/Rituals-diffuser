@@ -370,6 +370,14 @@ void WebServer::setupRoutes() {
         handleReset(request);
     });
 
+    _server->on("/api/restart", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (rejectCrossSite(request)) return;
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Restarting...\"}");
+        // Schedule restart in loop() to avoid blocking async callback
+        _pendingRestart = true;
+        _pendingActionTime = millis();
+    });
+
     _server->on("/api/passwords", HTTP_POST, [this](AsyncWebServerRequest* request) {
         handleSavePasswords(request);
     });
@@ -607,11 +615,7 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["device"]["name"] = settings.deviceName;
     doc["device"]["mac"] = wifiManager.getMacAddress();
     doc["device"]["version"] = FIRMWARE_VERSION;
-    #ifdef PLATFORM_ESP8266
-    doc["device"]["platform"] = "ESP8266";
-    #else
-    doc["device"]["platform"] = "ESP32";
-    #endif
+    doc["device"]["platform"] = PLATFORM_NAME;
 
     // Statistics
     doc["stats"]["total_runtime"] = fanController.getTotalRuntimeMinutes() / 60.0;  // hours
@@ -1046,11 +1050,7 @@ void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
     doc["buttons"]["rear_pressed"] = buttonHandler.isRearPressed();
 
     // Pin configuration
-#ifdef PLATFORM_ESP8266
-    doc["pins"]["platform"] = "ESP8266";
-#else
-    doc["pins"]["platform"] = "ESP32";
-#endif
+    doc["pins"]["platform"] = PLATFORM_NAME;
     doc["pins"]["fan_pwm"] = FAN_PWM_PIN;
     doc["pins"]["fan_tacho"] = FAN_TACHO_PIN;
     doc["pins"]["led"] = LED_DATA_PIN;

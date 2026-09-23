@@ -6,8 +6,14 @@
 // ===========================================
 #ifdef ESP8266
     #define PLATFORM_ESP8266
+    #define PLATFORM_NAME "ESP8266"
 #else
     #define PLATFORM_ESP32
+    #ifdef ESP32C3_SUPERMINI
+        #define PLATFORM_NAME "ESP32-C3"
+    #else
+        #define PLATFORM_NAME "ESP32"
+    #endif
 #endif
 
 // ===========================================
@@ -220,7 +226,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.10.0"
+#define FIRMWARE_VERSION        "1.11.0"
 
 // ===========================================
 // Update Checker Settings
