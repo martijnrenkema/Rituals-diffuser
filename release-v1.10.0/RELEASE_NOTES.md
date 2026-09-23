@@ -1,0 +1,48 @@
+# v1.10.0 - Reliability & Safety
+
+Bug fixes from a full code review, a safer factory reset on the rear button, and CSRF protection for the web API.
+
+## Bug Fixes
+
+- **AP mode via front button stayed open for only a few seconds:** the background WiFi retry fired immediately after a long press and closed the AP again. The retry now waits 5 minutes.
+- **Total runtime double-counted in Home Assistant:** runtime saved every 30 minutes was added a second time. Web UI and MQTT now report the same value.
+- **Wrong handler for `/api/status/lite` and `/api/diagnostic/buttons`:** the web server's prefix matching sent them to `/api/status` and `/api/diagnostic`. Status polling now really uses the light endpoint, and the diagnostics button test works again.
+- **Stuck OTA state:** a failed or interrupted web upload left the LED blinking purple until reboot. Failed uploads are now aborted and cleaned up, and stalled uploads time out after 30 seconds.
+- **Filesystem corruption risk during upload:** the filesystem is unmounted and log writes are paused while a filesystem image is uploaded through the web UI.
+- **Night mode brightness 0%:** the LED turned back on at 50% on the next status change. 0% now keeps the LED off at night.
+- **Inconsistent daytime brightness:** the LED ran at 50% without night mode and 100% with night mode enabled. It is now 100% in both cases.
+- **Default OTA password:** back to `diffuser-ota` as documented (was derived from the MAC address).
+- **WiFi reconnect status:** when WiFi comes back on its own, the LED and MQTT recover immediately instead of after up to 60 seconds.
+- **MQTT settings validation:** host/user/password length limits now match the storage size (no silent truncation of the last character).
+
+## Improvements
+
+- **Rear button factory reset:** needs a 5 second hold. After 1 second the LED blinks red slowly as a warning; releasing the button cancels. At 5 seconds the LED blinks red fast to confirm, then the settings are cleared. A short press still restarts the device.
+- **CSRF protection:** state-changing requests sent by a browser from another website (Origin/Referer header not matching the device address) are rejected with 403. A malicious web page can no longer reset or reflash the diffuser through your browser. The web UI, curl and scripts are unaffected.
+- **ESP32 thread safety:** web handlers and the main loop are serialized with a mutex, so web requests no longer race with fan, LED, MQTT and storage updates.
+- **ESP8266 Safe Update mode:** turns the fan off when entered and restarts automatically after 10 minutes without activity.
+- **Less flash wear:** fan speed is saved 5 seconds after the last change instead of on every slider step.
+- **Web OTA upload** turns the fan off. **Fan calibration** saves pending runtime and updates LED/MQTT.
+- **Fewer filesystem lookups:** API routes are matched before static files.
+- **MQTT reconnect backoff** capped at 60 seconds as intended.
+
+## Resource Usage
+
+| Platform | RAM | Flash |
+|----------|-----|-------|
+| ESP8266 | ~76% | ~72% |
+| ESP32 | ~22% | ~72% |
+| ESP32-C3 | ~19% | ~68% |
+
+## Binaries
+
+| File | Platform | Flash Address |
+|------|----------|---------------|
+| `firmware_esp8266.bin` | ESP8266 | `0x0` |
+| `littlefs_esp8266.bin` | ESP8266 | `0x1E0000` |
+| `firmware_esp32.bin` | ESP32 | `0x10000` |
+| `spiffs_esp32.bin` | ESP32 | `0x3D0000` |
+| `firmware_esp32c3.bin` | ESP32-C3 SuperMini | `0x10000` |
+| `spiffs_esp32c3.bin` | ESP32-C3 SuperMini | `0x3D0000` |
+
+> Updating the filesystem is optional for this release (only the speed slider debounce changed), but recommended.

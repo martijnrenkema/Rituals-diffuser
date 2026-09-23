@@ -45,6 +45,7 @@ public:
     void showIntervalMode();    // Purple - Interval mode active
     void showOTA();             // Purple fast blink - OTA update
     void showError();           // Red - Error
+    void showResetWarning();    // Red slow blink - factory reset button held
 
     // Brightness control (for night mode)
     void setBrightness(uint8_t percent);

@@ -325,14 +325,16 @@ The device automatically appears in Home Assistant when MQTT auto-discovery is e
 ### Rear Button (SW1 - Cold Reset)
 | Action | Function |
 |--------|----------|
-| Short press | Restart device |
-| Long press (3s) | Factory reset (clears all settings) |
+| Short press (<1s) | Restart device |
+| Hold 1s | LED blinks red slowly: factory reset warning. Release now to cancel |
+| Hold 5s | LED blinks red fast to confirm, then factory reset (clears all settings) |
 
 ## LED Status Indicators
 
 | Color | Pattern | Status |
 |-------|---------|--------|
 | Red | Blinking | Disconnected / Error |
+| Red | Slow blink | Rear button held - factory reset warning |
 | Cyan | Fast blink | Connecting to WiFi |
 | Green | Solid | Fan running |
 | Blue | Solid | Timer active |
@@ -356,8 +358,10 @@ Change passwords in web interface under "Security". Minimum 8 characters. Restar
 
 Automatically dims the LED during specified hours:
 - Configure start/end hour (0-23)
-- Set dimmed brightness (0-100%)
+- Set dimmed brightness (0-100%, 0% turns the LED off at night)
 - Enable/disable via web interface
+
+Outside night hours the LED runs at full brightness.
 
 ## Troubleshooting
 
@@ -401,7 +405,7 @@ Automatically dims the LED during specified hours:
    - WiFi connection fails 3x (takes ~90 seconds), OR
    - Long press front button (3 seconds)
 2. Check serial log for `[WIFI] AP started` and `[WIFI] AP IP: 192.168.4.1`
-3. If `[WIFI] ERROR: Failed to start AP!` appears, try factory reset (long press rear button)
+3. If `[WIFI] ERROR: Failed to start AP!` appears, try factory reset (hold rear button 5 seconds)
 
 **If connected but page won't load:**
 1. Use `http://192.168.4.1/` (not https!)
@@ -447,6 +451,7 @@ Look for these log messages:
 │   ├── wifi_manager.*        # WiFi connection
 │   ├── web_server.*          # Web interface + OTA
 │   ├── mqtt_handler.*        # MQTT + HA discovery
+│   ├── state_lock.*          # Mutex between web handlers and main loop (ESP32)
 │   └── ota_handler.*         # ArduinoOTA
 ├── data/                     # Web files (LittleFS on ESP8266, SPIFFS on ESP32)
 │   ├── index.html
@@ -506,6 +511,29 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v1.10.0
+**Bug Fixes:**
+- Front button AP mode no longer disappears after a few seconds (the background WiFi retry fired immediately and closed the AP)
+- Total runtime no longer double-counted in Home Assistant (web UI and MQTT now show the same value)
+- `/api/status/lite` and `/api/diagnostic/buttons` were answered by the wrong handler (route prefix matching); the diagnostics button test works again and status polling uses the light endpoint
+- Failed or stalled web OTA uploads no longer leave the device stuck in OTA mode (purple LED); uploads time out after 30s of inactivity
+- Filesystem is unmounted and log writes are paused during a web OTA upload, preventing a corrupted filesystem image
+- Night mode brightness 0% now really keeps the LED off, and daytime brightness is the same (100%) whether night mode is enabled or not
+- Default OTA password is `diffuser-ota` again, as documented (was derived from the MAC address)
+- LED reconnect status updates immediately when WiFi comes back on its own
+- MQTT host/user/password length validation matches the storage size (no silent truncation)
+- "Web interface files missing" page names the correct filesystem image
+
+**Improvements:**
+- Rear button: factory reset now needs a 5 second hold. After 1s the LED blinks red as a warning; releasing cancels.
+- CSRF protection: state-changing API requests coming from another website (Origin/Referer not matching the device) are rejected, so a web page can no longer trigger reset/upload through your browser. Scripts and curl are unaffected.
+- ESP32: HTTP handlers and the main loop are serialized with a mutex (no more races between web requests and fan/MQTT/LED updates)
+- ESP8266 Safe Update mode turns the fan off and restarts automatically after 10 minutes without activity
+- Fan speed is saved 5s after the last change instead of on every slider step (less flash wear)
+- Web OTA upload turns the fan off; fan calibration saves runtime and updates LED/MQTT
+- Static files are matched after API routes (fewer filesystem lookups per API call)
+- MQTT reconnect backoff capped at 60s as intended
+
 ### v1.9.10
 **ESP8266 RAM & Stability:**
 - Scent table moved to PROGMEM and duplicate settings copy removed: ~2 KB more free RAM on ESP8266 (static RAM 78.2% → 75.7%)
@@ -537,29 +565,5 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 **ESP8266 RAM Optimization:**
 - Disabled ArduinoOTA background service on ESP8266 to free RAM - use web-based Safe Update mode instead
 - ESP32 and ESP32-C3 retain ArduinoOTA (plenty of RAM available)
-
-### v1.9.6
-**ESP8266 Update Checker & OTA Improvements** - Firmware version now reliably appears in Home Assistant on ESP8266. Update UI enabled on all platforms. OTA upload page shows real-time progress.
-
-**Stream-based Update Checker:**
-- Replaced `getString()` with direct JSON stream parsing (`deserializeJson` from HTTP stream)
-- Avoids allocating ~10KB GitHub API response as String - critical for ESP8266 low-heap situations
-- Increased BearSSL rx buffer from 512 to 1024 bytes for more reliable TLS
-- Added `HTTP/1.0` mode to force Content-Length headers (no chunked transfer)
-
-**Update UI on ESP8266:**
-- Update section now visible on ESP8266 web interface (was hidden)
-- Added extra polling timeouts (10s, 15s) for slower BearSSL HTTPS checks
-- Dynamic release URL from API response
-- Added `release_url` and `error` fields to main `/api/status` endpoint
-
-**OTA Upload Progress:**
-- Sync OTA page now uses XHR-based uploads with real-time progress bars
-- Button disables during upload with "Do not interrupt!" warning
-- Success/failure shown inline (no page reload)
-- Removed PROGMEM success/fail HTML pages (saves flash)
-
-### v1.9.5
-**ESP8266 Stability Overhaul** - Major heap fragmentation fixes addressing crash reports ([#8](https://github.com/martijnrenkema/Rituals-diffuser/issues/8), [#3](https://github.com/martijnrenkema/Rituals-diffuser/issues/3)). Thanks to [@FredericMa](https://github.com/FredericMa) for [PR #9](https://github.com/martijnrenkema/Rituals-diffuser/pull/9).
 
 For older versions, see [GitHub Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases).

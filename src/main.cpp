@@ -15,6 +15,7 @@
 #include "logger.h"
 #include "update_checker.h"
 #include "button_handler.h"
+#include "state_lock.h"
 
 #ifdef PLATFORM_ESP8266
 #include "sync_ota.h"
@@ -29,8 +30,24 @@
 bool timeConfigured = false;
 unsigned long lastNightModeCheck = 0;
 
-// OTA state tracking
-bool otaInProgress = false;
+// OTA state tracking (also written from the AsyncTCP upload handler)
+volatile bool otaInProgress = false;
+
+// Rear button held: factory reset warning shown on the LED
+bool factoryResetWarning = false;
+
+// Fan speed persistence is debounced to avoid a flash write per slider step
+static uint8_t pendingSpeedSave = 0;
+static unsigned long speedChangedAt = 0;
+
+// Write settings that are still waiting for their debounce delay.
+// Call before any intentional restart.
+void flushPendingSettings() {
+    if (pendingSpeedSave > 0) {
+        storage.setFanSpeed(pendingSpeedSave);
+        pendingSpeedSave = 0;
+    }
+}
 
 // Configure NTP time sync
 void setupTimeSync() {
@@ -73,7 +90,7 @@ void checkNightMode(bool force) {
     if (!storage.isNightModeEnabled()) {
         // Disabled: restore full brightness if we were previously dimming
         if (force || (initialized && wasNight)) {
-            ledController.setBrightness(100);
+            ledController.setBrightness(LED_DEFAULT_BRIGHTNESS);
             wasNight = false;
             initialized = true;
         }
@@ -92,8 +109,8 @@ void checkNightMode(bool force) {
             Serial.printf("[MAIN] Night mode brightness applied (hour=%d, %d%%)\n",
                           hour, storage.getNightModeBrightness());
         } else {
-            ledController.setBrightness(100);
-            Serial.printf("[MAIN] Night mode inactive, full brightness (hour=%d)\n", hour);
+            ledController.setBrightness(LED_DEFAULT_BRIGHTNESS);
+            Serial.printf("[MAIN] Night mode inactive, day brightness (hour=%d)\n", hour);
         }
         wasNight = isNight;
     }
@@ -101,6 +118,7 @@ void checkNightMode(bool force) {
 
 // Central LED status update - determines LED color based on priority
 // Priority (highest first):
+// 0. Factory reset warning (red slow blink while rear button is held)
 // 1. OTA in progress (purple fast blink)
 // 2. AP mode (orange pulsing)
 // 3. WiFi connecting (cyan blinking)
@@ -111,7 +129,13 @@ void checkNightMode(bool force) {
 // 8. Fan on (green solid)
 // 9. Standby / fan off (LED off)
 void updateLedStatus() {
-    // 1. OTA has highest priority
+    // 0. Rear button held - warn before factory reset
+    if (factoryResetWarning) {
+        ledController.showResetWarning();
+        return;
+    }
+
+    // 1. OTA
     if (otaInProgress) {
         ledController.showOTA();
         return;
@@ -180,11 +204,25 @@ void onFanStateChange(bool on, uint8_t speed) {
     // other caller.
     mqttHandler.requestStatePublish();
 
-    // Only save speed if it actually changed (avoid flash wear)
-    static uint8_t lastSavedSpeed = 0;
-    if (speed != lastSavedSpeed && speed > 0) {
-        storage.setFanSpeed(speed);
-        lastSavedSpeed = speed;
+    // Persist speed once it has been stable for FAN_SPEED_SAVE_DELAY_MS
+    // (dragging the web slider would otherwise write flash on every step)
+    if (speed == 0) return;
+    if (speed == storage.getSettings().fanSpeed) {
+        pendingSpeedSave = 0;
+    } else {
+        pendingSpeedSave = speed;
+        speedChangedAt = millis();
+    }
+}
+
+// Show a red fast blink for a moment before a restart/reset.
+// Blocking is fine here: the device is about to reboot anyway.
+static void blinkBeforeRestart(unsigned long durationMs) {
+    ledController.showError();
+    unsigned long start = millis();
+    while (millis() - start < durationMs) {
+        ledController.loop();
+        delay(10);
     }
 }
 
@@ -220,20 +258,33 @@ void onFrontButton(ButtonEvent event) {
     }
 }
 
+// Rear button:
+//   short press (<1s)       -> restart
+//   hold 1s                 -> LED blinks red slowly (factory reset warning)
+//   release before 5s       -> cancel, nothing happens
+//   hold 5s                 -> LED blinks red fast (confirmation), factory reset
 void onRearButton(ButtonEvent event) {
     if (event == ButtonEvent::SHORT_PRESS) {
-        // Restart ESP32
         Serial.println("[MAIN] Restart triggered by button");
         logger.info("Restart triggered by button");
-        ledController.showError();  // Flash red to indicate restart
-        delay(500);
+        logger.save();
+        flushPendingSettings();
+        blinkBeforeRestart(500);
         ESP.restart();
+    } else if (event == ButtonEvent::HOLD_WARNING) {
+        Serial.println("[MAIN] Rear button held - release to cancel factory reset");
+        factoryResetWarning = true;
+        updateLedStatus();
+    } else if (event == ButtonEvent::HOLD_CANCELLED) {
+        Serial.println("[MAIN] Factory reset cancelled");
+        factoryResetWarning = false;
+        updateLedStatus();
     } else if (event == ButtonEvent::LONG_PRESS) {
-        // Factory reset - clear all settings and restart
         Serial.println("[MAIN] Factory reset triggered!");
         logger.warn("Factory reset triggered");
-        ledController.showError();
-        delay(1000);
+        logger.save();
+        factoryResetWarning = false;
+        blinkBeforeRestart(1500);
         storage.reset();
         ESP.restart();
     }
@@ -243,6 +294,9 @@ void setup() {
     // Initialize serial
     Serial.begin(SERIAL_BAUD);
     delay(1000);
+
+    // Must exist before the web server starts handling requests (ESP32)
+    stateLockInit();
 
     Serial.println();
     Serial.println("=================================");
@@ -358,42 +412,60 @@ void loop() {
     }
     #endif
 
-    // Run all component loops with strategic yields for ESP8266 stability
-    wifiManager.loop();
+    // Run all component loops with strategic yields for ESP8266 stability.
+    // Components that share state with HTTP handlers run under the state lock
+    // (ESP32: handlers run in the AsyncTCP task; ESP8266: no-op).
+    {
+        StateLock lock;
+        wifiManager.loop();
+        yield();
+
+        fanController.loop();
+        ledController.loop();
+
+        otaHandler.loop();
+        buttonHandler.loop();
+        webServer.loop();  // Process pending web actions
+    }
     yield();
 
-    fanController.loop();
-    ledController.loop();
-
-    otaHandler.loop();
-    buttonHandler.loop();
-    webServer.loop();  // Process pending web actions
-    yield();
-
+    // Not locked: blocks for seconds during HTTPS and only touches its own state
     updateChecker.loop();  // Check for firmware updates (heap-guarded on ESP8266)
 
-    // Run MQTT loop with extra yield time
+    // Locks internally around command handling (connect attempts may block ~3s)
     mqttHandler.loop();
     yield();
 
-    // Check for urgent log saves (ERROR/WARN logs need saving)
-    if (logger.needsUrgentSave()) {
-        logger.save();
-    }
+    unsigned long now = millis();
+    {
+        StateLock lock;
 
-    // RFID loop (all platforms with RC522_ENABLED)
+        // Check for urgent log saves (ERROR/WARN logs need saving).
+        // Never write the filesystem while an OTA upload may be replacing it.
+        if (!otaInProgress && logger.needsUrgentSave()) {
+            logger.save();
+        }
+
+        // RFID loop (all platforms with RC522_ENABLED)
 #if defined(RC522_ENABLED)
-    rfidLoop();
+        rfidLoop();
 #endif
 
-    // Periodic tasks every minute
-    unsigned long now = millis();
-    if (now - lastNightModeCheck >= 60000) {
-        checkNightMode(false);
-        lastNightModeCheck = now;
+        // Debounced fan speed persistence
+        if (pendingSpeedSave > 0 && now - speedChangedAt >= FAN_SPEED_SAVE_DELAY_MS) {
+            flushPendingSettings();
+        }
 
-        // Save logs periodically (only writes if dirty)
-        logger.save();
+        // Periodic tasks every minute
+        if (now - lastNightModeCheck >= 60000) {
+            checkNightMode(false);
+            lastNightModeCheck = now;
+
+            // Save logs periodically (only writes if dirty)
+            if (!otaInProgress) {
+                logger.save();
+            }
+        }
     }
 
 #ifdef PLATFORM_ESP8266

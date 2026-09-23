@@ -112,14 +112,16 @@
 // ===========================================
 #define FAN_MIN_SPEED       0       // Minimum speed (0%)
 #define FAN_MAX_SPEED       100     // Maximum speed (100%)
-#define FAN_MIN_PWM         0       // Some fans need minimum ~20% to start
 #define FAN_SOFT_START_MS   500     // Soft start duration
+#define FAN_SPEED_SAVE_DELAY_MS 5000 // Persist speed only after it stopped changing (flash wear)
 
 // ===========================================
 // Button Configuration
 // ===========================================
 #define BUTTON_DEBOUNCE_MS      50      // Debounce time
-#define BUTTON_LONG_PRESS_MS    3000    // Long press for WiFi reset
+#define BUTTON_LONG_PRESS_MS    3000    // Front button long press: start AP mode
+#define BUTTON_RESET_WARN_MS    1000    // Rear button: LED starts blinking red (release = cancel)
+#define BUTTON_RESET_PRESS_MS   5000    // Rear button: factory reset
 
 // ===========================================
 // Timer Presets (minutes)
@@ -162,7 +164,9 @@
 // OTA Settings
 // ===========================================
 #define OTA_HOSTNAME            "rituals-diffuser"
-#define OTA_PASSWORD            "diffuser-ota"
+#define OTA_PASSWORD            "diffuser-ota"  // Default, changeable in web UI -> Security
+#define SYNC_OTA_TIMEOUT_MS     600000          // ESP8266 safe update mode: restart after 10 min idle
+#define WEB_UPLOAD_TIMEOUT_MS   30000           // Abort a web OTA upload that stalls this long
 
 // ===========================================
 // NVS Storage Keys (EEPROM on ESP8266)
@@ -204,8 +208,8 @@
 // LED Blink Patterns (ms)
 // ===========================================
 #define LED_BLINK_FAST          100     // WiFi connecting
-#define LED_BLINK_SLOW          500     // AP mode
-#define LED_PULSE_INTERVAL      2000    // Timer active
+#define LED_BLINK_SLOW          500     // AP mode / factory reset warning
+#define LED_DEFAULT_BRIGHTNESS  100     // Daytime brightness (%) - night mode dims below this
 
 // ===========================================
 // Misc
@@ -216,7 +220,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "1.9.10"
+#define FIRMWARE_VERSION        "1.10.0"
 
 // ===========================================
 // Update Checker Settings

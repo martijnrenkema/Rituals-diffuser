@@ -117,13 +117,13 @@ void UpdateChecker::performCheck() {
 #ifdef PLATFORM_ESP8266
     // ESP8266: Check if we have enough memory for BearSSL TLS handshake
     uint32_t freeHeap = ESP.getFreeHeap();
-    logger.infof("Free heap for update check: %lu bytes", freeHeap);
+    logger.infof("Free heap for update check: %lu bytes", (unsigned long)freeHeap);
 
     // BearSSL needs ~12-15KB, plus the 1.5KB JSON doc and HTTP buffers (~2KB),
     // so 18KB is a more realistic floor than 15KB.
     if (freeHeap < 18000) {
-        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Low memory (%lu bytes)", freeHeap);
-        logger.warnf("Update check skipped: only %lu bytes free", freeHeap);
+        snprintf(_info.errorMessage, sizeof(_info.errorMessage), "Low memory (%lu bytes)", (unsigned long)freeHeap);
+        logger.warnf("Update check skipped: only %lu bytes free", (unsigned long)freeHeap);
         _state = UpdateCheckState::ERROR;
         if (_stateCallback) _stateCallback();
         return;

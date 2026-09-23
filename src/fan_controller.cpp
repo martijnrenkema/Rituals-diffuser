@@ -2,9 +2,6 @@
 #include "config.h"
 #include "storage.h"
 
-// External function from main.cpp for LED status updates
-extern void updateLedStatus();
-
 // Helper macro for LEDC write - new API uses pin, old API uses channel
 #if defined(PLATFORM_ESP32) && ESP_ARDUINO_VERSION_MAJOR >= 3
     #define FAN_LEDC_WRITE(duty) ledcWrite(FAN_PWM_PIN, duty)
@@ -78,7 +75,7 @@ void FanController::loop() {
         _lastRpmCalc = now;
 
         if (_calibrating) {
-            Serial.printf("[FAN] RPM calc: count=%lu, rpm=%d\n", count, _rpm);
+            Serial.printf("[FAN] RPM calc: count=%lu, rpm=%d\n", (unsigned long)count, _rpm);
         }
     }
 
@@ -95,7 +92,7 @@ void FanController::loop() {
 #endif
             _currentPWM = 0;
             Serial.println("[FAN] Calibration timeout - aborted after 60s");
-            updateLedStatus();  // Update LED to reflect fan is now off
+            notifyStateChange();  // Update LED + MQTT to reflect fan is now off
             return;
         }
 
@@ -121,7 +118,7 @@ void FanController::loop() {
                 _currentPWM = 0;
 
                 Serial.printf("[FAN] Calibration complete! minPWM = %d\n", _minPWM);
-                updateLedStatus();  // Update LED to reflect fan is now off
+                notifyStateChange();  // Update LED + MQTT to reflect fan is now off
             } else if (_calibrationPWM < 250) {
                 // Increase PWM and try again
                 _calibrationPWM += 5;
@@ -142,7 +139,7 @@ void FanController::loop() {
 #endif
                 _currentPWM = 0;
                 Serial.println("[FAN] Calibration failed - no RPM detected");
-                updateLedStatus();  // Update LED to reflect fan is now off
+                notifyStateChange();  // Update LED + MQTT to reflect fan is now off
             }
         }
         return;  // Skip normal fan logic during calibration
@@ -423,8 +420,11 @@ void FanController::startCalibration() {
 
     Serial.println("[FAN] Starting calibration...");
 
-    // Ensure fan is off and state is clean
-    _isOn = false;
+    // Turn the fan off through the normal path so pending runtime is saved,
+    // the timer is cancelled and LED/MQTT get notified
+    if (_isOn) {
+        turnOff();
+    }
     _softStartTime = 0;
     _timerActive = false;
 
@@ -491,5 +491,11 @@ uint32_t FanController::getSessionRuntimeMinutes() {
 }
 
 uint32_t FanController::getTotalRuntimeMinutes() {
-    return storage.getTotalRuntimeMinutes() + getSessionRuntimeMinutes();
+    // Storage already contains everything up to _lastRuntimeSave (saved every
+    // 30 min while running), so only add the part that isn't stored yet.
+    uint32_t unsaved = 0;
+    if (_isOn && _lastRuntimeSave > 0) {
+        unsaved = (millis() - _lastRuntimeSave) / 60000;
+    }
+    return storage.getTotalRuntimeMinutes() + unsaved;
 }

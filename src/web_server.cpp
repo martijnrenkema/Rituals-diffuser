@@ -8,6 +8,7 @@
 #include "mqtt_handler.h"
 #include "update_checker.h"
 #include "logger.h"
+#include "state_lock.h"
 #include <ArduinoJson.h>
 
 // RFID support for all platforms with RC522_ENABLED
@@ -15,10 +16,11 @@
 #include "rfid_handler.h"
 #endif
 
-// External function and flag from main.cpp for LED priority system
+// External functions and flag from main.cpp
 extern void updateLedStatus();
 extern void checkNightMode(bool force);
-extern bool otaInProgress;
+extern void flushPendingSettings();
+extern volatile bool otaInProgress;
 
 #ifdef PLATFORM_ESP8266
 // External flag from sync_ota.cpp
@@ -37,6 +39,7 @@ void stopAsyncWebServer() {
     #define FILESYSTEM LittleFS
     // ESP8266 Arduino Core 3.x: getErrorString() returns a String
     #define UPDATE_ERROR_STRING() Update.getErrorString().c_str()
+    #define FS_IMAGE_NAME "littlefs_esp8266.bin"
     // Linker symbols for filesystem size
     extern "C" uint32_t _FS_start;
     extern "C" uint32_t _FS_end;
@@ -45,7 +48,44 @@ void stopAsyncWebServer() {
     #include <Update.h>
     #define FILESYSTEM SPIFFS
     #define UPDATE_ERROR_STRING() Update.errorString()
+    #define FS_IMAGE_NAME "spiffs_esp32.bin"
 #endif
+
+// CSRF protection for state-changing requests. Browsers always send an Origin
+// (or at least Referer) header on cross-site POST/DELETE requests, including
+// plain HTML form posts. If one is present it must match the Host we are
+// served on, so another website can't trigger actions (reset, firmware
+// upload, ...) through a visitor's browser. Requests without either header
+// (curl, scripts, Home Assistant REST) are not browser-driven and allowed.
+static bool isSameOrigin(AsyncWebServerRequest* request) {
+    const char* name = request->hasHeader("Origin") ? "Origin"
+                     : request->hasHeader("Referer") ? "Referer" : nullptr;
+    if (name == nullptr) return true;
+
+    String origin = request->header(name);
+    int schemeEnd = origin.indexOf("://");
+    if (schemeEnd < 0) return false;          // Includes Origin: null
+    origin = origin.substring(schemeEnd + 3);
+    int pathStart = origin.indexOf('/');
+    if (pathStart >= 0) origin = origin.substring(0, pathStart);
+    return origin.equalsIgnoreCase(request->host());
+}
+
+static bool rejectCrossSite(AsyncWebServerRequest* request) {
+    if (isSameOrigin(request)) return false;
+    request->send(403, "application/json", "{\"error\":\"Cross-site request rejected\"}");
+    return true;
+}
+
+// Handlers run in the AsyncTCP task on ESP32; take the state lock before
+// touching shared state. Bounded wait so the network task never stalls long.
+#define LOCK_TIMEOUT_MS 2000
+#define LOCK_OR_503(request) \
+    StateLock _stateLock(LOCK_TIMEOUT_MS); \
+    if (!_stateLock.locked()) { \
+        (request)->send(503, "application/json", "{\"error\":\"Busy, please retry\"}"); \
+        return; \
+    }
 
 WebServer webServer;
 
@@ -87,6 +127,24 @@ void WebServer::loop() {
     // Process deferred actions from async callbacks
     // This prevents blocking the network stack in callbacks
 
+    // Web OTA upload started: free resources and stop the fan (done here
+    // instead of in the upload handler, which runs in the network context)
+    if (_uploadStartPending) {
+        _uploadStartPending = false;
+        mqttHandler.disconnect();
+        fanController.turnOff();
+        updateLedStatus();
+        logger.info("Web OTA upload started");
+    }
+
+    // Upload stalled (client gone, network drop): abort so the device
+    // doesn't stay in OTA state forever
+    if (_uploadActive && millis() - _lastUploadActivity > WEB_UPLOAD_TIMEOUT_MS) {
+        Serial.println("[OTA] Upload timed out - aborting");
+        abortUpload();
+        logger.warn("Web OTA upload timed out");
+    }
+
     if (_pendingActionTime == 0) return;
 
     // Wait for HTTP response to be sent (500ms is enough for TCP ACK)
@@ -100,7 +158,6 @@ void WebServer::loop() {
         _pendingWifiConnect = false;
         actionProcessed = true;
         wifiManager.connect(_pendingWifiSsid, _pendingWifiPassword);
-        if (_settingsCallback) _settingsCallback();
     }
 
     if (_pendingMqttConnect) {
@@ -109,7 +166,6 @@ void WebServer::loop() {
         mqttHandler.disconnect();
         mqttHandler.connect(_pendingMqttHost, _pendingMqttPort,
                            _pendingMqttUser, _pendingMqttPassword);
-        if (_settingsCallback) _settingsCallback();
     }
 
     if (_pendingReset) {
@@ -122,6 +178,7 @@ void WebServer::loop() {
     if (_pendingRestart) {
         _pendingRestart = false;
         actionProcessed = true;
+        flushPendingSettings();
         ESP.restart();
     }
 
@@ -145,22 +202,155 @@ void WebServer::loop() {
     }
 }
 
-void WebServer::onSettingsChanged(SettingsCallback callback) {
-    _settingsCallback = callback;
+// Abort a web OTA upload and restore normal operation
+void WebServer::abortUpload() {
+#ifdef PLATFORM_ESP8266
+    Update.end();    // Resets the updater when the image is incomplete
+#else
+    Update.abort();
+#endif
+    if (_uploadIsFilesystem) {
+        // Remount without formatting - a half-written image must not be wiped
+#ifdef PLATFORM_ESP8266
+        FILESYSTEM.begin();
+#else
+        FILESYSTEM.begin(false);
+#endif
+    }
+    _uploadActive = false;
+    _uploadRequest = nullptr;
+    otaInProgress = false;
+    updateLedStatus();
+}
+
+// Upload data handler for firmware and filesystem images
+void WebServer::handleUploadChunk(AsyncWebServerRequest* request, bool filesystem, size_t index,
+                                  uint8_t* data, size_t len, bool final) {
+    if (!index) {
+        // CSRF protection (see isSameOrigin). A second concurrent upload would
+        // corrupt the first one. Rejected requests never become _uploadRequest,
+        // so all their chunks are ignored.
+        if (!isSameOrigin(request) || _uploadActive) {
+            return;
+        }
+
+        Serial.printf("[OTA] %s update start\n", filesystem ? "Filesystem" : "Firmware");
+        _uploadRequest = request;
+        _uploadFailed = false;
+        _uploadIsFilesystem = filesystem;
+        _lastUploadActivity = millis();
+        {
+            StateLock lock(LOCK_TIMEOUT_MS);
+            otaInProgress = true;     // Also stops log writes to the filesystem
+            _uploadActive = true;
+        }
+        _uploadStartPending = true;   // loop(): MQTT off, fan off, LED
+
+        bool began;
+        if (filesystem) {
+            // Unmount so nothing writes into the partition being replaced
+            FILESYSTEM.end();
+#ifdef PLATFORM_ESP8266
+            size_t fsSize = ((size_t)&_FS_end - (size_t)&_FS_start);
+            began = Update.begin(fsSize, U_FS);
+#else
+            began = Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS);
+#endif
+        } else {
+#ifdef PLATFORM_ESP8266
+            // request->contentLength() includes multipart overhead and may not equal
+            // the actual firmware size. Use the maximum sketch space (matches the
+            // sync OTA path in sync_ota.cpp) so Update.begin() always sees a valid
+            // upper bound regardless of the multipart envelope.
+            uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+            began = Update.begin(maxSketchSpace, U_FLASH);
+#else
+            began = Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+#endif
+        }
+        if (!began) {
+            Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
+            Update.printError(Serial);
+            _uploadFailed = true;
+            return;
+        }
+        Serial.println("[OTA] Update.begin success");
+    }
+
+    if (request != _uploadRequest || !_uploadActive) {
+        return;  // Rejected or aborted by timeout
+    }
+    _lastUploadActivity = millis();
+    if (_uploadFailed) {
+        return;  // Drain the rest of the body; handleUploadDone() reports the error
+    }
+
+    if (len) {
+        if (Update.write(data, len) != len) {
+            Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
+            _uploadFailed = true;
+            return;
+        }
+        // Feed watchdog to prevent timeout on large uploads
+        // NOTE: Do NOT call yield() here - on ESP8266 the AsyncWebServer upload
+        // handler runs in system context where yield() causes a panic crash
+        #ifdef PLATFORM_ESP8266
+        ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
+        #endif
+    }
+
+    if (final) {
+        if (Update.end(true)) {
+            Serial.printf("[OTA] Update success: %u bytes\n", index + len);
+        } else {
+            Serial.printf("[OTA] Update failed: %s\n", UPDATE_ERROR_STRING());
+            Update.printError(Serial);
+            _uploadFailed = true;
+        }
+    }
+}
+
+// Upload complete handler (runs after the last chunk)
+void WebServer::handleUploadDone(AsyncWebServerRequest* request) {
+    if (request != _uploadRequest) {
+        request->send(403, "text/plain", "Upload rejected");
+        return;
+    }
+
+    bool success = _uploadActive && !_uploadFailed && !Update.hasError();
+    AsyncWebServerResponse* response = request->beginResponse(
+        success ? 200 : 500,
+        "text/plain",
+        success ? "OK" : "Update failed"
+    );
+    response->addHeader("Connection", "close");
+    request->send(response);
+
+    StateLock lock(LOCK_TIMEOUT_MS);
+    if (success) {
+        _uploadActive = false;
+        _uploadRequest = nullptr;
+        // Schedule restart in loop() to avoid blocking async callback
+        _pendingRestart = true;
+        _pendingActionTime = millis();
+    } else if (_uploadActive) {
+        // Reset OTA state so LED, MQTT and logging return to normal
+        abortUpload();
+        logger.warn("Web OTA upload failed");
+    }
 }
 
 void WebServer::setupRoutes() {
-    // Serve static files from filesystem
-    _server->serveStatic("/", FILESYSTEM, "/").setDefaultFile("index.html");
-
-    // API endpoints
-    _server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        handleStatus(request);
-    });
+    // NOTE on ordering: AsyncCallbackWebHandler matches "/x" also for "/x/...",
+    // and the first registered match wins. Register more specific paths first.
 
     // Lite status endpoint for polling - uses stack allocation to reduce heap pressure on ESP8266
     _server->on("/api/status/lite", HTTP_GET, [this](AsyncWebServerRequest* request) {
         handleStatusLite(request);
+    });
+
+    _server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleStatus(request);
     });
 
     _server->on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest* request) {
@@ -200,19 +390,22 @@ void WebServer::setupRoutes() {
     // Pre-size the stream buffer to one alloc instead of growing under
     // backpressure (default ~1460 bytes; full log JSON can reach ~2.4 KB).
     _server->on("/api/logs", HTTP_GET, [](AsyncWebServerRequest* request) {
+        LOCK_OR_503(request);
         AsyncResponseStream* response = request->beginResponseStream("application/json", 4096);
         logger.streamJson(*response);
         request->send(response);
     });
 
     _server->on("/api/logs", HTTP_DELETE, [](AsyncWebServerRequest* request) {
+        if (rejectCrossSite(request)) return;
+        LOCK_OR_503(request);
         logger.clear();
         request->send(200, "application/json", "{\"success\":true,\"message\":\"Logs cleared\"}");
     });
 
-    // Hardware diagnostics
-    _server->on("/api/diagnostic", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        handleDiagnostic(request);
+    // Hardware diagnostics (sub-paths before "/api/diagnostic", see note above)
+    _server->on("/api/diagnostic/buttons", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleDiagnosticButtons(request);
     });
 
     _server->on("/api/diagnostic/led", HTTP_POST, [this](AsyncWebServerRequest* request) {
@@ -223,12 +416,14 @@ void WebServer::setupRoutes() {
         handleDiagnosticFan(request);
     });
 
-    _server->on("/api/diagnostic/buttons", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        handleDiagnosticButtons(request);
+    _server->on("/api/diagnostic", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleDiagnostic(request);
     });
 
     // Device settings
     _server->on("/api/device", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (rejectCrossSite(request)) return;
+        LOCK_OR_503(request);
         if (request->hasParam("name", true)) {
             String name = request->getParam("name", true)->value();
             if (name.length() > 0 && name.length() < 32) {
@@ -260,13 +455,12 @@ void WebServer::setupRoutes() {
     #ifdef PLATFORM_ESP8266
     // ESP8266: Prepare for sync OTA mode (stops async server, starts sync server)
     _server->on("/api/ota/prepare", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (rejectCrossSite(request)) return;
         Serial.println("[OTA] Preparing for sync OTA mode...");
-        Serial.printf("[OTA] Flag BEFORE: %d\n", requestSyncOTAMode ? 1 : 0);
 
         // Set flag BEFORE sending response - main loop will handle the actual switch
         requestSyncOTAMode = true;
 
-        Serial.printf("[OTA] Flag AFTER: %d\n", requestSyncOTAMode ? 1 : 0);
         request->send(200, "application/json", "{\"success\":true,\"message\":\"Switching to OTA mode...\"}");
     });
     #endif
@@ -274,146 +468,20 @@ void WebServer::setupRoutes() {
     // OTA Update - Firmware
     _server->on("/api/update/firmware", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
-            // Upload complete handler
-            bool success = !Update.hasError();
-            AsyncWebServerResponse* response = request->beginResponse(
-                success ? 200 : 500,
-                "text/plain",
-                success ? "OK" : "Update failed"
-            );
-            response->addHeader("Connection", "close");
-            request->send(response);
-            if (success) {
-                // Schedule restart in loop() to avoid blocking async callback
-                _pendingRestart = true;
-                _pendingActionTime = millis();
-            }
+            handleUploadDone(request);
         },
-        [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
-            // Upload data handler
-            if (!index) {
-                Serial.printf("[OTA] Firmware update start: %s\n", filename.c_str());
-                otaInProgress = true;
-                updateLedStatus();
-
-                // Stop non-essential services to free memory
-                mqttHandler.disconnect();
-
-                #ifdef PLATFORM_ESP8266
-                // request->contentLength() includes multipart overhead and may not equal
-                // the actual firmware size. Use the maximum sketch space (matches the
-                // sync OTA path in sync_ota.cpp) so Update.begin() always sees a valid
-                // upper bound regardless of the multipart envelope.
-                uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-                if (!Update.begin(maxSketchSpace, U_FLASH)) {
-                #else
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
-                #endif
-                    Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
-                    Update.printError(Serial);
-                    return;
-                }
-                Serial.println("[OTA] Update.begin success");
-            }
-
-            if (Update.hasError()) {
-                return;  // Skip writing if already failed
-            }
-
-            if (len) {
-                if (Update.write(data, len) != len) {
-                    Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
-                    return;
-                }
-                // Feed watchdog to prevent timeout on large uploads
-                // NOTE: Do NOT call yield() here - on ESP8266 the AsyncWebServer upload
-                // handler runs in system context where yield() causes a panic crash
-                #ifdef PLATFORM_ESP8266
-                ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
-                #endif
-            }
-
-            if (final) {
-                if (Update.end(true)) {
-                    Serial.printf("[OTA] Firmware update success: %u bytes\n", index + len);
-                } else {
-                    Serial.printf("[OTA] Firmware update failed: %s\n", UPDATE_ERROR_STRING());
-                    Update.printError(Serial);
-                    // Reset OTA flag on failure so LED returns to normal
-                    otaInProgress = false;
-                    updateLedStatus();
-                }
-            }
+        [this](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
+            handleUploadChunk(request, false, index, data, len, final);
         }
     );
 
     // OTA Update - Filesystem
     _server->on("/api/update/filesystem", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
-            bool success = !Update.hasError();
-            AsyncWebServerResponse* response = request->beginResponse(
-                success ? 200 : 500,
-                "text/plain",
-                success ? "OK" : "Update failed"
-            );
-            response->addHeader("Connection", "close");
-            request->send(response);
-            if (success) {
-                // Schedule restart in loop() to avoid blocking async callback
-                _pendingRestart = true;
-                _pendingActionTime = millis();
-            }
+            handleUploadDone(request);
         },
-        [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
-            if (!index) {
-                Serial.printf("[OTA] Filesystem update start: %s\n", filename.c_str());
-                otaInProgress = true;
-                updateLedStatus();
-
-                // Stop non-essential services to free memory
-                mqttHandler.disconnect();
-
-                #ifdef PLATFORM_ESP8266
-                size_t fsSize = ((size_t)&_FS_end - (size_t)&_FS_start);
-                if (!Update.begin(fsSize, U_FS)) {
-                #else
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_SPIFFS)) {
-                #endif
-                    Serial.printf("[OTA] Update.begin failed: %s\n", UPDATE_ERROR_STRING());
-                    Update.printError(Serial);
-                    return;
-                }
-                Serial.println("[OTA] Update.begin success");
-            }
-
-            if (Update.hasError()) {
-                return;  // Skip writing if already failed
-            }
-
-            if (len) {
-                if (Update.write(data, len) != len) {
-                    Serial.printf("[OTA] Update.write failed: %s\n", UPDATE_ERROR_STRING());
-                    return;
-                }
-                // Feed watchdog to prevent timeout on large uploads
-                // NOTE: Do NOT call yield() here - on ESP8266 the AsyncWebServer upload
-                // handler runs in system context where yield() causes a panic crash
-                #ifdef PLATFORM_ESP8266
-                ESP.wdtFeed();  // Explicitly feed software watchdog on ESP8266
-                #endif
-            }
-
-            if (final) {
-                if (Update.end(true)) {
-                    Serial.printf("[OTA] Filesystem update success: %u bytes\n", index + len);
-                } else {
-                    Serial.printf("[OTA] Filesystem update failed: %s\n", UPDATE_ERROR_STRING());
-                    Update.printError(Serial);
-                    // Reset OTA flag on failure so LED returns to normal
-                    otaInProgress = false;
-                    updateLedStatus();
-                }
-            }
+        [this](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
+            handleUploadChunk(request, true, index, data, len, final);
         }
     );
 
@@ -451,6 +519,10 @@ void WebServer::setupRoutes() {
         request->send(200, "text/plain", F("success"));
     });
 
+    // Static files last: the static handler hits the filesystem for every
+    // request it is asked about, so API routes must be matched before it.
+    _server->serveStatic("/", FILESYSTEM, "/").setDefaultFile("index.html");
+
     // Captive portal redirect - only in AP mode, redirect to config page
     _server->onNotFound([](AsyncWebServerRequest* request) {
         // Only redirect GET requests in AP mode for captive portal
@@ -463,7 +535,7 @@ void WebServer::setupRoutes() {
                     "<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
                     "<h1>Rituals Diffuser</h1>"
                     "<p>Web interface files missing!</p>"
-                    "<p>Please flash <b>spiffs_esp8266.bin</b> to the device.</p>"
+                    "<p>Please flash <b>" FS_IMAGE_NAME "</b> to the device.</p>"
                     "</body></html>");
             } else {
                 request->redirect("http://192.168.4.1/");
@@ -475,6 +547,8 @@ void WebServer::setupRoutes() {
 }
 
 void WebServer::handleStatus(AsyncWebServerRequest* request) {
+    LOCK_OR_503(request);
+
 #ifdef PLATFORM_ESP8266
     // Protect against OOM during response generation
     if (ESP.getFreeHeap() < 8000) {
@@ -528,7 +602,7 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     #endif
 
     // Statistics
-    doc["stats"]["total_runtime"] = storage.getTotalRuntimeMinutes() / 60.0;  // hours
+    doc["stats"]["total_runtime"] = fanController.getTotalRuntimeMinutes() / 60.0;  // hours
     doc["stats"]["session_runtime"] = fanController.getSessionRuntimeMinutes();  // minutes
 
     // Night mode
@@ -612,6 +686,9 @@ void WebServer::handleStatusLite(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     if (!request->hasParam("ssid", true) || !request->hasParam("password", true)) {
         request->send(400, "application/json", "{\"error\":\"Missing parameters\"}");
         return;
@@ -643,6 +720,9 @@ void WebServer::handleSaveWifi(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     if (!request->hasParam("host", true)) {
         request->send(400, "application/json", "{\"error\":\"Missing host parameter\"}");
         return;
@@ -651,8 +731,8 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
     const String& host = request->getParam("host", true)->value();
 
     // Validate host length
-    if (host.length() == 0 || host.length() > 64) {
-        request->send(400, "application/json", "{\"error\":\"Host must be 1-64 characters\"}");
+    if (host.length() == 0 || host.length() > 63) {
+        request->send(400, "application/json", "{\"error\":\"Host must be 1-63 characters\"}");
         return;
     }
 
@@ -674,15 +754,15 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
     String passwordStr = "";
     if (request->hasParam("user", true)) {
         userStr = request->getParam("user", true)->value();
-        if (userStr.length() > 32) {
-            request->send(400, "application/json", "{\"error\":\"Username must be max 32 characters\"}");
+        if (userStr.length() > 31) {
+            request->send(400, "application/json", "{\"error\":\"Username must be max 31 characters\"}");
             return;
         }
     }
     if (request->hasParam("password", true)) {
         passwordStr = request->getParam("password", true)->value();
-        if (passwordStr.length() > 64) {
-            request->send(400, "application/json", "{\"error\":\"Password must be max 64 characters\"}");
+        if (passwordStr.length() > 63) {
+            request->send(400, "application/json", "{\"error\":\"Password must be max 63 characters\"}");
             return;
         }
     }
@@ -702,6 +782,9 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleFanControl(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     StaticJsonDocument<256> response;
     response["success"] = true;
 
@@ -728,8 +811,7 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
         if (validSpeed && speedStr.length() > 0) {
             int speed = speedStr.toInt();
             if (speed >= 0 && speed <= 100) {
-                fanController.setSpeed(speed);
-                storage.setFanSpeed(speed);
+                fanController.setSpeed(speed);  // Persisted (debounced) via main.cpp
             }
         }
         // Ignore invalid speed values silently (backwards compatible)
@@ -807,6 +889,9 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleReset(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Resetting...\"}");
 
     // Schedule reset in loop() to avoid blocking async callback
@@ -815,6 +900,9 @@ void WebServer::handleReset(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleSavePasswords(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     bool changed = false;
 
     if (request->hasParam("ota_password", true)) {
@@ -879,6 +967,9 @@ void WebServer::handleGetNightMode(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     bool enabled = false;
     uint8_t start = 22;
     uint8_t end = 7;
@@ -915,6 +1006,8 @@ void WebServer::handleSaveNightMode(AsyncWebServerRequest* request) {
 // =====================================================
 
 void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
+    LOCK_OR_503(request);
+
     // Use StaticJsonDocument on stack to avoid heap allocation and fragmentation
     // ESP8266 has 4KB stack which can handle 384 bytes
     StaticJsonDocument<384> doc;
@@ -961,6 +1054,9 @@ void WebServer::handleDiagnostic(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleDiagnosticLed(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     if (request->hasParam("action", true)) {
         String action = request->getParam("action", true)->value();
 
@@ -997,6 +1093,9 @@ void WebServer::handleDiagnosticLed(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleDiagnosticFan(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     if (request->hasParam("action", true)) {
         String action = request->getParam("action", true)->value();
 
@@ -1105,6 +1204,9 @@ void WebServer::handleDiagnosticButtons(AsyncWebServerRequest* request) {
 // ==========================================
 
 void WebServer::handleUpdateCheck(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     // Schedule update check in loop() to avoid blocking async callback
     _pendingUpdateCheck = true;
     _pendingActionTime = millis();
@@ -1141,6 +1243,9 @@ void WebServer::handleUpdateStatus(AsyncWebServerRequest* request) {
 
 #ifndef PLATFORM_ESP8266
 void WebServer::handleStartUpdate(AsyncWebServerRequest* request) {
+    if (rejectCrossSite(request)) return;
+    LOCK_OR_503(request);
+
     if (!updateChecker.isUpdateAvailable()) {
         request->send(400, "application/json", "{\"error\":\"No update available\"}");
         return;

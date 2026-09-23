@@ -7,7 +7,9 @@
 enum class ButtonEvent {
     NONE,
     SHORT_PRESS,
-    LONG_PRESS
+    LONG_PRESS,
+    HOLD_WARNING,   // Held past the warning threshold (only if a warning time is set)
+    HOLD_CANCELLED  // Released after HOLD_WARNING but before LONG_PRESS
 };
 
 class ButtonHandler {
@@ -25,20 +27,23 @@ public:
     bool isRearPressed();
 
 private:
-    // Front button (Connect)
-    bool _frontLastState = HIGH;
-    unsigned long _frontPressTime = 0;
-    bool _frontLongPressFired = false;
-    ButtonCallback _frontCallback = nullptr;
+    struct Button {
+        uint8_t pin;
+        unsigned long longPressMs;
+        unsigned long warnMs;       // 0 = no HOLD_WARNING / HOLD_CANCELLED events
+        bool lastState;
+        unsigned long pressTime;
+        bool longPressFired;
+        bool warningFired;
+        ButtonCallback callback;
+    };
 
-    // Rear button
-    bool _rearLastState = HIGH;
-    unsigned long _rearPressTime = 0;
-    bool _rearLongPressFired = false;
-    ButtonCallback _rearCallback = nullptr;
+    // Front button (Connect): short = fan toggle, long (3s) = AP mode
+    Button _front = {BUTTON_FRONT_PIN, BUTTON_LONG_PRESS_MS, 0, HIGH, 0, false, false, nullptr};
+    // Rear button: short = restart, hold 1s = warning, hold 5s = factory reset
+    Button _rear = {BUTTON_REAR_PIN, BUTTON_RESET_PRESS_MS, BUTTON_RESET_WARN_MS, HIGH, 0, false, false, nullptr};
 
-    void handleButton(uint8_t pin, bool& lastState, unsigned long& pressTime,
-                      bool& longPressFired, ButtonCallback callback);
+    void handleButton(Button& btn);
 };
 
 extern ButtonHandler buttonHandler;

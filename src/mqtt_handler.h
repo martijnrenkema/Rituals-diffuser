@@ -69,10 +69,6 @@ public:
         interrupts();
     }
 
-    // Callbacks
-    typedef void (*CommandCallback)(const char* topic, const char* payload);
-    void onCommand(CommandCallback callback);
-
 private:
     WiFiClient _wifiClient;
     PubSubClient _mqttClient;
@@ -97,8 +93,6 @@ private:
     MqttPublishState _publishState = MqttPublishState::IDLE;
     static const unsigned long PUBLISH_STEP_DELAY = 50; // ms between publishes
 
-    CommandCallback _commandCallback = nullptr;
-
     static void mqttCallback(char* topic, byte* payload, unsigned int length);
     static MQTTHandler* _instance;
 
@@ -118,8 +112,6 @@ private:
     void publishCurrentVersionSensorDiscovery();
     void publishScentSensorDiscovery();
     void publishCartridgeBinarySensorDiscovery();
-
-    String getBaseTopic();
 };
 
 extern MQTTHandler mqttHandler;

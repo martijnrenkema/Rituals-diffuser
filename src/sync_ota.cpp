@@ -10,10 +10,11 @@
 #include "wifi_manager.h"
 #include "mqtt_handler.h"
 #include "led_controller.h"
+#include "fan_controller.h"
 // Note: Don't include logger.h - we avoid flash writes during OTA
 
 // External variables from main.cpp
-extern bool otaInProgress;
+extern volatile bool otaInProgress;
 extern void updateLedStatus();
 
 // Flag to signal main loop to switch to sync OTA mode
@@ -118,6 +119,10 @@ void runSyncOTAServer() {
     Serial.println("[OTA-SYNC] Starting synchronous OTA server...");
     // Note: Don't use logger during OTA - it writes to flash which can conflict
 
+    // The main loop (fan timer, interval mode) stops running from here on,
+    // so don't leave the fan spinning unattended
+    fanController.turnOff();
+
     // Stop MQTT to free memory and prevent interference
     mqttHandler.disconnect();
     Serial.println("[OTA-SYNC] MQTT disconnected");
@@ -141,8 +146,32 @@ void runSyncOTAServer() {
     // Create synchronous web server
     ESP8266WebServer syncServer(80);
 
+    // CSRF protection: a browser-sent Origin/Referer must match our Host
+    // (same rule as isSameOrigin() in web_server.cpp)
+    syncServer.collectHeaders("Origin", "Referer");
+    auto sameOrigin = [&syncServer]() -> bool {
+        String origin = syncServer.hasHeader("Origin") ? syncServer.header("Origin")
+                      : syncServer.hasHeader("Referer") ? syncServer.header("Referer") : String();
+        if (origin.length() == 0) return true;   // Not browser-driven
+        int schemeEnd = origin.indexOf("://");
+        if (schemeEnd < 0) return false;          // Includes Origin: null
+        origin = origin.substring(schemeEnd + 3);
+        int pathStart = origin.indexOf('/');
+        if (pathStart >= 0) origin = origin.substring(0, pathStart);
+        return origin.equalsIgnoreCase(syncServer.hostHeader());
+    };
+
+    // Per-upload state. Update.hasError() alone is not enough: a rejected or
+    // never-started upload has no error but must not trigger a restart.
+    static bool uploadOk = false;
+
+    // Restart automatically when nobody uses safe mode (e.g. page closed)
+    static unsigned long lastActivity = 0;
+    lastActivity = millis();
+
     // Serve the OTA page with dynamic version info
     syncServer.on("/", HTTP_GET, [&syncServer]() {
+        lastActivity = millis();
         String page = generateOTAPage();
         syncServer.send(200, "text/html", page);
     });
@@ -159,25 +188,37 @@ void runSyncOTAServer() {
 
     // Handle firmware upload
     syncServer.on("/update", HTTP_POST, [&syncServer]() {
-        if (Update.hasError()) {
+        lastActivity = millis();
+        if (!uploadOk || Update.hasError()) {
             Serial.printf("[OTA-SYNC] Firmware update error: %s\n", Update.getErrorString().c_str());
-            syncServer.send(500, "text/plain", Update.getErrorString());
+            syncServer.send(500, "text/plain", uploadOk ? Update.getErrorString() : String(F("Upload rejected or failed")));
         } else {
             syncServer.send(200, "text/plain", F("OK"));
             delay(1000);
             ESP.restart();
         }
-    }, [&syncServer]() {
+    }, [&syncServer, sameOrigin]() {
         HTTPUpload& upload = syncServer.upload();
+        lastActivity = millis();
         if (upload.status == UPLOAD_FILE_START) {
+            uploadOk = false;
+            if (!sameOrigin()) {
+                Serial.println("[OTA-SYNC] Upload rejected: cross-site request");
+                return;
+            }
             Serial.printf("[OTA-SYNC] Firmware upload start: %s\n", upload.filename.c_str());
             uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
             if (!Update.begin(maxSketchSpace, U_FLASH)) {
                 Serial.printf("[OTA-SYNC] Update.begin failed: %s\n", Update.getErrorString().c_str());
+                return;
             }
+            uploadOk = true;
+        } else if (!uploadOk) {
+            return;
         } else if (upload.status == UPLOAD_FILE_WRITE) {
             if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
                 Serial.printf("[OTA-SYNC] Update.write failed: %s\n", Update.getErrorString().c_str());
+                uploadOk = false;
             }
             // Feed watchdog
             ESP.wdtFeed();
@@ -186,32 +227,45 @@ void runSyncOTAServer() {
                 Serial.printf("[OTA-SYNC] Firmware update success: %u bytes\n", upload.totalSize);
             } else {
                 Serial.printf("[OTA-SYNC] Update.end failed: %s\n", Update.getErrorString().c_str());
+                uploadOk = false;
             }
         }
     });
 
     // Handle filesystem upload
     syncServer.on("/update-fs", HTTP_POST, [&syncServer]() {
-        if (Update.hasError()) {
+        lastActivity = millis();
+        if (!uploadOk || Update.hasError()) {
             Serial.printf("[OTA-SYNC] Filesystem update error: %s\n", Update.getErrorString().c_str());
-            syncServer.send(500, "text/plain", Update.getErrorString());
+            syncServer.send(500, "text/plain", uploadOk ? Update.getErrorString() : String(F("Upload rejected or failed")));
         } else {
             syncServer.send(200, "text/plain", F("OK"));
             delay(1000);
             ESP.restart();
         }
-    }, [&syncServer]() {
+    }, [&syncServer, sameOrigin]() {
         HTTPUpload& upload = syncServer.upload();
+        lastActivity = millis();
         if (upload.status == UPLOAD_FILE_START) {
+            uploadOk = false;
+            if (!sameOrigin()) {
+                Serial.println("[OTA-SYNC] Upload rejected: cross-site request");
+                return;
+            }
             Serial.printf("[OTA-SYNC] Filesystem upload start: %s\n", upload.filename.c_str());
             size_t fsSize = ((size_t)&_FS_end - (size_t)&_FS_start);
             LittleFS.end();  // Unmount filesystem before update
             if (!Update.begin(fsSize, U_FS)) {
                 Serial.printf("[OTA-SYNC] Update.begin failed: %s\n", Update.getErrorString().c_str());
+                return;
             }
+            uploadOk = true;
+        } else if (!uploadOk) {
+            return;
         } else if (upload.status == UPLOAD_FILE_WRITE) {
             if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
                 Serial.printf("[OTA-SYNC] Update.write failed: %s\n", Update.getErrorString().c_str());
+                uploadOk = false;
             }
             ESP.wdtFeed();
         } else if (upload.status == UPLOAD_FILE_END) {
@@ -219,6 +273,7 @@ void runSyncOTAServer() {
                 Serial.printf("[OTA-SYNC] Filesystem update success: %u bytes\n", upload.totalSize);
             } else {
                 Serial.printf("[OTA-SYNC] Update.end failed: %s\n", Update.getErrorString().c_str());
+                uploadOk = false;
             }
         }
     });
@@ -233,6 +288,12 @@ void runSyncOTAServer() {
         syncServer.handleClient();
         ESP.wdtFeed();
         delay(10);
+
+        if (millis() - lastActivity > SYNC_OTA_TIMEOUT_MS) {
+            Serial.println("[OTA-SYNC] No activity for 10 minutes - restarting to normal mode");
+            delay(100);
+            ESP.restart();
+        }
     }
 }
 

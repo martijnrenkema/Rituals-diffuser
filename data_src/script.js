@@ -138,7 +138,7 @@ $('#speed').oninput=e=>{
     const offset=circumference-(e.target.value/100)*circumference;
     $('#speed-circle').style.strokeDashoffset=offset;
     clearTimeout(speedTimer);
-    speedTimer=setTimeout(()=>cmd({speed:e.target.value}),50);  // Snellere respons
+    speedTimer=setTimeout(()=>cmd({speed:e.target.value}),150);  // Debounce: fewer requests while dragging
 };
 
 $$('.timer-btn').forEach(b=>b.onclick=()=>cmd({timer:b.dataset.t}));

@@ -3,10 +3,8 @@
 
 #ifdef PLATFORM_ESP8266
     #include <EEPROM.h>
-    #include <ESP8266WiFi.h>
 #else
     #include <Preferences.h>
-    #include <WiFi.h>
     static Preferences prefs;
 #endif
 
@@ -201,13 +199,8 @@ const char* Storage::getOTAPassword() {
     if (strlen(_settings.otaPassword) > 0) {
         return _settings.otaPassword;
     }
-    // Generate unique default password from MAC address
-    // Format: "ota-" + last 6 hex chars of MAC = 10 char password
-    static char defaultOta[16];
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    snprintf(defaultOta, sizeof(defaultOta), "ota-%02x%02x%02x", mac[3], mac[4], mac[5]);
-    return defaultOta;
+    // Documented default (README) - users can change it in the web UI
+    return OTA_PASSWORD;
 }
 
 const char* Storage::getAPPassword() {
@@ -255,8 +248,6 @@ void Storage::ensureDefaults(DiffuserSettings& settings) {
         settings.nightModeEnd = 7;     // 7 AM
         settings.nightModeBrightness = 10;  // 10% brightness
     }
-    // Update checker defaults (v6)
-    // lastKnownVersion and updateAvailable are zero-initialized by memset
 }
 
 // Usage Statistics
@@ -270,13 +261,13 @@ void Storage::addRuntimeMinutes(uint32_t minutes) {
     if (_pendingRuntimeMinutes >= 360) {
         commit();
         _pendingRuntimeMinutes = 0;
-        Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", _settings.totalRuntimeMinutes);
+        Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", (unsigned long)_settings.totalRuntimeMinutes);
     }
 #else
     // ESP32: NVS has wear leveling, safe to write more often
     prefs.putULong(NVS_TOTAL_RUNTIME, _settings.totalRuntimeMinutes);
     _pendingRuntimeMinutes = 0;
-    Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", _settings.totalRuntimeMinutes);
+    Serial.printf("[STORAGE] Runtime saved: %lu minutes\n", (unsigned long)_settings.totalRuntimeMinutes);
 #endif
 }
 
@@ -287,7 +278,7 @@ void Storage::flushRuntime() {
 #else
     prefs.putULong(NVS_TOTAL_RUNTIME, _settings.totalRuntimeMinutes);
 #endif
-    Serial.printf("[STORAGE] Runtime flushed: %lu minutes\n", _settings.totalRuntimeMinutes);
+    Serial.printf("[STORAGE] Runtime flushed: %lu minutes\n", (unsigned long)_settings.totalRuntimeMinutes);
     _pendingRuntimeMinutes = 0;
 }
 

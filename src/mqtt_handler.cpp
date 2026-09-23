@@ -5,6 +5,7 @@
 #include "storage.h"
 #include "logger.h"
 #include "update_checker.h"
+#include "state_lock.h"
 
 // RFID support for all platforms with RC522_ENABLED
 #if defined(RC522_ENABLED)
@@ -13,8 +14,9 @@
 
 // WiFi library is included via mqtt_handler.h
 
-// External function from main.cpp for LED priority system
+// External function and flag from main.cpp
 extern void updateLedStatus();
+extern volatile bool otaInProgress;
 
 MQTTHandler mqttHandler;
 MQTTHandler* MQTTHandler::_instance = nullptr;
@@ -59,7 +61,8 @@ void MQTTHandler::loop() {
         unsigned long now = millis();
         if (now - _lastReconnect >= _reconnectInterval) {
             _lastReconnect = now;
-            if (_host.length() > 0 && wifiManager.isConnected()) {
+            // Don't reconnect during a firmware upload - it only competes for RAM
+            if (_host.length() > 0 && wifiManager.isConnected() && !otaInProgress) {
                 Serial.println("[MQTT] Attempting connection...");
                 String clientId = "rituals-" + _deviceId;
 
@@ -105,11 +108,13 @@ void MQTTHandler::loop() {
                     Serial.printf("[MQTT] Connection failed, rc=%d\n", _mqttClient.state());
                     logger.errorf("MQTT connection failed (rc=%d)", _mqttClient.state());
                     // Back off so a dead broker doesn't stall the loop every 5s
-                    if (_reconnectInterval < 60000UL) _reconnectInterval *= 2;
+                    _reconnectInterval = min(_reconnectInterval * 2, 60000UL);
                 }
             }
         }
     } else {
+        // Incoming commands mutate fan/storage state; serialize with HTTP handlers
+        StateLock lock;
         _mqttClient.loop();
 
         // Process non-blocking publish state machine
@@ -423,8 +428,7 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         // toInt() returns 0 for non-numeric strings, only accept if payload was "0" or valid number
         bool isValidNumber = (speed > 0) || (p == "0");
         if (isValidNumber) {
-            fanController.setSpeed(speed);
-            storage.setFanSpeed(speed);
+            fanController.setSpeed(speed);  // Persisted (debounced) via main.cpp
             if (speed > 0 && !fanController.isOn()) {
                 fanController.turnOn();
             }
@@ -475,20 +479,6 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
 
     // Request state publish (non-blocking)
     requestStatePublish();
-
-    // Notify callback
-    if (_commandCallback) {
-        _commandCallback(topic, payload);
-    }
-}
-
-void MQTTHandler::onCommand(CommandCallback callback) {
-    _commandCallback = callback;
-}
-
-String MQTTHandler::getBaseTopic() {
-    // Include device ID for unique topics when multiple diffusers are present
-    return String(MQTT_TOPIC_PREFIX) + "_" + _deviceId;
 }
 
 void MQTTHandler::publishDiscovery() {

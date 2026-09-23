@@ -21,26 +21,24 @@ void ButtonHandler::begin() {
 #endif
 
     // Initialize press times to prevent false long-press detection if button held during boot
-    _frontPressTime = millis();
-    _rearPressTime = millis();
+    _front.pressTime = millis();
+    _rear.pressTime = millis();
 
     Serial.println("[BTN] Button handler initialized");
     Serial.printf("[BTN] Front (SW2): GPIO%d, Rear (SW1): GPIO%d\n", BUTTON_FRONT_PIN, BUTTON_REAR_PIN);
 }
 
 void ButtonHandler::loop() {
-    handleButton(BUTTON_FRONT_PIN, _frontLastState, _frontPressTime,
-                 _frontLongPressFired, _frontCallback);
-    handleButton(BUTTON_REAR_PIN, _rearLastState, _rearPressTime,
-                 _rearLongPressFired, _rearCallback);
+    handleButton(_front);
+    handleButton(_rear);
 }
 
 void ButtonHandler::onFrontButton(ButtonCallback callback) {
-    _frontCallback = callback;
+    _front.callback = callback;
 }
 
 void ButtonHandler::onRearButton(ButtonCallback callback) {
-    _rearCallback = callback;
+    _rear.callback = callback;
 }
 
 bool ButtonHandler::isFrontPressed() {
@@ -51,38 +49,45 @@ bool ButtonHandler::isRearPressed() {
     return digitalRead(BUTTON_REAR_PIN) == LOW;
 }
 
-void ButtonHandler::handleButton(uint8_t pin, bool& lastState, unsigned long& pressTime,
-                                  bool& longPressFired, ButtonCallback callback) {
-    bool currentState = digitalRead(pin);
+void ButtonHandler::handleButton(Button& btn) {
+    bool currentState = digitalRead(btn.pin);
     unsigned long now = millis();
 
     // Button pressed (transition HIGH -> LOW)
-    if (lastState == HIGH && currentState == LOW) {
-        pressTime = now;
-        longPressFired = false;
+    if (btn.lastState == HIGH && currentState == LOW) {
+        btn.pressTime = now;
+        btn.longPressFired = false;
+        btn.warningFired = false;
     }
 
-    // Button held down - check for long press
-    if (currentState == LOW && !longPressFired) {
-        if (now - pressTime >= BUTTON_LONG_PRESS_MS) {
-            longPressFired = true;
-            if (callback) {
-                callback(ButtonEvent::LONG_PRESS);
-            }
-            Serial.printf("[BTN] GPIO%d long press\n", pin);
+    if (currentState == LOW && !btn.longPressFired) {
+        unsigned long held = now - btn.pressTime;
+
+        // Held long enough to warn (e.g. "factory reset coming")
+        if (btn.warnMs > 0 && !btn.warningFired && held >= btn.warnMs) {
+            btn.warningFired = true;
+            Serial.printf("[BTN] GPIO%d hold warning\n", btn.pin);
+            if (btn.callback) btn.callback(ButtonEvent::HOLD_WARNING);
+        }
+
+        if (held >= btn.longPressMs) {
+            btn.longPressFired = true;
+            Serial.printf("[BTN] GPIO%d long press\n", btn.pin);
+            if (btn.callback) btn.callback(ButtonEvent::LONG_PRESS);
         }
     }
 
     // Button released (transition LOW -> HIGH)
-    if (lastState == LOW && currentState == HIGH) {
-        // Only fire short press if long press wasn't triggered
-        if (!longPressFired && (now - pressTime >= BUTTON_DEBOUNCE_MS)) {
-            if (callback) {
-                callback(ButtonEvent::SHORT_PRESS);
-            }
-            Serial.printf("[BTN] GPIO%d short press\n", pin);
+    if (btn.lastState == LOW && currentState == HIGH && !btn.longPressFired) {
+        if (btn.warningFired) {
+            // Released during the warning phase: abort without action
+            Serial.printf("[BTN] GPIO%d hold cancelled\n", btn.pin);
+            if (btn.callback) btn.callback(ButtonEvent::HOLD_CANCELLED);
+        } else if (now - btn.pressTime >= BUTTON_DEBOUNCE_MS) {
+            Serial.printf("[BTN] GPIO%d short press\n", btn.pin);
+            if (btn.callback) btn.callback(ButtonEvent::SHORT_PRESS);
         }
     }
 
-    lastState = currentState;
+    btn.lastState = currentState;
 }

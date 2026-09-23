@@ -42,9 +42,10 @@ struct DiffuserSettings {
     uint8_t nightModeEnd;    // Hour (0-23)
     uint8_t nightModeBrightness;  // LED brightness during night (0-100)
 
-    // Update Checker (v6)
-    char lastKnownVersion[16];    // Last version seen from GitHub
-    bool updateAvailable;          // Cached update availability
+    // Reserved (v6): formerly update checker cache, currently unused.
+    // Kept so the EEPROM layout (and everyone's saved settings) stays valid.
+    char reservedVersion[16];
+    bool reservedFlag;
 };
 
 // Magic number for valid settings validation

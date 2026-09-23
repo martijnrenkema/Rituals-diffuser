@@ -28,7 +28,8 @@ void LedController::begin() {
     FastLED.show();
     Serial.printf("[LED] FastLED initialized on GPIO%d\n", LED_DATA_PIN);
 #endif
-    _brightness = 128;  // 50% - applied via RGB scaling in showLed()
+    // Applied via RGB scaling in showLed(); night mode dims below this
+    _brightness = map(LED_DEFAULT_BRIGHTNESS, 0, 100, 0, 255);
 }
 
 void LedController::showLed() {
@@ -205,11 +206,6 @@ void LedController::setMode(LedMode mode) {
             _pulseDirection = true;
         }
 
-        // Ensure brightness is not zero when turning on (unless explicitly set)
-        if (_brightness == 0 && mode != LedMode::OFF) {
-            _brightness = 128;
-        }
-
         Serial.printf("[LED] Mode changed to %d\n", (int)mode);
     }
 }
@@ -281,6 +277,11 @@ void LedController::showOTA() {
 void LedController::showError() {
     setColor(LED_COLOR_RED);
     setMode(LedMode::BLINK_FAST);
+}
+
+void LedController::showResetWarning() {
+    setColor(LED_COLOR_RED);
+    setMode(LedMode::BLINK_SLOW);
 }
 
 void LedController::updateLed() {

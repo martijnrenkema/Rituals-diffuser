@@ -11,13 +11,8 @@ public:
     void loop();  // Process pending actions from callbacks
     void stop();
 
-    // Callback for settings changes
-    typedef void (*SettingsCallback)();
-    void onSettingsChanged(SettingsCallback callback);
-
 private:
     AsyncWebServer* _server = nullptr;
-    SettingsCallback _settingsCallback = nullptr;
 
     // Deferred action flags (to avoid blocking in async callbacks)
     // Use char arrays instead of String to avoid heap fragmentation
@@ -36,6 +31,20 @@ private:
     bool _pendingOTAUpdate = false;
     #endif
     unsigned long _pendingActionTime = 0;
+
+    // Web OTA upload state (one upload at a time). Written from the upload
+    // handler, acted upon in loop() so MQTT/fan/LED are only touched there.
+    volatile bool _uploadActive = false;
+    volatile bool _uploadFailed = false;
+    AsyncWebServerRequest* volatile _uploadRequest = nullptr;  // Request owning the active upload
+    volatile bool _uploadIsFilesystem = false;
+    volatile bool _uploadStartPending = false;
+    volatile unsigned long _lastUploadActivity = 0;
+
+    void handleUploadChunk(AsyncWebServerRequest* request, bool filesystem, size_t index,
+                           uint8_t* data, size_t len, bool final);
+    void handleUploadDone(AsyncWebServerRequest* request);
+    void abortUpload();
 
     void setupRoutes();
     void handleStatus(AsyncWebServerRequest* request);

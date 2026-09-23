@@ -336,7 +336,9 @@ void rfidLoop() {
     Serial.println();
     Serial.println("========== NEW CARTRIDGE DETECTED ==========");
     Serial.printf("UID: %s (%d bytes)\n", uid, mfrc522->uid.size);
-    Serial.printf("Tag type: %s\n", mfrc522->PICC_GetTypeName(piccType));
+    // PICC_GetTypeName() returns a flash string: print it, don't pass it to printf
+    Serial.print("Tag type: ");
+    Serial.println(mfrc522->PICC_GetTypeName(piccType));
 
 #ifdef PLATFORM_ESP8266
     // ESP8266: Minimal read - only page 4 (scent code) to save RAM

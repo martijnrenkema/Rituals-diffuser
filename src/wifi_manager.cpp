@@ -71,8 +71,14 @@ void WiFiManager::loop() {
             break;
 
         case WifiStatus::DISCONNECTED:
-            // Auto reconnect if we have credentials
-            if (_ssid[0] != '\0' && now - _lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
+            // The SDK auto-reconnect often restores the link before our own
+            // retry interval expires - pick that up immediately
+            if (WiFi.status() == WL_CONNECTED) {
+                _reconnectAttempts = 0;
+                setState(WifiStatus::CONNECTED);
+                Serial.printf("[WIFI] Reconnected (SDK auto-reconnect), IP: %s\n", WiFi.localIP().toString().c_str());
+                logger.info("WiFi reconnected");
+            } else if (_ssid[0] != '\0' && now - _lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
                 Serial.println("[WIFI] Attempting reconnect...");
                 connect(_ssid, _password);
             }
@@ -189,6 +195,11 @@ void WiFiManager::startAP() {
         logger.error("AP IP invalid");
         return;
     }
+
+    // Start the background-retry interval now. Without this, the first loop
+    // iteration after >5 min uptime would immediately reconnect to the saved
+    // network and tear down the AP the user just opened with the button.
+    _lastAPRetry = millis();
 
     setState(WifiStatus::AP_MODE);
     Serial.printf("[WIFI] AP started: %s\n", _apName);
