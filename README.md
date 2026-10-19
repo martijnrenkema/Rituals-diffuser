@@ -117,7 +117,7 @@ Connect your ESP32 DevKit to the Rituals Genie board:
 | GPIO0 | RC522 CS | RC522 Chip Select |
 | GPIO2 | RC522 RST | RC522 Reset |
 
-> **NFC Reader (RC522)**: The Rituals Genie has a built-in RC522 NFC reader on the HSPI bus (GPIO12/13/14). Active after boot.
+> **NFC Reader (RC522 or PN512)**: The Rituals Genie has a built-in NFC reader on the HSPI bus (GPIO12/13/14). Depending on the production batch this is an RC522 or an NXP PN512; the chip is detected automatically at boot.
 
 ### ESP32-C3 SuperMini Pinout
 
@@ -539,6 +539,7 @@ Exact versions are pinned in `platformio.ini` so builds are reproducible.
 - Based on research from the [Home Assistant Community](https://community.home-assistant.io/t/replace-the-software-of-the-rituals-genie-esp-with-esphome/762356)
 - Inspired by [Echnics/Perfume-Genie-ESPhome](https://github.com/Echnics/Perfume-Genie-ESPhome)
 - Thanks to [@FredericMa](https://github.com/FredericMa) for ESP8266 optimization contributions ([PR #9](https://github.com/martijnrenkema/Rituals-diffuser/pull/9))
+- Thanks to [@SgtBlade](https://github.com/SgtBlade) for finding the PN512 reader variant and the settings it needs ([#10](https://github.com/martijnrenkema/Rituals-diffuser/issues/10))
 
 ## License
 
@@ -549,6 +550,11 @@ MIT License - feel free to use and modify.
 This project is not affiliated with Rituals Cosmetics. Use at your own risk. Modifying your device may void warranty.
 
 ## Changelog
+
+### v2.0.1
+**PN512 NFC reader support:**
+- Some Genies have an NXP PN512 instead of an RC522 NFC reader. The firmware now detects the chip at boot (version register `0x82`) and applies the PN512 antenna and receiver settings, so cartridges are read on both. One firmware for both chips; OTA updates keep working
+- Detected chip shown as `rfid.chip` in `/api/status`
 
 ### v2.0.0
 **New look, installable as an app:**

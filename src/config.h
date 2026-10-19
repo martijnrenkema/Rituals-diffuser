@@ -251,7 +251,7 @@
 // ===========================================
 // Firmware Version (centralized)
 // ===========================================
-#define FIRMWARE_VERSION        "2.0.0"
+#define FIRMWARE_VERSION        "2.0.1"
 
 // ===========================================
 // Update Checker Settings

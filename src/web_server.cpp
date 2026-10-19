@@ -666,9 +666,9 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     // can occasionally push past 1408; ESP8266 keeps the smaller budget with the
     // low-heap 503 guard above as a safety net.
 #ifdef PLATFORM_ESP8266
-    DynamicJsonDocument doc(1472);
+    DynamicJsonDocument doc(1488);
 #else
-    DynamicJsonDocument doc(1728);
+    DynamicJsonDocument doc(1744);
 #endif
 
     // WiFi status
@@ -749,7 +749,8 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["rfid"]["write_usage"] = storage.isRfidWriteUsage();
     doc["rfid"]["tag_writable"] = rfidIsTagWritable();
     doc["rfid"]["time_since_tag"] = rfidTimeSinceLastTag();
-    // Debug info: version register (0x91/0x92/0x88 = valid, 0x00/0xFF = no communication)
+    doc["rfid"]["chip"] = rfidGetChipName();  // Static string, not copied
+    // Debug info: version register (0x91/0x92/0x88 = RC522, 0x82 = PN512, 0x00/0xFF = no communication)
     char versionHex[5];
     snprintf(versionHex, sizeof(versionHex), "0x%02X", rfidGetVersionReg());
     doc["rfid"]["version_reg"] = versionHex;

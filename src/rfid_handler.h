@@ -71,6 +71,9 @@ bool rfidIsConnected();
 // Debug: Get the version register value read during init (0 if not read)
 uint8_t rfidGetVersionReg();
 
+// Detected reader chip: "RC522", "PN512" or "none"
+const char* rfidGetChipName();
+
 #endif // RC522_ENABLED
 
 #endif // RFID_HANDLER_H

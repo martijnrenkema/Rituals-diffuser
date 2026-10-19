@@ -14,6 +14,39 @@
 static MFRC522* mfrc522 = nullptr;
 static bool rc522Connected = false;
 static uint8_t rc522VersionReg = 0;  // Store version for debug
+static bool isPn512 = false;          // NXP PN512 found instead of an RC522
+
+// Some Genies ship with an NXP PN512 (VersionReg 0x82) instead of an RC522.
+// The register map is compatible, but the PN512 only reads tags with its own
+// analog front-end settings. Values taken from the MFRC522_PN512 library.
+#define PN512_VERSION 0x82
+
+static MFRC522::PCD_Register pn512Reg(uint8_t addr) {
+    return static_cast<MFRC522::PCD_Register>(addr << 1);
+}
+
+static void applyPn512Config() {
+    mfrc522->PCD_WriteRegister(MFRC522::RxThresholdReg, 0xFF);
+    mfrc522->PCD_WriteRegister(MFRC522::ControlReg, 0x10);
+    mfrc522->PCD_WriteRegister(MFRC522::DemodReg, 0x4D);
+    mfrc522->PCD_WriteRegister(pn512Reg(0x25), 0x87);  // TxBitPhaseReg
+    mfrc522->PCD_WriteRegister(MFRC522::RxSelReg, 0x84);
+    mfrc522->PCD_WriteRegister(MFRC522::RFCfgReg, 0x48);
+    mfrc522->PCD_WriteRegister(pn512Reg(0x23), 0x88);  // GsNOffReg
+    mfrc522->PCD_WriteRegister(MFRC522::CWGsPReg, 0x20);
+    mfrc522->PCD_WriteRegister(MFRC522::GsNReg, 0x88);  // GsNOnReg
+    mfrc522->PCD_WriteRegister(MFRC522::ModGsPReg, 0x20);
+    mfrc522->PCD_WriteRegister(MFRC522::BitFramingReg, 0x00);
+    mfrc522->PCD_WriteRegister(MFRC522::WaterLevelReg, 64);
+    mfrc522->PCD_WriteRegister(pn512Reg(0x1E), 0x00);  // TypeBReg
+    mfrc522->PCD_WriteRegister(MFRC522::MfTxReg, 0x8A);
+}
+
+// PCD_Init() resets the analog settings, so every (re)init goes through here
+static void initReader() {
+    mfrc522->PCD_Init();
+    if (isPn512) applyPn512Config();
+}
 
 // Laatste gedetecteerde tag
 // Use fixed char arrays to avoid heap fragmentation
@@ -259,7 +292,15 @@ bool rfidInit() {
     // Store for debug access via web API
     rc522VersionReg = version;
 
-    if (version == 0x91 || version == 0x92 || version == 0x88) {
+    isPn512 = (version == PN512_VERSION);
+
+    if (isPn512) {
+        rc522Connected = true;
+        Serial.println("[RFID] PN512 detected! Firmware version: 0x82");
+        // The library has no PN512 self-test reference, so skip the self-test
+        initReader();
+        return true;
+    } else if (version == 0x91 || version == 0x92 || version == 0x88) {
         rc522Connected = true;
         Serial.printf("[RFID] RC522 detected! Firmware version: 0x%02X", version);
         if (version == 0x91) Serial.println(" (v1.0)");
@@ -273,7 +314,7 @@ bool rfidInit() {
         Serial.printf("[RFID] Self-test result: %s\n", selfTestOk ? "PASS" : "FAIL");
 
         // Re-init after self-test (self-test disables crypto)
-        mfrc522->PCD_Init();
+        initReader();
 
         return true;
     } else {
@@ -284,7 +325,7 @@ bool rfidInit() {
         } else if (version == 0xFF) {
             Serial.println("[RFID] Version 0xFF suggests: no communication (check wiring/power)");
         }
-        Serial.println("[RFID] Expected: 0x91 (v1.0), 0x92 (v2.0), or 0x88 (clone)");
+        Serial.println("[RFID] Expected: 0x91 (v1.0), 0x92 (v2.0), 0x88 (clone) or 0x82 (PN512)");
         Serial.println("[RFID] Check wiring!");
 
         // Debug: try reading other registers
@@ -338,7 +379,7 @@ void rfidLoop() {
         // PCD_Init resets all RC522 registers - expensive to do every second
         static uint8_t wakeupFailCount = 0;
         if (wakeupFailCount >= 3) {
-            mfrc522->PCD_Init();
+            initReader();
             wakeupFailCount = 0;
         }
 
@@ -678,6 +719,11 @@ bool rfidIsConnected() {
 
 uint8_t rfidGetVersionReg() {
     return rc522VersionReg;
+}
+
+const char* rfidGetChipName() {
+    if (!rc522Connected) return "none";
+    return isPn512 ? "PN512" : "RC522";
 }
 
 #endif // RC522_ENABLED
