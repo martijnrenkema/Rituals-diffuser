@@ -17,14 +17,14 @@ Custom firmware for the Rituals Perfume Genie diffuser (V1 and V2). Replaces the
 
 > **Community tested!** Both ESP8266 (Rituals Genie V1/V2) and ESP32 versions are actively used by the community. Found an issue? [Report it here](https://github.com/martijnrenkema/Rituals-diffuser/issues).
 
-> **ESP8266 Note:** Versions v1.9.x include experimental features like NFC scent detection and various memory optimizations. If you experience stability issues on ESP8266, use **[v1.8.5](https://github.com/martijnrenkema/Rituals-diffuser/releases/tag/v1.8.5)** as the recommended stable version.
+> **NFC reader:** Genies come with either an RC522 or an NXP PN512 NFC reader. Since v2.0.1 both are supported by the same firmware and detected automatically, including reading and writing cartridge usage.
 
 ## Features
 
 - **Local Control** - No cloud dependency, works offline
 - **Web Interface** - Warm, app-like UI with a blurred background and glass cards, for phone and desktop. Installable on your home screen (see [Install as an app](#install-as-an-app))
 - **Home Assistant Integration** - MQTT auto-discovery (MQTT is optional: the web interface works on its own)
-- **NFC Scent Detection** - Automatically detects Rituals scent cartridges (v1.9.0+, experimental on ESP8266)
+- **NFC Scent Detection** - Automatically detects Rituals scent cartridges, with both RC522 and PN512 readers (v2.0.1+)
 - **Cartridge Usage** - Minutes at full speed and first-use date per cartridge, in the original Rituals tag format; optionally saved on the cartridge itself (v2.0.0+)
 - **Timer Presets** - 30, 60, 90, 120 minutes
 - **Auto-Off Failsafe** - Without a timer the fan turns off after 1-4 hours without interaction, so a forgotten diffuser doesn't empty a cartridge (v2.0.0+)
@@ -530,7 +530,7 @@ pio run -e esp8266 -t uploadfs
 - [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer) - Async web server
 - [FastLED](https://github.com/FastLED/FastLED) - WS2812 LED control (ESP32)
 - [NeoPixelBus](https://github.com/Makuna/NeoPixelBus) - WS2812 LED control (ESP8266)
-- [MFRC522](https://github.com/miguelbalboa/rfid) - RC522 RFID reader
+- [MFRC522](https://github.com/miguelbalboa/rfid) - RC522 / PN512 NFC reader (PN512 register settings from [MFRC522_PN512](https://github.com/nfc-rfid-reader-sdk/MFRC522_PN512))
 
 Exact versions are pinned in `platformio.ini` so builds are reproducible.
 
@@ -555,6 +555,7 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 **PN512 NFC reader support:**
 - Some Genies have an NXP PN512 instead of an RC522 NFC reader. The firmware now detects the chip at boot (version register `0x82`) and applies the PN512 antenna and receiver settings, so cartridges are read on both. One firmware for both chips; OTA updates keep working
 - Detected chip shown as `rfid.chip` in `/api/status`
+- Reading, cartridge removal/reinsertion and saving usage on the cartridge confirmed on two PN512 Genies
 
 ### v2.0.0
 **New look, installable as an app:**
@@ -638,12 +639,5 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 - Web OTA upload turns the fan off; fan calibration saves runtime and updates LED/MQTT
 - Static files are matched after API routes (fewer filesystem lookups per API call)
 - MQTT reconnect backoff capped at 60s as intended
-
-### v1.9.10
-**ESP8266 RAM & Stability:**
-- Scent table moved to PROGMEM and duplicate settings copy removed: ~2 KB more free RAM on ESP8266 (static RAM 78.2% → 75.7%)
-- New build flags for low-RAM ESP8266 builds: `-DESP8266_LITE=1` (disables NFC + scent lookup, ~4 KB RAM saved), or individually `-DENABLE_NFC=0` / `-DENABLE_SCENT=0`
-- MQTT reconnect backoff: failed broker connects retry at 5s → doubling up to 60s, so an offline broker no longer stalls the main loop (~3s block) every 5 seconds
-- Fix `esp32c3_ota` build environment: missing MFRC522 dependency
 
 For older versions, see [GitHub Releases](https://github.com/martijnrenkema/Rituals-diffuser/releases).
