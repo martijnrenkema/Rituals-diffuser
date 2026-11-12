@@ -2,9 +2,9 @@ const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const RING=2*Math.PI*52;
 const REL='https://github.com/martijnrenkema/Rituals-diffuser/releases';
 let state={on:false,speed:50,intervalMode:false,intOn:30,intOff:30};
-let info={mqttHost:'',mqttPort:1883,platform:''};
+let info={mqttHost:'',mqttPort:1883,platform:'',version:'',apMode:false};
 let isESP8266=false;
-let speedTimer,dragging=false;  // dragging: don't let polling move the slider under the finger
+let speedTimer,speedSeq=0,dragging=false;  // dragging: don't let polling move the slider under the finger
 
 // ---------- helpers ----------
 let toastTimer;
@@ -23,9 +23,16 @@ async function post(url,params){
     return d;
 }
 async function getJSON(url){
-    const r=await fetch(url);
-    return r.json();
+    // Time out: an unreachable diffuser would otherwise keep requests hanging
+    const ac=new AbortController(),t=setTimeout(()=>ac.abort(),6000);
+    try{
+        const r=await fetch(url,{signal:ac.signal});
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return await r.json();
+    }finally{clearTimeout(t)}
 }
+// Don't overwrite a field the user is typing in
+function setVal(sel,v){const el=$(sel);if(document.activeElement!==el)el.value=v}
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const pad=n=>String(n).padStart(2,'0');
 
@@ -58,17 +65,41 @@ document.addEventListener('visibilitychange',()=>{
         fetchStatusLite();
     }
 });
-fetchStatus();  // Full status only at page load
-
+// Connection state: two failed polls in a row show the "can't reach" banner
+let fails=0,fullLoaded=false,polling=false;
+fetchStatus();  // Full status at page load, and again after the connection was lost
+function reached(ok){
+    const wasOffline=fails>=2;
+    fails=ok?0:fails+1;
+    const offline=fails>=2;
+    $('#offline').classList.toggle('hidden',!offline);
+    document.body.classList.toggle('offline',offline);
+    return ok&&wasOffline;
+}
 async function fetchStatus(){
-    try{update(await getJSON('/api/status'))}catch(e){console.error(e)}
+    try{
+        const d=await getJSON('/api/status');
+        reached(true);
+        fullLoaded=true;
+        update(d);
+    }catch(e){reached(false)}
 }
 async function fetchStatusLite(){
-    try{updateLite(await getJSON('/api/status/lite'))}catch(e){console.error(e)}
+    if(polling)return;
+    polling=true;
+    try{
+        const d=await getJSON('/api/status/lite');
+        const back=reached(true);
+        updateLite(d);
+        // First load failed, or the diffuser is back (restart, update, WiFi): reload everything
+        if(back||!fullLoaded){fetchStatus();fetchPasswords();fetchUpdateStatus()}
+    }catch(e){reached(false)}
+    polling=false;
 }
 
 function setConn(wifi,mqtt){
     if(wifi){
+        info.apMode=!!wifi.ap_mode;
         $('#wifi-dot').classList.toggle('on',!!(wifi.connected||wifi.ap_mode));
         $('#wifi-label').textContent=wifi.ap_mode?'Setup AP':'WiFi';
     }
@@ -93,13 +124,15 @@ function update(d){
         $('#wifi-sum').textContent=w.ap_mode?'Setup access point · '+w.ip
             :w.connected?[w.ssid,w.rssi+' dBm',w.ip].join(' · '):'Not connected';
         if(w.rssi)$('#rssi').textContent=w.rssi;
-        if(w.ssid&&!w.ap_mode)$('#w-ssid').value=w.ssid;
+        if(w.ssid&&!w.ap_mode)setVal('#w-ssid',w.ssid);
     }
     if(d.device){
         const dv=d.device;
-        if(dv.name){$('#dev-name').textContent=dv.name;$('#name-sum').textContent=dv.name;$('#device-name').value=dv.name;document.title=dv.name}
+        // Firmware changed while the page was open: load the matching web interface
+        if(dv.version&&info.version&&dv.version!==info.version){location.reload();return}
+        if(dv.name){$('#dev-name').textContent=dv.name;$('#name-sum').textContent=dv.name;setVal('#device-name',dv.name);document.title=dv.name}
         if(dv.mac)$('#mac').textContent=dv.mac;
-        if(dv.version)$$('.version').forEach(el=>el.textContent='v'+dv.version);
+        if(dv.version){info.version=dv.version;$$('.version').forEach(el=>el.textContent='v'+dv.version)}
         if(dv.platform){
             info.platform=dv.platform;
             $('#platform').textContent=dv.platform;
@@ -107,7 +140,11 @@ function update(d){
             $('#esp8266-info').classList.toggle('hidden',!isESP8266);
         }
     }
-    if(d.mqtt&&d.mqtt.host){$('#m-host').value=d.mqtt.host;$('#m-port').value=d.mqtt.port}
+    if(d.mqtt&&d.mqtt.host){
+        setVal('#m-host',d.mqtt.host);setVal('#m-port',d.mqtt.port);
+        if(d.mqtt.user!==undefined)setVal('#m-user',d.mqtt.user);
+        $('#m-pass').placeholder=d.mqtt.has_password?'Saved · leave empty to keep it':'';
+    }
     if(d.stats){
         $('#total-runtime').textContent=d.stats.total_runtime.toFixed(1)+' h';
         $('#session-runtime').textContent=d.stats.session_runtime;
@@ -190,17 +227,24 @@ $('#speed').oninput=e=>{
     $('#speed-val').textContent=v;
     setRing(v,v>0||state.on);
     clearTimeout(speedTimer);
-    speedTimer=setTimeout(async()=>{await cmd({speed:v});dragging=false},150);  // Debounce while dragging
+    const seq=++speedSeq;
+    // Debounce while dragging; only the last change releases the slider to polling again
+    speedTimer=setTimeout(async()=>{await cmd({speed:v});if(seq===speedSeq)dragging=false},150);
 };
 
 $$('.chip').forEach(b=>b.onclick=()=>cmd({timer:b.dataset.t}));
 $('#auto-off').onchange=e=>cmd({auto_off:e.target.value});
-$('#interval').onchange=e=>cmd({interval:e.target.checked});
+$('#interval').onchange=e=>{state.intervalMode=e.target.checked;cmd({interval:e.target.checked})};
 
 let intTimer;
 function saveInterval(){
     clearTimeout(intTimer);
-    intTimer=setTimeout(()=>cmd({interval_on:$('#int-on').value,interval_off:$('#int-off').value}),400);
+    intTimer=setTimeout(()=>{
+        // The diffuser accepts 10-120 s; show what it will use
+        const fix=el=>{const v=Math.min(120,Math.max(10,Math.round(+el.value)||30));el.value=v;return v};
+        state.intOn=fix($('#int-on'));state.intOff=fix($('#int-off'));
+        cmd({interval_on:state.intOn,interval_off:state.intOff});
+    },400);
 }
 $('#int-on').onchange=saveInterval;
 $('#int-off').onchange=saveInterval;
@@ -260,18 +304,31 @@ function updateRfid(r){
 $('#wifi-form').onsubmit=async e=>{
     e.preventDefault();
     try{
-        const d=await post('/api/wifi',{ssid:$('#w-ssid').value,password:$('#w-pass').value});
+        const ssid=$('#w-ssid').value;
+        const d=await post('/api/wifi',{ssid:ssid,password:$('#w-pass').value});
         toast(d.message||'Saved');
         $('#w-pass').value='';
+        // The diffuser leaves this network (or its setup network): say how to find it again
+        const n=$('#wifi-note');
+        n.textContent='The diffuser is now joining "'+ssid+'"'+(info.apMode?' and its setup network disappears':'')
+            +'. Connect this device to the same network and open '
+            +(isESP8266?'':'http://rituals-diffuser.local or ')+'the IP address your router gave the diffuser.'
+            +' If it cannot connect, the setup network "Rituals-Diffuser-…" comes back after a few minutes.';
+        n.classList.remove('hidden');
     }catch(err){toast(err.message,true)}
 };
 
 $('#mqtt-form').onsubmit=async e=>{
     e.preventDefault();
     try{
-        const d=await post('/api/mqtt',{host:$('#m-host').value,port:$('#m-port').value,user:$('#m-user').value,password:$('#m-pass').value});
-        info.mqttHost=$('#m-host').value;info.mqttPort=$('#m-port').value;
+        const p={host:$('#m-host').value,port:$('#m-port').value,user:$('#m-user').value};
+        // Empty password field keeps the saved password; without a username it is cleared
+        if($('#m-pass').value||!p.user)p.password=$('#m-pass').value;
+        const d=await post('/api/mqtt',p);
+        info.mqttHost=p.host;info.mqttPort=p.port;
         toast(d.message||'Saved');
+        if($('#m-pass').value)$('#m-pass').placeholder='Saved · leave empty to keep it';
+        else if(!p.user)$('#m-pass').placeholder='';
         $('#m-pass').value='';
     }catch(err){toast(err.message,true)}
 };
@@ -445,7 +502,11 @@ function formatLogTime(l){
 $('#refresh-logs').onclick=fetchLogs;
 $('#clear-logs').onclick=async()=>{
     if(!confirm('Clear all log entries?'))return;
-    try{await fetch('/api/logs',{method:'DELETE'});fetchLogs()}catch(e){toast('Could not clear logs',true)}
+    try{
+        const r=await fetch('/api/logs',{method:'DELETE'});
+        if(!r.ok)throw new Error();
+        fetchLogs();
+    }catch(e){toast('Could not clear logs',true)}
 };
 $('#logs-section').addEventListener('toggle',function(){if(this.open)fetchLogs()});
 
@@ -460,7 +521,11 @@ function updateUpdateUI(d){
     const checking=d.state===1,downloading=d.state===2,failed=d.state===3;
     if(downloading){st.className='note';st.textContent='Downloading update...'}
     else if(checking){st.className='note';st.textContent='Checking for updates...'}
-    else if(failed){st.className='note bad';st.textContent='Update check failed'+(d.error?': '+d.error:'')}
+    else if(failed){
+        // Download errors start with the file they were about
+        const what=/^(Firmware|SPIFFS)/.test(d.error||'')?'Update failed':'Update check failed';
+        st.className='note bad';st.textContent=what+(d.error?': '+d.error:'');
+    }
     else if(d.available){st.className='note';st.textContent='Version '+d.latest+' is available'}
     else if(d.latest){st.className='note ok';st.textContent='Up to date'}
     else{st.className='note';st.textContent='Not checked yet'}
@@ -484,6 +549,7 @@ function updateUpdateUI(d){
     if(showBanner)$('#update-version').textContent='v'+d.latest;
 }
 async function fetchUpdateStatus(){
+    if(document.hidden)return null;
     try{const d=await getJSON('/api/update/status');updateUpdateUI(d);return d}
     catch(e){return null}
 }
@@ -501,9 +567,16 @@ $('#do-install').onclick=async()=>{
     try{
         await post('/api/update/install');
         clearInterval(updatePoll);
+        let n=0,started=false;
         updatePoll=setInterval(async()=>{
             const d=await fetchUpdateStatus();
-            if(d&&(d.state===0||d.state===3)){clearInterval(updatePoll);updatePoll=null}
+            if(!d)return;  // Restarting, or page in the background
+            if(d.state===2){started=true;return}
+            // The download starts a moment after the request: until then the
+            // status still shows the previous result (maybe an old failure)
+            if(!started&&++n<8)return;
+            clearInterval(updatePoll);updatePoll=null;
+            if(d.state===3||!started)toast('Update failed'+(d.error?': '+d.error:''),true);
         },1000);
     }catch(err){toast(err.message,true)}
 };

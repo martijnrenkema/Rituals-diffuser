@@ -551,6 +551,27 @@ This project is not affiliated with Rituals Cosmetics. Use at your own risk. Mod
 
 ## Changelog
 
+### v2.0.2
+**Web interface:**
+- The interval switch and the interval times no longer jump back to their old value for a few seconds after changing them
+- The cartridge card follows the cartridge: usage keeps counting on screen, and taking a cartridge out or putting another one in updates the text without reloading the page (it could keep showing "Removed" or the previous cartridge's usage)
+- A banner shows when the diffuser can't be reached, and the page catches up by itself when it is back (after a restart, an update or a WiFi drop). If the first load failed, it is retried instead of leaving the page empty
+- Changing the MQTT broker no longer erases the saved username and password: the username is filled in, and an empty password field keeps the saved password
+- After saving WiFi settings, the page explains how to find the diffuser again
+- A failed update download is shown on the Firmware page instead of silently returning to "update available"
+- The speed slider no longer moves under your finger when a status update arrives while dragging
+
+**Firmware:**
+- ESP32/ESP32-C3: a firmware or web interface upload from the Firmware page could be aborted the moment it started ("Upload rejected"), after which every further upload was refused until a restart. Seen on the ESP32-C3
+- Update check: a failed automatic check stopped all further automatic checks until a restart or a manual check. It is now retried every hour (ESP8266: until one check succeeded)
+- The device name from Settings is now used for the device in Home Assistant (it was always "Rituals Diffuser"); the firmware version is shown on the device page
+- ESP32 update from GitHub: the fan is turned off during the download, like the other update methods
+- A cartridge that could not be read when it was inserted is read again on the next scans, instead of staying "Read Error" / "Unknown cartridge" until it is taken out and put back
+- Timer countdown rounds up, so the last minute shows "1 min" instead of "0 min"
+- Speeds above 100 sent over MQTT are limited to 100 instead of wrapping around
+- `/api/fan` also returns the interval settings; `/api/status/lite` returns `rfid.has_tag`, `usage_minutes` and `first_use`; `/api/status` returns `mqtt.user` and `mqtt.has_password` (never the password itself)
+- `POST /api/mqtt`: leaving out `user` or `password` keeps the stored value; an empty value clears it
+
 ### v2.0.1
 **PN512 NFC reader support:**
 - Some Genies have an NXP PN512 instead of an RC522 NFC reader. The firmware now detects the chip at boot (version register `0x82`) and applies the PN512 antenna and receiver settings, so cartridges are read on both. One firmware for both chips; OTA updates keep working

@@ -177,6 +177,10 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .bar i{display:block;height:100%;width:0;background:var(--cream);border-radius:999px;transition:width .2s}
 .upload.drag{border-color:var(--sand);background:rgba(200,179,155,.15)}
 
+/* Diffuser unreachable: banner on top, controls dimmed (they show old values) */
+#offline{margin-bottom:12px}
+.offline .grid{opacity:.5;transition:opacity .3s}
+
 /* Warning state (fan not turning) */
 .stalled .hero{border-color:rgba(243,167,150,.5)}
 

@@ -26,6 +26,19 @@ static void formatIsoUtc(uint32_t t, char* out, size_t size) {
              (unsigned long)(secs % 60));
 }
 
+// Copy a string for use inside a JSON string literal: quotes and backslashes
+// are escaped, control characters dropped.
+static void jsonEscape(const char* in, char* out, size_t size) {
+    size_t pos = 0;
+    for (; *in && pos + 2 < size; in++) {
+        unsigned char c = (unsigned char)*in;
+        if (c < 0x20) continue;
+        if (c == '"' || c == '\\') out[pos++] = '\\';
+        out[pos++] = (char)c;
+    }
+    out[pos] = '\0';
+}
+
 // RFID support for all platforms with RC522_ENABLED
 #if defined(RC522_ENABLED)
 #include "rfid_handler.h"
@@ -476,6 +489,7 @@ void MQTTHandler::handleMessage(const char* topic, const char* payload) {
         // toInt() returns 0 for non-numeric strings, only accept if payload was "0" or valid number
         bool isValidNumber = (speed > 0) || (p == "0");
         if (isValidNumber) {
+            if (speed > 100) speed = 100;  // setSpeed() takes a uint8_t: 300 would wrap to 44
             fanController.setSpeed(speed);  // Persisted (debounced) via main.cpp
             if (speed > 0 && !fanController.isOn()) {
                 fanController.turnOn();
@@ -545,6 +559,10 @@ void MQTTHandler::publishFanDiscovery() {
 
     snprintf(_mqttTopic, sizeof(_mqttTopic), "%s/fan/rd_%s/config", MQTT_DISCOVERY_PREFIX, id);
 
+    // Device name from the settings (Settings -> Device -> Name)
+    char name[2 * sizeof(storage.getSettings().deviceName)];
+    jsonEscape(storage.getSettings().deviceName, name, sizeof(name));
+
     snprintf(_mqttBuf, sizeof(_mqttBuf),
         "{\"name\":\"Diffuser\","
         "\"uniq_id\":\"rd_%s\","
@@ -558,8 +576,9 @@ void MQTTHandler::publishFanDiscovery() {
         "\"avty_t\":\"%s/availability\","
         "\"spd_rng_min\":1,\"spd_rng_max\":100,"
         "\"dev\":{\"ids\":[\"rituals_%s\"],"
-        "\"name\":\"Rituals Diffuser\",\"mf\":\"Rituals\",\"mdl\":\"Genie 2.0\"}}",
-        id, base, base, base, base, base, base, base, id);
+        "\"name\":\"%s\",\"mf\":\"Rituals\",\"mdl\":\"Genie 2.0\","
+        "\"sw\":\"" FIRMWARE_VERSION "\"}}",
+        id, base, base, base, base, base, base, base, id, name);
 
     Serial.printf("[MQTT] Fan discovery: %d bytes\n", (int)strlen(_mqttBuf));
     if (!_mqttClient.publish(_mqttTopic, _mqttBuf, true)) {

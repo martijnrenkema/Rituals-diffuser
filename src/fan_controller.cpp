@@ -334,8 +334,8 @@ uint16_t FanController::getRemainingMinutes() {
     if (!_timerActive) return 0;
     unsigned long elapsed = millis() - _timerStartTime;
     if (elapsed >= _timerDuration) return 0;
-    // Round down - shows actual complete minutes remaining
-    return (_timerDuration - elapsed) / 60000;
+    // Round up, like the auto-off countdown: "1 min" until it happens
+    return (_timerDuration - elapsed + 59999) / 60000;
 }
 
 bool FanController::isTimerActive() {

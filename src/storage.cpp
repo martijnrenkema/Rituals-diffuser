@@ -265,8 +265,12 @@ void Storage::ensureDefaults(DiffuserSettings& settings) {
     if (settings.autoOffHours == 0 || settings.autoOffHours > AUTO_OFF_MAX_HOURS) {
         settings.autoOffHours = AUTO_OFF_DEFAULT_HOURS;
     }
-    if (settings.intervalOnTime < INTERVAL_MIN) settings.intervalOnTime = INTERVAL_ON_DEFAULT;
-    if (settings.intervalOffTime < INTERVAL_MIN) settings.intervalOffTime = INTERVAL_OFF_DEFAULT;
+    if (settings.intervalOnTime < INTERVAL_MIN || settings.intervalOnTime > INTERVAL_MAX) {
+        settings.intervalOnTime = INTERVAL_ON_DEFAULT;
+    }
+    if (settings.intervalOffTime < INTERVAL_MIN || settings.intervalOffTime > INTERVAL_MAX) {
+        settings.intervalOffTime = INTERVAL_OFF_DEFAULT;
+    }
     if (strlen(settings.deviceName) == 0) {
         strcpy(settings.deviceName, "Rituals Diffuser");
     }

@@ -292,17 +292,21 @@ void WebServer::handleUploadChunk(AsyncWebServerRequest* request, bool filesyste
             if (!lock.locked()) {
                 return;  // Busy - reject rather than race with the main loop
             }
+            // Set the whole upload state before _uploadActive: from that
+            // moment loop() checks the stall timeout, and a stale
+            // _lastUploadActivity would abort the upload right away
             otaInProgress = true;
+            _uploadRequest = request;
+            _uploadFailed = false;
+            _updateBegun = false;
+            _uploadIsFilesystem = filesystem;
+            _uploadBytes = 0;
+            _uploadAbortPending = false;
+            _lastUploadActivity = millis();
             _uploadActive = true;
         }
 
         Serial.printf("[OTA] %s update start\n", filesystem ? "Filesystem" : "Firmware");
-        _uploadRequest = request;
-        _uploadFailed = false;
-        _updateBegun = false;
-        _uploadIsFilesystem = filesystem;
-        _uploadBytes = 0;
-        _lastUploadActivity = millis();
         _uploadStartPending = true;   // loop(): MQTT off, fan off, LED
 
         // Client gone mid-upload: forget the request pointer immediately (the
@@ -666,9 +670,9 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     // can occasionally push past 1408; ESP8266 keeps the smaller budget with the
     // low-heap 503 guard above as a safety net.
 #ifdef PLATFORM_ESP8266
-    DynamicJsonDocument doc(1488);
+    DynamicJsonDocument doc(1536);
 #else
-    DynamicJsonDocument doc(1744);
+    DynamicJsonDocument doc(1792);
 #endif
 
     // WiFi status
@@ -686,6 +690,9 @@ void WebServer::handleStatus(AsyncWebServerRequest* request) {
     doc["mqtt"]["connected"] = mqttHandler.isConnected();
     doc["mqtt"]["host"] = settings.mqttHost;
     doc["mqtt"]["port"] = settings.mqttPort;
+    // The password itself is never sent, only whether one is stored
+    doc["mqtt"]["user"] = settings.mqttUser;
+    doc["mqtt"]["has_password"] = settings.mqttPassword[0] != '\0';
 
     // Fan status
     doc["fan"]["on"] = fanController.isOn();
@@ -770,7 +777,7 @@ void WebServer::handleStatusLite(AsyncWebServerRequest* request) {
     // Lite status endpoint for frequent polling - uses StaticJsonDocument on STACK
     // to avoid heap allocation and fragmentation on ESP8266
     // Contains only data needed for UI polling updates
-    StaticJsonDocument<448> doc;
+    StaticJsonDocument<448> doc;  // 24 values, no copied strings: 384 bytes needed
 
     // Fan status (essential for UI updates)
     doc["fan"]["on"] = fanController.isOn();
@@ -793,8 +800,12 @@ void WebServer::handleStatusLite(AsyncWebServerRequest* request) {
     // RFID status (only if enabled)
     #if defined(RC522_ENABLED)
     doc["rfid"]["connected"] = rfidIsConnected();
+    doc["rfid"]["has_tag"] = rfidHasTag();
     doc["rfid"]["cartridge_present"] = rfidIsCartridgePresent();
-    doc["rfid"]["last_scent"] = rfidGetLastScent();
+    doc["rfid"]["last_scent"] = rfidGetLastScentCStr();  // Static buffer, not copied
+    // Usage keeps counting while the fan runs, and changes with the cartridge
+    doc["rfid"]["usage_minutes"] = rfidGetUsageMinutes();
+    doc["rfid"]["first_use"] = rfidGetFirstUse();
     #endif
 
     String response;
@@ -866,9 +877,11 @@ void WebServer::handleSaveMqtt(AsyncWebServerRequest* request) {
         }
     }
 
-    // Get user and password if provided, with length validation
-    String userStr = "";
-    String passwordStr = "";
+    // User and password: a parameter that is left out keeps the stored value,
+    // so the host can be changed without typing the password again. An empty
+    // value clears it.
+    String userStr = storage.getSettings().mqttUser;
+    String passwordStr = storage.getSettings().mqttPassword;
     if (request->hasParam("user", true)) {
         userStr = request->getParam("user", true)->value();
         if (userStr.length() > 31) {
@@ -902,7 +915,7 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     if (rejectCrossSite(request)) return;
     LOCK_OR_503(request);
 
-    StaticJsonDocument<256> response;
+    StaticJsonDocument<256> response;  // 11 values: 176 bytes needed
     response["success"] = true;
 
     if (request->hasParam("power", true)) {
@@ -1003,6 +1016,9 @@ void WebServer::handleFanControl(AsyncWebServerRequest* request) {
     response["fan"]["remaining_minutes"] = fanController.getRemainingMinutes();
     response["fan"]["auto_off_hours"] = fanController.getAutoOffHours();
     response["fan"]["auto_off_minutes"] = fanController.getAutoOffRemainingMinutes();
+    response["fan"]["interval_mode"] = fanController.isIntervalMode();
+    response["fan"]["interval_on"] = fanController.getIntervalOnTime();
+    response["fan"]["interval_off"] = fanController.getIntervalOffTime();
 
     String output;
     if (serializeJson(response, output) == 0) {
@@ -1236,6 +1252,7 @@ void WebServer::handleDiagnosticFan(AsyncWebServerRequest* request) {
         } else if (action == "speed") {
             if (request->hasParam("value", true)) {
                 int speed = request->getParam("value", true)->value().toInt();
+                speed = constrain(speed, 0, 100);
                 fanController.setSpeed(speed);
                 if (!fanController.isOn()) fanController.turnOn();
 
@@ -1374,7 +1391,9 @@ void WebServer::handleStartUpdate(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (updateChecker.getState() != UpdateCheckState::IDLE) {
+    // ERROR (failed check or download) is fine: a new attempt clears it
+    if (updateChecker.getState() == UpdateCheckState::CHECKING ||
+        updateChecker.getState() == UpdateCheckState::DOWNLOADING) {
         request->send(400, "application/json", "{\"error\":\"Update already in progress\"}");
         return;
     }

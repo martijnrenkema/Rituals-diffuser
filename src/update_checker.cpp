@@ -13,6 +13,8 @@
     #include <WiFiClientSecure.h>
     #include <Update.h>
     #include "filesystem.h"
+    #include "fan_controller.h"
+    #include "state_lock.h"
 #endif
 
 UpdateChecker updateChecker;
@@ -48,13 +50,18 @@ void UpdateChecker::loop() {
     // Handle requested check
     if (_checkRequested && _state == UpdateCheckState::IDLE) {
         _checkRequested = false;
+        // Counts as a check: the automatic one waits a full interval again
+        _lastAutoCheck = millis() | 1;  // Never 0 (= "not checked yet")
         performCheck();
     }
 
-    // Auto-check logic (only when WiFi connected and idle)
-    if (_state == UpdateCheckState::IDLE && WiFi.status() == WL_CONNECTED) {
+    // Auto-check logic (only when WiFi connected). A failed check leaves the
+    // state at ERROR; that must not stop the automatic retries.
+    bool failed = _state == UpdateCheckState::ERROR;
+    if ((_state == UpdateCheckState::IDLE || failed) && WiFi.status() == WL_CONNECTED) {
         unsigned long now = millis();
         bool shouldAutoCheck = false;
+        const unsigned long RETRY_INTERVAL = 3600000UL;  // After a failure: 1 hour
 
 #ifdef PLATFORM_ESP8266
         // ESP8266: First check 15 seconds after boot, when more heap is available
@@ -63,35 +70,35 @@ void UpdateChecker::loop() {
         // Skip periodic checks once successful: not enough RAM for repeated TLS handshakes.
         // Note: we use _hasSucceededOnce instead of comparing _info.lastCheckTime to 0,
         // because millis() can wrap around to 0 after ~49.7 days of uptime.
-        const unsigned long ESP8266_RETRY_INTERVAL = 3600000UL;  // 1 hour
-        if (_lastAutoCheck == 0 && (now - _bootTime >= 15000)) {
-            shouldAutoCheck = true;
-        } else if (_lastAutoCheck > 0 &&
-                   !_hasSucceededOnce &&
-                   (now - _lastAutoCheck >= ESP8266_RETRY_INTERVAL)) {
+        if (_lastAutoCheck == 0) {
+            if (now - _bootTime >= 15000) {
+                shouldAutoCheck = true;
+            }
+        } else if (!_hasSucceededOnce && (now - _lastAutoCheck >= RETRY_INTERVAL)) {
             // Previous attempt failed - retry
             shouldAutoCheck = true;
         }
 #else
-        // ESP32: Check 2 minutes after boot, then every 24 hours
+        // ESP32: Check 2 minutes after boot, then every 24 hours (after a
+        // failed check: every hour until it works again)
         if (_lastAutoCheck == 0) {
             if (now - _bootTime >= 120000) {
                 shouldAutoCheck = true;
             }
-        } else if (now - _lastAutoCheck >= UPDATE_CHECK_INTERVAL) {
+        } else if (now - _lastAutoCheck >= (failed ? RETRY_INTERVAL : UPDATE_CHECK_INTERVAL)) {
             shouldAutoCheck = true;
         }
 #endif
 
         if (shouldAutoCheck) {
-            _lastAutoCheck = now;
+            _lastAutoCheck = now | 1;  // Never 0 (= "not checked yet")
             performCheck();
         }
     }
 
     #ifndef PLATFORM_ESP8266
     // Handle OTA update request
-    if (_otaRequested && _state == UpdateCheckState::IDLE) {
+    if (_otaRequested && (_state == UpdateCheckState::IDLE || _state == UpdateCheckState::ERROR)) {
         _otaRequested = false;
         performOTAUpdate();
     }
@@ -298,7 +305,7 @@ int UpdateChecker::compareVersions(const char* v1, const char* v2) {
 #ifndef PLATFORM_ESP8266
 
 void UpdateChecker::startOTAUpdate() {
-    if (_state != UpdateCheckState::IDLE) {
+    if (_state == UpdateCheckState::CHECKING || _state == UpdateCheckState::DOWNLOADING) {
         logger.warn("Cannot start OTA: busy");
         return;
     }
@@ -422,11 +429,21 @@ void UpdateChecker::performOTAUpdate() {
     memset(_info.errorMessage, 0, sizeof(_info.errorMessage));
     if (_stateCallback) _stateCallback();
 
+    // The main loop (timer, interval mode, auto-off) doesn't run during the
+    // download, so don't leave the fan spinning unattended
+    {
+        StateLock lock;
+        fanController.turnOff();
+    }
+
     // Step 1: Download and install firmware
     if (!downloadAndInstall(_info.downloadUrl, U_FLASH, "Firmware")) {
+        // Stay in ERROR so the web interface can show what went wrong; a new
+        // check or install attempt clears it
+        logger.warnf("Update failed: %s", _info.errorMessage);
+        _info.downloadProgress = 0;
         _state = UpdateCheckState::ERROR;
         if (_stateCallback) _stateCallback();
-        _state = UpdateCheckState::IDLE;
         return;
     }
 

@@ -46,6 +46,7 @@
 </nav>
 
 <main>
+<div id="offline" class="note bad hidden" role="alert"><svg class="i"><use href="#i-wifi"/></svg><span>Can't reach the diffuser. Trying again…</span></div>
 <!-- ================= CONTROL ================= -->
 <section id="v-control" class="view">
 <header class="top">
@@ -117,6 +118,7 @@
 <label class="field">Network name (SSID)<input type="text" id="w-ssid" required maxlength="32" autocomplete="off"></label>
 <label class="field">Password<input type="password" id="w-pass" maxlength="63" placeholder="Leave empty for an open network"></label>
 <button type="submit" class="btn">Connect</button>
+<p id="wifi-note" class="note hidden" role="status"></p>
 </form>
 </details>
 <details class="row">

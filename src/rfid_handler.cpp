@@ -64,6 +64,8 @@ static uint32_t lastFirstUse = 0;        // Page 7: first-use Unix time (0 = nev
 #define USAGE_WRITE_INTERVAL_MS 600000UL  // While blowing continuously: at most every 10 min
 #define MAX_WRITE_FAILURES  3               // Then stop writing to this cartridge
 #define CLOCK_VALID_EPOCH   1600000000UL    // time() below this: NTP not synced yet
+#define MAX_READ_RETRIES    5               // New cartridge: read attempts before giving up
+static uint8_t readRetries = 0;
 static bool usageValid = false;          // Pages 6/7 of the current cartridge were read
 static bool tagWritable = false;         // Current cartridge accepts writes to pages 6/7
 static uint8_t writeFailures = 0;
@@ -348,6 +350,7 @@ void rfidLoop() {
     // Check timeout - cartridge verwijderd?
     if (cartridgePresent && (now - lastTagTime > CARTRIDGE_TIMEOUT_MS)) {
         cartridgePresent = false;
+        readRetries = 0;
         Serial.println("[RFID] Cartridge removed (timeout)");
         mqttHandler.requestStatePublish();  // Notify MQTT immediately
     }
@@ -587,6 +590,16 @@ void rfidLoop() {
                       page4Hex.c_str(), page4Ascii.c_str());
     }
 #endif
+
+    // Read failed (cartridge still moving, RF glitch): forget the UID so the
+    // next scans read the tag again, instead of showing an error until the
+    // cartridge is taken out and put back. Limited, for tags that never read.
+    if (usageValid) {
+        readRetries = 0;
+    } else if (readRetries < MAX_READ_RETRIES) {
+        readRetries++;
+        lastUID[0] = '\0';
+    }
 
     if (lastUsageMinutes != 0 || lastFirstUse != 0) {
         Serial.printf("[RFID] Tag usage: %u min, first use %u\n",
